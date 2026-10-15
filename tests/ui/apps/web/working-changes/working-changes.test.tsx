@@ -60,7 +60,7 @@ async function fixture(
     rejectDiffs = false,
     repositoryId = crypto.randomUUID(),
     draftKey = JSON.stringify([crypto.randomUUID(), repositoryId, "/repo"]),
-    openGitIdentity = () => {},
+    openGitSettings = () => {},
     ignoreRules = {},
   }: {
     readonly staged?: RepositoryChanges["staged"];
@@ -70,7 +70,7 @@ async function fixture(
     readonly rejectDiffs?: boolean;
     readonly repositoryId?: string;
     readonly draftKey?: string;
-    readonly openGitIdentity?: () => void;
+    readonly openGitSettings?: () => void;
     readonly ignoreRules?: Readonly<Record<string, IgnoreRule>>;
   } = {},
 ) {
@@ -178,7 +178,7 @@ async function fixture(
     {
       environment: { requests },
       queryClient,
-      notifications: { openGitIdentity },
+      notifications: { openGitSettings },
     },
   );
   if (!rejectDiffs) await diffReady();
@@ -672,30 +672,30 @@ describe("working changes", () => {
       .toHaveValue("");
     expect(f.commits).toHaveLength(2);
   });
-  it("offers the identity settings when Git does not know who is committing", async () => {
-    const openGitIdentity = vi.fn();
-    const f = await fixture([], { openGitIdentity });
-    await stageAll();
-    await page
-      .getByRole("textbox", { name: "Commit subject" })
-      .fill("First commit");
-    f.rejectCommit(
-      repositoryRejected(
-        "IdentityMissing",
-        "Add your name and email to commit.",
-      ),
-    );
+  it.each([
+    ["IdentityMissing", "Add your name and email to commit."],
+    ["SigningUnavailable", "Can't find the signing key id_ed25519."],
+  ] as const)(
+    "offers the Git settings when a commit fails with %s",
+    async (reason, detail) => {
+      const openGitSettings = vi.fn();
+      const f = await fixture([], { openGitSettings });
+      await stageAll();
+      await page
+        .getByRole("textbox", { name: "Commit subject" })
+        .fill("First commit");
+      f.rejectCommit(repositoryRejected(reason, detail));
 
-    await page
-      .getByRole("button", { name: "Commit 1 file", exact: true })
-      .click();
-    await page.getByRole("button", { name: "Open settings" }).click();
+      await page
+        .getByRole("button", { name: "Commit 1 file", exact: true })
+        .click();
+      await expect.element(page.getByText(detail)).toBeVisible();
+      await page.getByRole("button", { name: "Open settings" }).click();
 
-    expect(openGitIdentity).toHaveBeenCalledOnce();
-    await expect
-      .element(page.getByText("Add your name and email to commit."))
-      .not.toBeInTheDocument();
-  });
+      expect(openGitSettings).toHaveBeenCalledOnce();
+      await expect.element(page.getByText(detail)).not.toBeInTheDocument();
+    },
+  );
   it("re-reads the changes when a write finds them stale", async () => {
     const f = await fixture();
     f.rejectMutationsAsStale();

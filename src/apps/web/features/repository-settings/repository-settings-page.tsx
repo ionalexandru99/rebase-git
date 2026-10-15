@@ -9,6 +9,7 @@ import {
 import { BranchSettings } from "#web/features/branch-settling/branch-settings.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
 import { RepositoryIdentityRow } from "#web/features/git-identity/git-identity.tsx";
+import { RepositorySigningRow } from "#web/features/git-signing/git-signing.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { forgetRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import { RepositoryFetchPruneRow } from "#web/features/remote-sync/fetch-prune.tsx";
@@ -130,6 +131,7 @@ function RepositoryHistorySettings({
     <>
       <SettingsSection title="Git">
         <RepositoryIdentityRow repositoryId={repositoryId} />
+        <RepositorySigningRow repositoryId={repositoryId} />
         <RepositoryFetchSettings
           repositoryId={repositoryId}
           canConfigure={canConfigure}

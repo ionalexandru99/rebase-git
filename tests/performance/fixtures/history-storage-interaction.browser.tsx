@@ -149,7 +149,7 @@ function StorageGraph(props: ComponentProps<typeof CommitGraph>) {
           repositories={[]}
           currentRepositoryId={undefined}
           openRepository={() => {}}
-          openGitIdentity={() => {}}
+          openGitSettings={() => {}}
         >
           <CommitGraph {...props} />
         </NotificationsProvider>

@@ -122,7 +122,10 @@ export function openTestEnvironment(overrides: EnvironmentOverrides = {}) {
   );
 }
 
-export async function openIsolatedTestEnvironment(prefix: string) {
+export async function openIsolatedTestEnvironment(
+  prefix: string,
+  extra: Readonly<Record<string, string>> = {},
+) {
   const home = await realpath(await mkdtemp(join(tmpdir(), prefix)));
   onTestFinished(() => removeTemporaryDirectory(home));
   const isolated = {
@@ -130,6 +133,7 @@ export async function openIsolatedTestEnvironment(prefix: string) {
     XDG_CONFIG_HOME: join(home, ".config"),
     GIT_CONFIG_GLOBAL: join(home, ".gitconfig"),
     GIT_CONFIG_NOSYSTEM: "1",
+    ...extra,
   };
   const isolate = (command: GitCommand): GitCommand => ({
     ...command,

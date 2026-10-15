@@ -36,6 +36,7 @@ import { environmentFilesystemFeature } from "#server/features/environment-files
 import { fileBlameFeature } from "#server/features/file-blame/file-blame.ts";
 import { fileHistoryFeature } from "#server/features/file-history/file-history.ts";
 import { gitIdentityFeature } from "#server/features/git-identity/git-identity.ts";
+import { gitSigningFeature } from "#server/features/git-signing/git-signing.ts";
 import { historySearchFeature } from "#server/features/history-search/history-search.ts";
 import { pullRequestsFeature } from "#server/features/pull-requests/pull-requests.ts";
 import { createRepositoryCreation } from "#server/features/repository-catalog/create-repository.ts";
@@ -232,6 +233,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       repositoryWorktreesFeature(dependencies),
       gitIdentityFeature(dependencies),
       signatureVerificationFeature(dependencies),
+      gitSigningFeature(dependencies),
       sourceControlFeature({ events: dependencies.events, sourceControl }),
       terminalFeature(dependencies),
       yield* acquireDiagnosticsFeature({

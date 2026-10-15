@@ -26,6 +26,7 @@ import {
 } from "#web/components/ui/settings-layout.tsx";
 import { Switch } from "#web/components/ui/switch.tsx";
 import { ServerIdentityRow } from "#web/features/git-identity/git-identity.tsx";
+import { ServerSigningRow } from "#web/features/git-signing/git-signing.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { ServerFetchPruneRow } from "#web/features/remote-sync/fetch-prune.tsx";
 import { ServerPullStrategyRow } from "#web/features/remote-sync/pull-strategy.tsx";
@@ -150,6 +151,7 @@ export function SourceControlSettings() {
             <LfsRow lfs={discovery.data.lfs} />
           </>
         )}
+        <ServerSigningRow />
         <ServerPullStrategyRow />
         <ServerFetchPruneRow />
       </SettingsSection>

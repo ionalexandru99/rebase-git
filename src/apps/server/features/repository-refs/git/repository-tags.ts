@@ -20,6 +20,7 @@ import {
   type GitFailed,
   isGitRejection,
   runRepositoryGit,
+  signingRejection,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
   readRefTarget,
@@ -198,5 +199,6 @@ function tagRejected(reason: TagRejected["reason"]): TagRejected {
 function tagWriteFailed(error: GitFailed): TagRejected | RepositoryRejected {
   return isGitRejection(error) && /already exists/.test(error.detail)
     ? tagRejected("Exists")
-    : repositoryRejected("GitFailed", error.detail);
+    : (signingRejection(error.detail) ??
+        repositoryRejected("GitFailed", error.detail));
 }
