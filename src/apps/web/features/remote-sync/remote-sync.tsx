@@ -22,7 +22,7 @@ export function RemoteSync({
   readonly children: (actions: ReactNode) => ReactNode;
 }) {
   const pull = usePull();
-  const push = usePush();
+  const push = usePush((branch) => void pull.pull(branch));
   return (
     <>
       <PushNotice push={push} />

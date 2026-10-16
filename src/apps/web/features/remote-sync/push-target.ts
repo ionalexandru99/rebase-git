@@ -138,12 +138,21 @@ export const pushFailureMessages: FailureMessages<
   RouteFailure<typeof RepositoryPushApi.push>
 > = { PushRejected: describePushRejection };
 
+export function remoteMoved(
+  failure: RouteFailure<typeof RepositoryPushApi.push> | undefined,
+) {
+  return (
+    failure?._tag === "PushRejected" &&
+    (failure.reason === "NonFastForward" || failure.reason === "LeaseRejected")
+  );
+}
+
 function describePushRejection({ reason, detail }: PushRejected) {
   switch (reason) {
     case "NonFastForward":
-      return "The remote has commits you don't have. Fetch first.";
+      return "The remote has commits you don't have.";
     case "LeaseRejected":
-      return "The remote branch moved since your last fetch. Fetch and review.";
+      return "The remote branch moved since your last fetch.";
     case "HookDeclined":
       return gitMessage(detail, "The remote rejected the push.");
     case "Authentication":

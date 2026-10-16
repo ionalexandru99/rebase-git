@@ -49,8 +49,14 @@ function tracked(ahead: number, behind: number): PushTarget {
   };
 }
 
-function PushControls({ target }: { readonly target: PushTarget }) {
-  const push = usePush();
+function PushControls({
+  target,
+  pull,
+}: {
+  readonly target: PushTarget;
+  readonly pull: (branch: string) => void;
+}) {
+  const push = usePush(pull);
   return (
     <>
       <PushButton push={push} target={target} operationBusy={false} />
@@ -77,6 +83,7 @@ async function fixture(
   ) => Promise<PushRejected | null> = async () => null,
 ) {
   const pushed = vi.fn<(command: PushBranch) => void>();
+  const pulled = vi.fn<(branch: string) => void>();
   const requests = fakeRequests(
     idleOperation,
     respond(RepositoryPushApi.push, async (command, options) => {
@@ -90,7 +97,7 @@ async function fixture(
     <RepositoryScopeProvider
       scope={repositoryScope({ ...scope, worktreePath })}
     >
-      <PushControls target={target} />
+      <PushControls target={target} pull={pulled} />
     </RepositoryScopeProvider>
   );
   const view = await render(tree(scope.worktreePath), {
@@ -98,6 +105,7 @@ async function fixture(
   });
   return {
     pushed,
+    pulled,
     switchWorktree: (worktreePath: string) => view.rerender(tree(worktreePath)),
   };
 }
@@ -142,7 +150,7 @@ describe("repository push", () => {
     await expect
       .element(
         page.getByText("The remote branch moved since your last fetch.", {
-          exact: false,
+          exact: true,
         }),
       )
       .toBeVisible();
@@ -152,6 +160,40 @@ describe("repository push", () => {
         mode: { _tag: "ForceWithLease", expectedOid: reviewed },
       }),
     );
+  });
+
+  it("offers Pull when the remote has commits the branch doesn't have", async () => {
+    const f = await fixture(tracked(1, 0), async () => ({
+      _tag: "PushRejected",
+      reason: "NonFastForward",
+      detail: "Updates were rejected because the remote contains work.",
+    }));
+
+    await page
+      .getByRole("button", {
+        name: "Push 1 commits to origin/feature/444-push",
+      })
+      .click();
+    await page.getByRole("button", { name: "Pull" }).click();
+
+    expect(f.pulled).toHaveBeenCalledWith("feature/444-push");
+  });
+
+  it("offers no Pull when a branch without an upstream is rejected", async () => {
+    await fixture({ branch: "spike", remotes: ["origin"] }, async () => ({
+      _tag: "PushRejected",
+      reason: "NonFastForward",
+      detail: "Updates were rejected because the remote contains work.",
+    }));
+
+    await page.getByRole("button", { name: "Push spike" }).click();
+
+    await expect
+      .element(page.getByText("The remote has commits you don't have."))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Pull" }))
+      .not.toBeInTheDocument();
   });
 
   it("pushes while the browser reports that it is offline", async () => {
