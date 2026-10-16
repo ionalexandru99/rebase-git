@@ -72,9 +72,9 @@ describe("Git identity", () => {
     });
   });
 
-  it("rejects a commit without a name and email as a missing identity", async () => {
+  it("rejects a commit without a configured name instead of guessing one", async () => {
     const f = await fixture();
-    await f.globalConfig("user.useConfigOnly", "true");
+    await f.globalConfig("user.email", "ada@example.com");
     await writeFile(join(f.repository, "file.txt"), "content\n");
     await f.git("-C", f.repository, "add", ".");
     const snapshot = await Effect.runPromise(f.changes.read(f.scope));
