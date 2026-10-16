@@ -18,13 +18,18 @@ import {
   type PushRequest,
   type PushTarget,
   pushFailureMessages,
+  remoteMoved,
 } from "#web/features/remote-sync/push-target.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
+import {
+  describeFailure,
+  rejection,
+} from "#web/platform/query/request-failure.ts";
 import { useCommand } from "#web/platform/query/use-command.ts";
 
 export type Push = ReturnType<typeof usePush>;
 
-export function usePush() {
+export function usePush(pull: (branch: string) => void) {
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
   const title = useRef<string | null>(null);
@@ -68,6 +73,11 @@ export function usePush() {
     void command.run(request).then((result) => {
       if (result._tag === "Ok")
         statusToast.success("push", describePushed(request));
+      else if (!request.setUpstream && remoteMoved(rejection(result)))
+        errorToast.show("push", describeFailure(result, pushFailureMessages), {
+          label: "Pull",
+          run: () => pull(request.branch),
+        });
       else errorToast.failure("push", result, pushFailureMessages);
       if (!reviewed) return;
       setPushing(false);
