@@ -142,6 +142,7 @@ export function commitRepositoryChanges(
             "--file=-",
           ],
           {
+            globalArguments: ["-c", "user.useConfigOnly=true"],
             indexFile,
             input: command.message,
             timeoutMilliseconds: 120_000,
