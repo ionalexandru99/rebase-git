@@ -39,12 +39,12 @@ describe("projects on the open project screen", () => {
       .getByRole("region", { name: "Projects" })
       .getByRole("option");
 
-    await expect.element(projects.first()).toHaveTextContent("project-0");
+    await expect.element(projects.first()).toMatchTextContent("project-0");
     expect(projects.elements()).toHaveLength(10);
 
     await page.getByRole("button", { name: "Show all 12 projects" }).click();
 
-    await expect.element(projects.nth(11)).toHaveTextContent("project-11");
+    await expect.element(projects.nth(11)).toMatchTextContent("project-11");
     await expect
       .element(page.getByRole("searchbox", { name: "Search repositories" }))
       .toHaveFocus();

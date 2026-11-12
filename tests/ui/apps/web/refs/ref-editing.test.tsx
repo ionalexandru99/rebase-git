@@ -231,7 +231,7 @@ describe("ref editing", () => {
     });
     await expect
       .element(warning)
-      .toHaveTextContent("Its commits exist nowhere else.");
+      .toMatchTextContent("Its commits exist nowhere else.");
     await expect
       .element(warning.getByRole("button", { name: "Cancel" }))
       .toHaveFocus();
@@ -283,7 +283,7 @@ describe("ref editing", () => {
     });
     await expect
       .element(warning)
-      .toHaveTextContent("Some of their commits exist nowhere else.");
+      .toMatchTextContent("Some of their commits exist nowhere else.");
     await warning.getByRole("button", { name: "Delete", exact: true }).click();
     await expect
       .poll(() => environment.requested)
@@ -464,7 +464,7 @@ describe("ref editing", () => {
     });
     await expect
       .element(confirmation)
-      .toHaveTextContent("Some of their commits exist nowhere else.");
+      .toMatchTextContent("Some of their commits exist nowhere else.");
     await confirmation
       .getByRole("button", { name: "Delete", exact: true })
       .click();
@@ -581,11 +581,11 @@ describe("ref editing", () => {
       message: "Release 2.0",
     });
     const details = screen.getByRole("region", { name: "v2.0 details" });
-    await expect.element(details).toHaveTextContent("Release 2.0");
-    await expect.element(details).toHaveTextContent("Tag author");
+    await expect.element(details).toMatchTextContent("Release 2.0");
+    await expect.element(details).toMatchTextContent("Tag author");
     await expect
       .element(details)
-      .toHaveTextContent(
+      .toMatchTextContent(
         `tag ${annotated.slice(0, 7)} → commit ${spike.slice(0, 7)}`,
       );
   });

@@ -556,10 +556,10 @@ describe("commit inspection", () => {
     await expect.poll(() => completed).toBe(2);
     await expect
       .element(screen.getByRole("region", { name: "Commit details" }))
-      .toHaveTextContent(`Message ${historyOid(1)}`);
+      .toMatchTextContent(`Message ${historyOid(1)}`);
     await expect
       .element(screen.getByRole("region", { name: "Commit file diff" }))
-      .toHaveTextContent("10 → 222 bytes");
+      .toMatchTextContent("10 → 222 bytes");
     await expect
       .element(screen.getByText("10 → 999 bytes"))
       .not.toBeInTheDocument();
@@ -600,7 +600,7 @@ it("preserves the restored inspector target across connection-driven graph notif
   await connect(true);
   await expect
     .element(screen.getByRole("region", { name: "Commit details" }))
-    .toHaveTextContent(`Message ${historyOid(1)}`);
+    .toMatchTextContent(`Message ${historyOid(1)}`);
   await expect
     .element(screen.getByRole("button", { name: /second.bin/ }))
     .toHaveAttribute("aria-pressed", "true");

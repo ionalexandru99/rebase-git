@@ -43,7 +43,7 @@ describe("interactive rebase tab", () => {
     const plan = f.screen.getByRole("listbox", { name: "Plan" });
     await expect
       .element(plan.getByRole("option").first())
-      .toHaveTextContent(/fixup.*fixup! Add tests/);
+      .toMatchTextContent(/fixup.*fixup! Add tests/);
     await plan.getByRole("option", { name: /wip/ }).click();
     await userEvent.keyboard("s");
     await expect
@@ -137,7 +137,7 @@ describe("interactive rebase tab", () => {
       .toHaveAttribute("aria-current", "step");
     await expect
       .element(f.screen.getByRole("listitem").nth(1))
-      .toHaveTextContent(/edit.*wip/);
+      .toMatchTextContent(/edit.*wip/);
   });
   it("keeps another operation's controls in reach while the plan waits", async () => {
     const f = await fixture(

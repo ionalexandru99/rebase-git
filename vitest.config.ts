@@ -35,6 +35,7 @@ const browserProject = (
       enabled: true,
       headless: true,
       instances: [{ browser: "chromium" as const }],
+      locators: { exact: false },
       provider: playwright(
         name === "integration-browser"
           ? {

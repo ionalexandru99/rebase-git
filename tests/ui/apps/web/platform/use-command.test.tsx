@@ -43,7 +43,7 @@ it("fills the repository target, answers rejections as results and rereads the r
   await page.getByRole("button", { name: "Create taken" }).click();
 
   // Assert
-  await expect.element(page.getByRole("alert")).toHaveTextContent("Rejected");
+  await expect.element(page.getByRole("alert")).toMatchTextContent("Rejected");
   expect(created).toHaveBeenLastCalledWith({
     repositoryId: scope.repositoryId,
     worktreePath: scope.worktreePath,

@@ -69,7 +69,7 @@ describe("rebase from the graph menu", () => {
     await openRebase();
     const item = page.getByRole("menuitem", { name: /^Onto here/ });
     await expect.element(item).toHaveAttribute("aria-disabled", "true");
-    await expect.element(item).toHaveTextContent("Already on it");
+    await expect.element(item).toMatchTextContent("Already on it");
   });
 
   it("opens an interactive plan onto another branch or from a commit of the branch", async () => {

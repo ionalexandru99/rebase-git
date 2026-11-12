@@ -68,7 +68,7 @@ describe("drop and squash commits from the graph", () => {
     });
     await expect
       .element(confirmation)
-      .toHaveTextContent("you'll need to force-push afterwards");
+      .toMatchTextContent("you'll need to force-push afterwards");
     await f.screen.getByRole("button", { name: "Drop 2 commits" }).click();
     await expect.poll(() => f.started).toHaveLength(1);
     expect(f.started[0]).toMatchObject({
@@ -167,7 +167,7 @@ describe("drop and squash commits from the graph", () => {
     await f.row("Add retry").click({ button: "right" });
     const drop = f.screen.getByRole("menuitem", { name: /^Drop commit/ });
     await expect.element(drop).toHaveAttribute("aria-disabled", "true");
-    await expect.element(drop).toHaveTextContent(reason);
+    await expect.element(drop).toMatchTextContent(reason);
   });
 });
 
