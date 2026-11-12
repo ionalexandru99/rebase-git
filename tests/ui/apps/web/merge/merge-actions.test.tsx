@@ -69,7 +69,7 @@ describe("merge actions", () => {
     await userEvent.keyboard("{ArrowDown}{ArrowRight}");
     await expect
       .element(screen.getByRole("menuitem", { name: /^Merge(?! into)/ }))
-      .toHaveTextContent("merge commit");
+      .toMatchTextContent("merge commit");
     await expect
       .element(screen.getByRole("menuitem", { name: /^Fast-forward only/ }))
       .toHaveAttribute("aria-disabled", "true");
@@ -111,7 +111,7 @@ describe("merge actions", () => {
     };
     await openModes();
     const mergeMode = screen.getByRole("menuitem", { name: /^Merge(?! into)/ });
-    await expect.element(mergeMode).toHaveTextContent("fast-forward");
+    await expect.element(mergeMode).toMatchTextContent("fast-forward");
     await mergeMode.click();
     await expect
       .element(screen.getByText("Local changes to file.txt block the merge."))
@@ -138,7 +138,7 @@ describe("merge actions", () => {
       .click({ button: "right" });
     await expect
       .element(screen.getByRole("menuitem", { name: /^Merge into main/ }))
-      .toHaveTextContent("Up to date");
+      .toMatchTextContent("Up to date");
     await expect
       .element(screen.getByRole("menuitem", { name: /^Merge into main/ }))
       .toHaveAttribute("aria-disabled", "true");

@@ -463,7 +463,7 @@ describe("history search controls", () => {
     });
     await expect
       .element(page.getByRole("button", { name: /Repair shallow history 1/ }))
-      .toHaveTextContent("a.ts, b.ts");
+      .toMatchTextContent("a.ts, b.ts");
     await expect
       .element(page.getByRole("progressbar", { name: "Code search progress" }))
       .toHaveAttribute("value", "40");

@@ -318,7 +318,7 @@ describe("commit graph states", () => {
     );
     await expect
       .element(screen.getByRole("alert"))
-      .toHaveTextContent("Commit history is unavailable");
+      .toMatchTextContent("Commit history is unavailable");
 
     await screen.getByRole("button", { name: "Retry" }).click();
     expect(reader.synchronizations()).toBe(1);
@@ -386,7 +386,7 @@ describe("commit graph states", () => {
 
     await expect
       .element(screen.getByRole("alert"))
-      .toHaveTextContent("Commit history is unavailable");
+      .toMatchTextContent("Commit history is unavailable");
     await expect
       .element(screen.getByRole("row", { name: /^Commit 0,/ }))
       .not.toBeInTheDocument();

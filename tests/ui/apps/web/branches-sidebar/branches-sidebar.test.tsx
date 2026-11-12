@@ -203,7 +203,7 @@ describe("branches sidebar", () => {
           name: "feature, remote branch deleted",
         }),
       )
-      .toHaveTextContent(/^feature$/);
+      .toHaveTextContent("feature");
   });
 
   it("keeps a single click as focus and checks out on double click", async () => {
@@ -412,7 +412,7 @@ describe("branches sidebar", () => {
     reads[0]?.reject(unanswered);
     await expect
       .element(screen.getByRole("alert"))
-      .toHaveTextContent("The server stopped responding.");
+      .toMatchTextContent("The server stopped responding.");
     await screen.getByRole("button", { name: "Retry" }).click();
     await expect.poll(() => reads.length).toBe(2);
   });

@@ -95,7 +95,7 @@ describe("reset actions", () => {
     const confirmation = screen.getByRole("alertdialog");
     await expect
       .element(confirmation)
-      .toHaveTextContent("Uncommitted edits in 2 files will be lost.");
+      .toMatchTextContent("Uncommitted edits in 2 files will be lost.");
 
     await screen.getByRole("button", { name: "Discard and reset" }).click();
     await expect.element(confirmation).not.toBeInTheDocument();
@@ -129,7 +129,7 @@ describe("reset actions", () => {
     const blocked = rebasing.getByRole("menuitem", {
       name: /^Reset/,
     });
-    await expect.element(blocked).toHaveTextContent("Rebase in progress");
+    await expect.element(blocked).toMatchTextContent("Rebase in progress");
     await expect.element(blocked).toHaveAttribute("aria-disabled", "true");
     await userEvent.keyboard("{Escape}");
     await rebasing.unmount();

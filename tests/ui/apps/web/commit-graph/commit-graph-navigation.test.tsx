@@ -276,7 +276,7 @@ describe("commit graph navigation", () => {
     grid.element().dispatchEvent(new Event("scroll"));
     await expect
       .element(screen.getByRole("alert"))
-      .toHaveTextContent("This browser cannot store repository history.");
+      .toMatchTextContent("This browser cannot store repository history.");
     await screen.getByRole("button", { name: "Retry" }).click();
     await expect
       .element(grid.getByRole("row", { name: /^Commit 801,/ }))

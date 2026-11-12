@@ -259,7 +259,7 @@ describe("working changes", () => {
       name: `Staged ${renamed} renamed from ${source}`,
       exact: true,
     });
-    await expect.element(row).toHaveTextContent("Button.tsx← legacy/");
+    await expect.element(row).toMatchTextContent("Button.tsx← legacy/");
     await expect.element(row).toHaveAccessibleDescription("Renamed");
     const next = page.getByRole("button", {
       name: "Staged src/ui/Card.tsx",
@@ -275,7 +275,9 @@ describe("working changes", () => {
       .toBeVisible();
     await expect.element(page.getByText("Content unchanged.")).toBeVisible();
     await page.getByRole("radio", { name: "List view" }).click();
-    await expect.element(row).toHaveTextContent("Button.tsx← legacy/ · src/ui");
+    await expect
+      .element(row)
+      .toMatchTextContent("Button.tsx← legacy/ · src/ui");
     await page.getByRole("radio", { name: "Tree view" }).click();
   });
   it("says when too many files changed to match renames", async () => {
@@ -738,7 +740,7 @@ describe("working changes", () => {
     const f = await fixture([], { rejectDiffs: true });
     await expect
       .element(page.getByRole("alert"))
-      .toHaveTextContent("The server stopped responding.");
+      .toMatchTextContent("The server stopped responding.");
     const diffReads = f.diffReads();
     f.acceptDiffs();
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
@@ -775,7 +777,7 @@ describe("working changes", () => {
     await amend.click();
     await expect
       .element(page.getByRole("alert"))
-      .toHaveTextContent("There is no commit to amend.");
+      .toMatchTextContent("There is no commit to amend.");
     await expect.element(amend).toBeEnabled();
     await amend.click();
     await expect.element(amend).not.toBeChecked();
@@ -825,7 +827,7 @@ describe("working changes", () => {
       await fixture();
       await expect
         .element(page.getByRole("alert"))
-        .toHaveTextContent(
+        .toMatchTextContent(
           "Could not access changes preferences or the commit draft in this browser.",
         );
     } finally {

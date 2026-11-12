@@ -141,7 +141,7 @@ describe("repository push", () => {
     const confirmation = page.getByRole("alertdialog", { name: "Force push?" });
     await expect
       .element(confirmation)
-      .toHaveTextContent(
+      .toMatchTextContent(
         "Commits on the remote that you don't have will be lost.",
       );
     expect(f.pushed).not.toHaveBeenCalled();

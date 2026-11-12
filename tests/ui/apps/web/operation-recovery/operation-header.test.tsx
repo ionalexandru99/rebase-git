@@ -142,7 +142,7 @@ describe("operation header in the Diffs tab", () => {
       .toBeVisible();
     await expect
       .element(header())
-      .toHaveTextContent(`topic · ${"a".repeat(8)}`);
+      .toMatchTextContent(`topic · ${"a".repeat(8)}`);
     await expect
       .element(header().getByRole("button", { name: "Continue rebase" }))
       .toBeDisabled();

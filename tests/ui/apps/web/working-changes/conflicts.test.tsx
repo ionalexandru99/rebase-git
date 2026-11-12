@@ -195,10 +195,10 @@ describe("conflicts in the Diffs tab", () => {
   it("lists each conflicted file once and keeps them out of bulk staging", async () => {
     const f = await fixture();
     const section = page.getByRole("region", { name: "Conflicted files" });
-    await expect.element(section).toHaveTextContent("Conflicts (3)");
-    await expect.element(section).toHaveTextContent("1 open");
-    await expect.element(section).toHaveTextContent("deleted in main");
-    await expect.element(section).toHaveTextContent("binary");
+    await expect.element(section).toMatchTextContent("Conflicts (3)");
+    await expect.element(section).toMatchTextContent("1 open");
+    await expect.element(section).toMatchTextContent("deleted in main");
+    await expect.element(section).toMatchTextContent("binary");
     for (const path of [conflicted, removed, logo]) {
       await expect.element(row(path)).toBeVisible();
       await expect

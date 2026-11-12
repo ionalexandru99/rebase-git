@@ -84,8 +84,8 @@ describe("revert commits from the graph", () => {
     await row(1).click({ button: "right" });
     await screen.getByRole("menuitem", { name: "Revert 2 commits" }).hover();
 
-    await expect.element(row(1)).toHaveTextContent("1Commit 1");
-    await expect.element(row(3)).toHaveTextContent("2Commit 3");
+    await expect.element(row(1)).toMatchTextContent("1Commit 1");
+    await expect.element(row(3)).toMatchTextContent("2Commit 3");
     await screen.getByRole("menuitem", { name: "Commit", exact: true }).click();
     await expect.poll(() => started).toHaveLength(1);
     expect(started[0]?.expectedHead).toBe(commitId);
@@ -106,7 +106,7 @@ describe("revert commits from the graph", () => {
 
     const revert = screen.getByRole("menuitem", { name: /^Revert/ });
     await expect.element(revert).toHaveAttribute("aria-disabled", "true");
-    await expect.element(revert).toHaveTextContent("Rebase in progress");
+    await expect.element(revert).toMatchTextContent("Rebase in progress");
   });
 
   it("shows why Git did not revert", async () => {

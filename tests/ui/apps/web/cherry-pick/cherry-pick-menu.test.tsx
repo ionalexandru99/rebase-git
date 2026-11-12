@@ -133,7 +133,7 @@ describe("cherry-pick from the graph menu", () => {
 
     await expect
       .element(screen.getByRole("menuitem", { name: /^Cherry-pick 2 commits/ }))
-      .toHaveTextContent("Several merges");
+      .toMatchTextContent("Several merges");
     await expect
       .element(screen.getByRole("menuitem", { name: /^Cherry-pick 2 commits/ }))
       .toHaveAttribute("aria-disabled", "true");
@@ -158,7 +158,7 @@ describe("cherry-pick from the graph menu", () => {
     await screen.getByRole("menuitem", { name: "Commit", exact: true }).click();
     await expect
       .element(screen.getByRole("menuitem", { name: /Commit 1/ }))
-      .toHaveTextContent("retry.ts");
+      .toMatchTextContent("retry.ts");
     await screen.getByRole("menuitem", { name: /Commit 2/ }).click();
     expect(start).toHaveBeenCalledWith(
       expect.objectContaining({
