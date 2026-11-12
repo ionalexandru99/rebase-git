@@ -8,6 +8,7 @@ describe("remote providers", () => {
     ["https://gitlab.com/team/repo.git", "gitlab"],
     ["ssh://git@gitlab.company.test/team/repo.git", "gitlab"],
     ["git@bitbucket.org:team/repo.git", "bitbucket"],
+    ["git@ssh.bitbucket.org:team/repo.git", "bitbucket"],
     ["git@ssh.dev.azure.com:v3/team/project/repo", "azure"],
     ["https://team.visualstudio.com/project/_git/repo", "azure"],
     ["git@codeberg.org:team/repo.git", "codeberg"],
