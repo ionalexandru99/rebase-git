@@ -365,7 +365,11 @@ function bitbucketRepository(
   remoteUrl: string,
 ): BitbucketRepository | undefined {
   const location = remoteLocation(remoteUrl);
-  if (location?.host !== "bitbucket.org") return undefined;
+  if (
+    location?.host !== "bitbucket.org" &&
+    location?.host !== "ssh.bitbucket.org"
+  )
+    return undefined;
   const parts = location.path
     .replace(/^\/+|\/+$/g, "")
     .replace(/\.git$/, "")

@@ -92,7 +92,7 @@ describe("Bitbucket pull requests", () => {
       elsewhere: [{ id: 12, checks: ["SUCCESSFUL"] }],
     });
     const f = await pullRequestsFixture(
-      { origin: "git@bitbucket.org:acme/rebase.git" },
+      { origin: "git@ssh.bitbucket.org:acme/rebase.git" },
       { bitbucket },
     );
     await Effect.runPromise(

@@ -237,7 +237,11 @@ function providerForAddress(address: string): Provider {
   }
   if (host === "github.com" || host === "ssh.github.com") return "github";
   if (host === "gitlab.com" || host === "altssh.gitlab.com") return "gitlab";
-  if (host === "bitbucket.org" || host === "altssh.bitbucket.org")
+  if (
+    host === "bitbucket.org" ||
+    host === "ssh.bitbucket.org" ||
+    host === "altssh.bitbucket.org"
+  )
     return "bitbucket";
   if (
     host === "dev.azure.com" ||
