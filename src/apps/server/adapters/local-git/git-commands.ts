@@ -399,14 +399,24 @@ function stopGit(child: ChildProcess) {
 }
 
 function killGit(child: ChildProcess) {
-  if (process.platform === "win32" && child.pid !== undefined)
+  if (process.platform === "win32" && child.pid !== undefined) {
+    closeOutputOnExit(child);
     execFile(
       "taskkill",
       ["/pid", String(child.pid), "/T", "/F"],
       { windowsHide: true },
       () => undefined,
     );
-  else signalGit(child);
+  } else signalGit(child);
+}
+
+function closeOutputOnExit(child: ChildProcess) {
+  const close = () => {
+    child.stdout?.destroy();
+    child.stderr?.destroy();
+  };
+  if (child.exitCode !== null || child.signalCode !== null) close();
+  else child.once("exit", close);
 }
 
 function signalGit(child: ChildProcess) {

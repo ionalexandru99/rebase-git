@@ -1,7 +1,7 @@
 import { readdir, realpath, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute } from "node:path";
-import { Effect } from "effect";
+import { Effect, Schedule } from "effect";
 import {
   type CloneRepository,
   type InitializeRepository,
@@ -25,6 +25,8 @@ import { serverSettingTable } from "#server/persistence/environment-state.schema
 export type RepositoryCreation = ReturnType<typeof createRepositoryCreation>;
 
 const cloneDeadlineMilliseconds = 6 * 60 * 60 * 1_000;
+const leftoverRemovalRetryDelay = "100 millis";
+const leftoverRemovalRetryCount = 10;
 
 type Destination = "Missing" | "Empty" | "Used" | "File";
 
@@ -110,11 +112,7 @@ export function createRepositoryCreation({
           .pipe(
             Effect.mapError(gitNotCreated),
             Effect.onInterrupt(() =>
-              before === "Missing"
-                ? Effect.promise(() =>
-                    rm(path, { recursive: true, force: true }),
-                  )
-                : Effect.void,
+              before === "Missing" ? removeLeftover(path) : Effect.void,
             ),
           );
         if (output.exitCode !== 0) {
@@ -167,6 +165,18 @@ export function createRepositoryCreation({
         return yield* remember(path);
       }),
   };
+}
+
+function removeLeftover(path: string) {
+  return Effect.tryPromise(() =>
+    rm(path, { recursive: true, force: true }),
+  ).pipe(
+    Effect.retry({
+      schedule: Schedule.spaced(leftoverRemovalRetryDelay),
+      times: leftoverRemovalRetryCount,
+    }),
+    Effect.ignore,
+  );
 }
 
 export function withoutCredentials(text: string) {
