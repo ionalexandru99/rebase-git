@@ -404,7 +404,10 @@ function killGit(child: ChildProcess) {
       "taskkill",
       ["/pid", String(child.pid), "/T", "/F"],
       { windowsHide: true },
-      () => undefined,
+      () => {
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+      },
     );
   else signalGit(child);
 }

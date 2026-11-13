@@ -112,7 +112,7 @@ export function createRepositoryCreation({
             Effect.onInterrupt(() =>
               before === "Missing"
                 ? Effect.promise(() =>
-                    rm(path, { recursive: true, force: true }),
+                    rm(path, { recursive: true, force: true, maxRetries: 10 }),
                   )
                 : Effect.void,
             ),
