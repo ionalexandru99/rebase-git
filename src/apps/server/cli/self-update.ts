@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { gt } from "semver";
+import { gt, valid } from "semver";
 import {
   type ServerLaunch,
   startServer,
@@ -45,6 +45,8 @@ export async function updateInstallation(
   }
   const version =
     requestedVersion?.replace(/^v/, "") ?? (await latestVersion());
+  if (valid(version) !== version)
+    throw new Error(`${version} is not a Rebase release version.`);
   if (
     version === currentVersion ||
     (requestedVersion === undefined && !gt(version, currentVersion))

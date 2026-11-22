@@ -10,7 +10,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { releaseArchiveName, tarCommand } from "#server/cli/self-update.ts";
 
@@ -22,12 +22,15 @@ const packageMetadata = JSON.parse(await readFile("package.json", "utf8")) as {
   readonly dependencies: Readonly<Record<string, string>>;
   readonly version: string;
 };
-const dist = resolve(process.argv[2] ?? "dist");
+const providedDist = process.argv[2];
+const dist = resolve(providedDist ?? "dist");
 const stage = resolve("release", `archive-${key}`);
 const archive = resolve("release", releaseArchiveName(packageMetadata.version));
 const processMonitor = join(stage, "process-monitor", key);
 
-if (!existsSync(join(dist, "runtime.js"))) await buildPackage();
+if (providedDist === undefined) await buildPackage();
+else if (!existsSync(join(dist, "runtime.js")))
+  throw new Error(`${dist} has no runtime.js. Run pnpm build:package first.`);
 await rm(stage, { force: true, recursive: true });
 await mkdir(join(stage, "bin"), { recursive: true });
 await Promise.all([
@@ -117,8 +120,19 @@ async function installTerminal() {
     `${terminal}@${packageMetadata.dependencies[terminal]}`,
   ];
   await execute(
-    windows ? (process.env.ComSpec ?? "cmd.exe") : "npm",
-    windows ? ["/d", "/c", "npm.cmd", ...npmArguments] : npmArguments,
+    windows ? process.execPath : "npm",
+    windows
+      ? [
+          join(
+            dirname(process.execPath),
+            "node_modules",
+            "npm",
+            "bin",
+            "npm-cli.js",
+          ),
+          ...npmArguments,
+        ]
+      : npmArguments,
   );
 }
 

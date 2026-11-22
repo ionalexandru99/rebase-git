@@ -124,7 +124,7 @@ jobs:
         timeout-minutes: 10
         run: node tests/package/smoke-packed-package.ts package-artifact
       - name: Build release archive
-        run: pnpm build:archive
+        run: pnpm build:archive dist
       - name: Smoke-test release archive
         timeout-minutes: 10
         run: node tests/package/smoke-archive.ts
