@@ -2,15 +2,16 @@ import { describe, expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import {
   type PullStrategy,
-  RepositoryPullApi,
+  PullStrategyApi,
   type RepositoryPullStrategy,
 } from "#contracts/repository-pull/repository-pull.contract.ts";
 import { fakeRequests, respond } from "#tests-support/fake-requests.ts";
 import { render } from "#tests-support/render.tsx";
+import { pullStrategySetting } from "#web/features/remote-sync/sync-settings.ts";
 import {
-  RepositoryPullStrategyRow,
-  ServerPullStrategyRow,
-} from "#web/features/remote-sync/pull-strategy.tsx";
+  RepositorySettingSelect,
+  ServerSettingSelect,
+} from "#web/features/settings/setting-rows.tsx";
 
 const repositoryId = "00000000-0000-4000-8000-000000000042";
 
@@ -18,13 +19,13 @@ describe("diverged pull settings", () => {
   it("saves the server value chosen in the select", async () => {
     let strategy: PullStrategy = "ask";
     const saved: unknown[] = [];
-    await render(<ServerPullStrategyRow />, {
+    await render(<ServerSettingSelect setting={pullStrategySetting} />, {
       environment: {
         requests: fakeRequests(
-          respond(RepositoryPullApi.readPullStrategy, async () => strategy),
-          respond(RepositoryPullApi.savePullStrategy, async (input) => {
+          respond(PullStrategyApi.read, async () => strategy),
+          respond(PullStrategyApi.save, async (input) => {
             saved.push(input);
-            strategy = input.strategy;
+            strategy = input.value;
             return strategy;
           }),
         ),
@@ -37,7 +38,7 @@ describe("diverged pull settings", () => {
     await page.getByRole("option", { name: "Rebase" }).click();
 
     await expect.element(select).toHaveTextContent("Rebase");
-    expect(saved).toEqual([{ strategy: "rebase" }]);
+    expect(saved).toEqual([{ value: "rebase" }]);
   });
 
   it("names the server value in the default option and clears the repository value with it", async () => {
@@ -46,24 +47,24 @@ describe("diverged pull settings", () => {
       server: "merge",
     };
     const saved: unknown[] = [];
-    await render(<RepositoryPullStrategyRow repositoryId={repositoryId} />, {
-      environment: {
-        requests: fakeRequests(
-          respond(
-            RepositoryPullApi.readRepositoryPullStrategy,
-            async () => strategy,
-          ),
-          respond(
-            RepositoryPullApi.saveRepositoryPullStrategy,
-            async (input) => {
+    await render(
+      <RepositorySettingSelect
+        repositoryId={repositoryId}
+        setting={pullStrategySetting}
+      />,
+      {
+        environment: {
+          requests: fakeRequests(
+            respond(PullStrategyApi.readRepository, async () => strategy),
+            respond(PullStrategyApi.saveRepository, async (input) => {
               saved.push(input);
-              strategy = { ...strategy, repository: input.strategy };
+              strategy = { ...strategy, repository: input.value };
               return strategy;
-            },
+            }),
           ),
-        ),
+        },
       },
-    });
+    );
     const select = page.getByRole("combobox", { name: "Diverged pull" });
     await expect.element(select).toHaveTextContent("Default (Merge)");
 
@@ -75,8 +76,8 @@ describe("diverged pull settings", () => {
 
     await expect.element(select).toHaveTextContent("Default (Merge)");
     expect(saved).toEqual([
-      { repositoryId, strategy: "rebase" },
-      { repositoryId, strategy: null },
+      { repositoryId, value: "rebase" },
+      { repositoryId, value: null },
     ]);
   });
 });

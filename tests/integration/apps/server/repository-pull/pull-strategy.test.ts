@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 import {
   type PullStrategy,
-  RepositoryPullApi,
+  PullStrategyApi,
 } from "#contracts/repository-pull/repository-pull.contract.ts";
 import { repositorySettingTable } from "#server/persistence/environment-state.schema.ts";
 import { createRepository, git } from "#tests-support/git.ts";
@@ -67,7 +67,7 @@ async function fixture() {
   await git(main, "worktree", "add", linked, "-b", "feature");
   const mainId = (await environment.remember(main)).id;
   const linkedId = (await environment.remember(linked)).id;
-  const pull = environment.routes(RepositoryPullApi);
+  const pull = environment.routes(PullStrategyApi);
   return {
     environment,
     mainId,
@@ -79,11 +79,11 @@ async function fixture() {
           .select({ pullStrategy: repositorySettingTable.pullStrategy })
           .from(repositorySettingTable),
       ),
-    readServer: () => pull.readPullStrategy(undefined),
-    saveServer: (strategy: PullStrategy) => pull.savePullStrategy({ strategy }),
+    readServer: () => pull.read(undefined),
+    saveServer: (value: PullStrategy) => pull.save({ value }),
     readRepository: (repositoryId: string) =>
-      pull.readRepositoryPullStrategy({ repositoryId }),
-    saveRepository: (repositoryId: string, strategy: PullStrategy | null) =>
-      pull.saveRepositoryPullStrategy({ repositoryId, strategy }),
+      pull.readRepository({ repositoryId }),
+    saveRepository: (repositoryId: string, value: PullStrategy | null) =>
+      pull.saveRepository({ repositoryId, value }),
   };
 }

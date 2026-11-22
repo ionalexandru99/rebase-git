@@ -8,9 +8,8 @@ import {
 import { SettingsRow } from "#web/components/ui/settings-layout.tsx";
 import { SettingsSelect } from "#web/components/ui/settings-select.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
+import { useSetting } from "#web/features/settings/setting-rows.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
-import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 const title = "Sign commits";
 const formatNames: Readonly<Record<SigningFormat, string>> = {
@@ -26,30 +25,20 @@ type SigningOption = {
 };
 
 export function ServerSigningRow() {
-  const signing = useEnvironmentQuery(GitSigningApi.read, undefined, {
-    changes: "refs",
-  });
-  const save = useCommand(GitSigningApi.save, {
-    answers: (value) => [answer(GitSigningApi.read, undefined, value)],
-  });
+  const signing = useSetting(GitSigningApi.read, undefined, GitSigningApi.save);
   const errorToast = useErrorToast();
   const data = signing.data;
   return (
-    <SettingsRow
-      title={title}
-      {...(signing.error === null
-        ? {}
-        : { description: describeFailure(signing.error) })}
-    >
+    <SettingsRow description={signing.error} title={title}>
       {data === undefined ? null : (
         <SigningSelect
           configured={data}
-          disabled={!save.canRun || save.running}
+          disabled={signing.busy}
           onChoose={async (choice) => {
             if (choice !== null)
-              errorToast.failure("saveSigning", await save.run(choice));
+              errorToast.failure("saveSigning", await signing.save(choice));
           }}
-          value={save.running && save.input !== undefined ? save.input : data}
+          value={signing.pending === undefined ? data : signing.pending.value}
         />
       )}
     </SettingsRow>
@@ -61,40 +50,25 @@ export function RepositorySigningRow({
 }: {
   readonly repositoryId: string;
 }) {
-  const signing = useEnvironmentQuery(
+  const signing = useSetting(
     GitSigningApi.readRepository,
     { repositoryId },
-    { changes: "refs" },
+    GitSigningApi.saveRepository,
   );
-  const save = useCommand(GitSigningApi.saveRepository, {
-    answers: (value) => [
-      answer(GitSigningApi.readRepository, { repositoryId }, value),
-    ],
-  });
   const errorToast = useErrorToast();
   const data = signing.data;
   return (
-    <SettingsRow
-      title={title}
-      {...(signing.error === null
-        ? {}
-        : { description: describeFailure(signing.error) })}
-    >
+    <SettingsRow description={signing.error} title={title}>
       {data === undefined ? null : (
         <SigningSelect
           configured={data.local ?? data.inherited}
-          disabled={!save.canRun || save.running}
+          disabled={signing.busy}
           inherited={data.inherited}
           onChoose={async (choice) =>
-            errorToast.failure(
-              "saveSigning",
-              await save.run({ repositoryId, signing: choice }),
-            )
+            errorToast.failure("saveSigning", await signing.save(choice))
           }
           value={
-            save.running && save.input !== undefined
-              ? save.input.signing
-              : data.local
+            signing.pending === undefined ? data.local : signing.pending.value
           }
         />
       )}

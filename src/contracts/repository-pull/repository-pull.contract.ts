@@ -2,7 +2,6 @@ import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
-  route,
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   ObjectId,
@@ -10,6 +9,7 @@ import {
   RepositoryPath,
 } from "#contracts/git/git-values.contract.ts";
 import { RepositoryOperation } from "#contracts/repository-operations/repository-operations.contract.ts";
+import { settingRoutes } from "#contracts/settings/setting-routes.contract.ts";
 
 const RefName = z.string().min(1).max(1_024);
 
@@ -95,12 +95,6 @@ export const FetchPrune = z.object({
 });
 export type FetchPrune = z.infer<typeof FetchPrune>;
 
-export const FetchPruneFailed = z.object({
-  _tag: z.literal("FetchPruneFailed"),
-  detail: z.string().max(2_048),
-});
-export type FetchPruneFailed = z.infer<typeof FetchPruneFailed>;
-
 export const PullStrategy = z.enum(["ask", ...DivergedPull.options]);
 export type PullStrategy = z.infer<typeof PullStrategy>;
 
@@ -129,50 +123,21 @@ export const RepositoryPullApi = {
     }),
     success: RepositoryFetchStatus,
   }),
-  readFetchPrune: route("fetch-prune/read", {
-    success: z.boolean(),
-    failure: FetchPruneFailed,
-  }),
-  saveFetchPrune: route("fetch-prune/save", {
-    request: z.object({ prune: z.boolean() }),
-    success: z.boolean(),
-    failure: FetchPruneFailed,
-  }),
-  readRepositoryFetchPrune: repositoryQuery("repositories/fetch-prune", {
-    request: RepositoryTarget,
-    success: FetchPrune,
-  }),
-  saveRepositoryFetchPrune: repositoryCommand("repositories/save-fetch-prune", {
-    request: z.object({
-      repositoryId: RepositoryId,
-      prune: z.boolean().nullable(),
-    }),
-    success: FetchPrune,
-  }),
   pull: repositoryCommand("repositories/pull", {
     request: PullBranch,
     success: BranchPulled,
     failure: PullFailure,
   }),
-  readPullStrategy: route("pull-strategy/read", {
-    success: PullStrategy,
-  }),
-  savePullStrategy: route("pull-strategy/save", {
-    request: z.object({ strategy: PullStrategy }),
-    success: PullStrategy,
-  }),
-  readRepositoryPullStrategy: repositoryQuery("repositories/pull-strategy", {
-    request: RepositoryTarget,
-    success: RepositoryPullStrategy,
-  }),
-  saveRepositoryPullStrategy: repositoryCommand(
-    "repositories/save-pull-strategy",
-    {
-      request: z.object({
-        repositoryId: RepositoryId,
-        strategy: PullStrategy.nullable(),
-      }),
-      success: RepositoryPullStrategy,
-    },
-  ),
 };
+
+export const FetchPruneApi = settingRoutes("fetch-prune", {
+  value: z.boolean(),
+  choice: z.boolean(),
+  repository: FetchPrune,
+});
+
+export const PullStrategyApi = settingRoutes("pull-strategy", {
+  value: PullStrategy,
+  choice: PullStrategy,
+  repository: RepositoryPullStrategy,
+});

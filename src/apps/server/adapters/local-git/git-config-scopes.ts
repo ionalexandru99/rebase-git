@@ -12,6 +12,11 @@ type ScopedValue = {
   readonly value: string;
 };
 
+export interface ConfigKeys<Key extends string> {
+  readonly keys: readonly Key[];
+  readonly type?: "bool";
+}
+
 export type ScopedConfig<Key extends string> = ReadonlyMap<
   Key,
   readonly ScopedValue[]
@@ -25,7 +30,7 @@ const scopes: Readonly<Record<ConfigScope, readonly string[]>> = {
 export async function readScopedConfig<Key extends string>(
   git: GitCommandRunner,
   directory: string,
-  keys: readonly Key[],
+  { keys, type }: ConfigKeys<Key>,
 ): Promise<ScopedConfig<Key>> {
   const values = new Map<Key, readonly ScopedValue[]>();
   for (const key of keys)
@@ -35,7 +40,15 @@ export async function readScopedConfig<Key extends string>(
         await runRepositoryGit(
           git,
           directory,
-          ["config", "-z", "--show-scope", "--show-origin", "--get-all", key],
+          [
+            "config",
+            "-z",
+            "--show-scope",
+            "--show-origin",
+            ...(type === undefined ? [] : [`--type=${type}`]),
+            "--get-all",
+            key,
+          ],
           { exitCodes: [0, 1] },
         ),
       ),
@@ -55,10 +68,10 @@ export async function saveScopedConfig<Key extends string>(
   git: GitCommandRunner,
   directory: string,
   scope: ConfigScope,
-  keys: readonly Key[],
+  config: ConfigKeys<Key>,
   writes: Readonly<Partial<Record<Key, string | null>>>,
 ) {
-  const written = keys.filter((key) => writes[key] !== undefined);
+  const written = config.keys.filter((key) => writes[key] !== undefined);
   for (const key of written) {
     const value = writes[key];
     if (value === null || value === undefined)
@@ -77,7 +90,7 @@ export async function saveScopedConfig<Key extends string>(
         value,
       ]);
   }
-  const values = await readScopedConfig(git, directory, keys);
+  const values = await readScopedConfig(git, directory, config);
   const key = written.find(
     (candidate) =>
       scopedValue(values, scope, candidate) !==

@@ -12,9 +12,11 @@ import { RepositoryIdentityRow } from "#web/features/git-identity/git-identity.t
 import { RepositorySigningRow } from "#web/features/git-signing/git-signing.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { forgetRepositoryRefs } from "#web/features/refs/repository-refs.ts";
-import { RepositoryFetchPruneRow } from "#web/features/remote-sync/fetch-prune.tsx";
 import { RepositoryFetchSettings } from "#web/features/remote-sync/fetch-settings.tsx";
-import { RepositoryPullStrategyRow } from "#web/features/remote-sync/pull-strategy.tsx";
+import {
+  fetchPruneSetting,
+  pullStrategySetting,
+} from "#web/features/remote-sync/sync-settings.ts";
 import {
   catalogWithout,
   useCatalogRepository,
@@ -27,6 +29,7 @@ import {
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { RepositoryCacheSettings } from "#web/features/repository-settings/components/repository-cache-settings.tsx";
 import { RepositoryDetailsSettings } from "#web/features/repository-settings/components/repository-details-settings.tsx";
+import { RepositorySettingSelect } from "#web/features/settings/setting-rows.tsx";
 import { WorktreeFolderSettings } from "#web/features/worktrees/worktree-folder-settings.tsx";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 import { useCommand } from "#web/platform/query/use-command.ts";
@@ -136,13 +139,19 @@ function RepositoryHistorySettings({
           repositoryId={repositoryId}
           canConfigure={canConfigure}
         />
-        <RepositoryFetchPruneRow repositoryId={repositoryId} />
+        <RepositorySettingSelect
+          repositoryId={repositoryId}
+          setting={fetchPruneSetting}
+        />
         <WorktreeFolderSettings
           repositoryId={repositoryId}
           path={path}
           canConfigure={canConfigure}
         />
-        <RepositoryPullStrategyRow repositoryId={repositoryId} />
+        <RepositorySettingSelect
+          repositoryId={repositoryId}
+          setting={pullStrategySetting}
+        />
       </SettingsSection>
       <BranchSettings
         repositoryId={repositoryId}

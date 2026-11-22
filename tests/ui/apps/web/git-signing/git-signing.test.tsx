@@ -53,7 +53,7 @@ describe("Git signing", () => {
       .element(select)
       .toHaveTextContent("GPG · D759C8BC · ada@example.com");
     expect(saved).toEqual([
-      { _tag: "Key", format: "openpgp", key: gpgKey.key },
+      { value: { _tag: "Key", format: "openpgp", key: gpgKey.key } },
     ]);
   });
 
@@ -100,7 +100,7 @@ describe("Git signing", () => {
     expect(saved).toEqual([
       {
         repositoryId,
-        signing: { _tag: "Key", format: "openpgp", key: gpgKey.key },
+        value: { _tag: "Key", format: "openpgp", key: gpgKey.key },
       },
     ]);
   });
@@ -113,7 +113,7 @@ describe("Git signing", () => {
           respond(GitSigningApi.keys, async () => [signingKey()]),
           respond(GitSigningApi.save, async () => {
             throw rejected({
-              _tag: "SigningFailed" as const,
+              _tag: "SettingFailed" as const,
               detail: "error: could not lock config file /home/ada/.gitconfig",
             });
           }),

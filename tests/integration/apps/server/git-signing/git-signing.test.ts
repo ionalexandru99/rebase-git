@@ -104,9 +104,9 @@ async function fixture() {
       return join(folder, `${name}.pub`);
     },
     keys: () => signing.keys(undefined),
-    save: (choice: SigningChoice) => signing.save(choice),
+    save: (choice: SigningChoice) => signing.save({ value: choice }),
     saveRepository: (choice: SigningChoice | null) =>
-      signing.saveRepository({ repositoryId, signing: choice }),
+      signing.saveRepository({ repositoryId, value: choice }),
     commit: async () => {
       await writeFile(join(repository, "file.txt"), "content\n");
       await git("-C", repository, "add", ".");

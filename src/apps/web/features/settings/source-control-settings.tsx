@@ -28,10 +28,13 @@ import { Switch } from "#web/components/ui/switch.tsx";
 import { ServerIdentityRow } from "#web/features/git-identity/git-identity.tsx";
 import { ServerSigningRow } from "#web/features/git-signing/git-signing.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { ServerFetchPruneRow } from "#web/features/remote-sync/fetch-prune.tsx";
-import { ServerPullStrategyRow } from "#web/features/remote-sync/pull-strategy.tsx";
+import {
+  fetchPruneSetting,
+  pullStrategySetting,
+} from "#web/features/remote-sync/sync-settings.ts";
 import { CloneFolderRow } from "#web/features/repository-catalog/clone-folder-row.tsx";
 import { BitbucketTokenForm } from "#web/features/settings/bitbucket-token-form.tsx";
+import { ServerSettingSelect } from "#web/features/settings/setting-rows.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useCommand } from "#web/platform/query/use-command.ts";
 
@@ -152,8 +155,8 @@ export function SourceControlSettings() {
           </>
         )}
         <ServerSigningRow />
-        <ServerPullStrategyRow />
-        <ServerFetchPruneRow />
+        <ServerSettingSelect setting={pullStrategySetting} />
+        <ServerSettingSelect setting={fetchPruneSetting} />
       </SettingsSection>
       <SettingsSection title="Defaults">
         <CloneFolderRow />
