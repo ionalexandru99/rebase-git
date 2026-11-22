@@ -8,6 +8,7 @@ import {
   RepositoryRefsApi,
   type RepositoryRefTarget,
 } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { BranchesSidebarFixture } from "#tests-support/branches-sidebar-fixture.tsx";
 import {
   type FakeRoute,
   fakeRequests,
@@ -28,7 +29,6 @@ import {
   upstream,
 } from "#tests-support/fixtures.ts";
 import { render, testChanges } from "#tests-support/render.tsx";
-import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope.ts";
 import {
   type RepositoryScope,
@@ -393,7 +393,7 @@ describe("branches sidebar", () => {
     const view = (scope: RepositoryScope | undefined) => (
       <RepositoryScopeProvider scope={scope}>
         <div style={{ height: 480, width: 320 }}>
-          <BranchesSidebar />
+          <BranchesSidebarFixture />
         </div>
       </RepositoryScopeProvider>
     );
@@ -503,7 +503,7 @@ async function renderSidebar({
       })}
     >
       <div style={{ height: 480, width: 320 }}>
-        <BranchesSidebar
+        <BranchesSidebarFixture
           onToggleHistoryRef={onToggleHistoryRef}
           {...(selectedHistoryRefKeys === undefined
             ? {}

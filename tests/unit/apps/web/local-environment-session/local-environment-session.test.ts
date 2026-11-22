@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   createLocalEnvironmentSession,
   type LocalEnvironmentGateway,
@@ -10,6 +10,10 @@ import type { EnvironmentConnection } from "#web/platform/environment/environmen
 const environmentId = "00000000-0000-4000-8000-000000000001";
 
 describe("local Environment session", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("authorizes, reports the connection credential and closes it on stop", async () => {
     const connection = createConnection();
     const gateway = createGateway(connection);
@@ -71,13 +75,8 @@ describe("local Environment session", () => {
     const reconnected = createConnection();
     const gateway = createGateway(initial, reconnected);
     const invalidation = { changed: vi.fn() };
-    const reconnect = Promise.withResolvers<void>();
-    const waitBeforeReconnect = vi.fn(() => reconnect.promise);
-    const session = createSession({
-      gateway,
-      invalidation,
-      waitBeforeReconnect,
-    });
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const session = createSession({ gateway, invalidation });
 
     session.start();
     await expectState(session.getSnapshot, "Connected");
@@ -86,7 +85,7 @@ describe("local Environment session", () => {
     await expectState(session.getSnapshot, "Reconnecting");
     expect(session.getSnapshot()).toMatchObject({ environmentId });
 
-    reconnect.resolve();
+    vi.runOnlyPendingTimers();
     await expectState(session.getSnapshot, "Connected");
     expect(gateway.connect).toHaveBeenCalledTimes(2);
     expect(invalidation.changed).toHaveBeenCalledTimes(2);
@@ -100,15 +99,15 @@ describe("local Environment session", () => {
       _tag: "EnvironmentProtocolMismatch",
       serverProtocol: 1,
     });
-    const waitBeforeReconnect = vi.fn(async () => {});
-    const session = createSession({ gateway, waitBeforeReconnect });
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const session = createSession({ gateway });
 
     session.start();
     await expectState(session.getSnapshot, "ProtocolMismatch");
     expect(session.getSnapshot()).toMatchObject({
       message: expect.stringContaining("server is older"),
     });
-    expect(waitBeforeReconnect).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
     session.stop();
   });
 });

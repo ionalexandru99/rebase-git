@@ -1,13 +1,5 @@
 import { useState } from "react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogTitle,
-} from "#web/components/ui/alert-dialog.tsx";
+import { ConfirmDialog } from "#web/components/ui/alert-dialog.tsx";
 import { Button } from "#web/components/ui/button.tsx";
 import { SettingsRow } from "#web/components/ui/settings-layout.tsx";
 import {
@@ -100,22 +92,14 @@ export function RepositoryDetailsSettings({
           {message}
         </p>
       )}
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogContent>
-          <AlertDialogTitle>Remove repository?</AlertDialogTitle>
-          <AlertDialogDescription>
-            The repository and its files stay on disk.
-          </AlertDialogDescription>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => void run(remove, "removeRepository")}
-            >
-              Remove repository
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirming}
+        title="Remove repository?"
+        description="The repository and its files stay on disk."
+        action="Remove repository"
+        onConfirm={() => void run(remove, "removeRepository")}
+        onClose={() => setConfirming(false)}
+      />
     </>
   );
 }

@@ -9,7 +9,7 @@ import {
   maximumFileHistory,
 } from "#contracts/file-history/file-history.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
-import { Button } from "#web/components/ui/button.tsx";
+import { QueryStatus } from "#web/components/ui/query-status.tsx";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -22,7 +22,7 @@ import {
   useRestoreFiles,
 } from "#web/features/commit-inspection/restore-files.tsx";
 import { useBlameAction } from "#web/features/file-blame/file-blame.ts";
-import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
+import { DiffWorkerPool } from "#web/features/file-diff/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { useDiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 import { isFileHistoryInput } from "#web/features/file-history/file-history.ts";
@@ -35,10 +35,9 @@ import {
   type RepositoryScope,
   useRepositoryScope,
 } from "#web/platform/query/repository-scope.tsx";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
 
 const CommitDiff = lazy(
-  () => import("#web/features/commit-inspection/components/commit-diff.tsx"),
+  () => import("#web/features/commit-inspection/commit-diff.tsx"),
 );
 
 export function FileHistoryPanel({
@@ -174,21 +173,12 @@ function FileHistory({
           </div>
         )}
       </header>
-      {history.isError ? (
-        <div role="alert" className="p-3 text-body">
-          {describeFailure(history.error)}{" "}
-          <Button
-            size="xs"
-            variant="ghost"
-            onClick={() => void history.refetch()}
-          >
-            Retry
-          </Button>
-        </div>
-      ) : history.data === undefined ? (
-        <p role="status" className="p-4 text-body text-muted-foreground">
-          Loading history…
-        </p>
+      {history.isError || history.data === undefined ? (
+        <QueryStatus
+          error={history.error}
+          loading="Loading history…"
+          onRetry={() => void history.refetch()}
+        />
       ) : entry === undefined ? null : (
         <ResizablePanelGroup
           orientation="horizontal"

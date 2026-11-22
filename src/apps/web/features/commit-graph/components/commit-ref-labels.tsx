@@ -12,7 +12,7 @@ import {
 import { createContext, type ReactNode, useContext } from "react";
 import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
 import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
-import { CopyPill } from "#web/features/clipboard/components/copy-pill.tsx";
+import { CopyPill } from "#web/features/clipboard/copy-pill.tsx";
 import { graphLaneColor } from "#web/features/commit-graph/layout/graph-colors.ts";
 import type { HistorySelection } from "#web/features/commit-graph/scope/history-scope.ts";
 import { TagLabelMenu } from "#web/features/refs/tag-label-menu.tsx";

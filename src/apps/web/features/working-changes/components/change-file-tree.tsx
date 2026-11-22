@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { FileListToolbar } from "#web/features/file-diff/components/file-list-toolbar.tsx";
+import { FileListToolbar } from "#web/features/file-diff/file-list-toolbar.tsx";
 import {
   ChangeFileSection,
   type ChangeFileSectionView,
@@ -7,7 +7,7 @@ import {
 import {
   ConflictFileSection,
   type ConflictFileSectionView,
-} from "#web/features/working-changes/conflicts/components/conflict-file-section.tsx";
+} from "#web/features/working-changes/conflicts/conflict-file-section.tsx";
 import type {
   ChangeAction,
   WorkingChangesView,

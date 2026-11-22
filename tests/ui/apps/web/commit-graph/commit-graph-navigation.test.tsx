@@ -156,18 +156,20 @@ describe("commit graph navigation", () => {
             reader={reader}
             repositoryName="Search"
             roots={roots}
-            scope={{
-              _tag: "Custom",
+            historyScope={{
+              scope: {
+                _tag: "Custom",
+                selections: roots.map((root) => ({
+                  _tag: "LocalBranch" as const,
+                  name: root.name,
+                })),
+              },
               selections: roots.map((root) => ({
                 _tag: "LocalBranch" as const,
                 name: root.name,
               })),
+              toggleRef: () => setRoots([main, feature]),
             }}
-            selections={roots.map((root) => ({
-              _tag: "LocalBranch" as const,
-              name: root.name,
-            }))}
-            onRevealHistoryRef={() => setRoots([main, feature])}
           />
         </div>
       );

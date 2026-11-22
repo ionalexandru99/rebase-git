@@ -8,30 +8,30 @@ import {
   type InspectCommitDiff,
 } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
+import { QueryStatus } from "#web/components/ui/query-status.tsx";
+import { CommitFiles } from "#web/features/commit-inspection/commit-files.tsx";
 import {
   type CodeMatchTarget,
   type CommitFocus,
   commitInputOid,
   isCommitInput,
 } from "#web/features/commit-inspection/commit-input.ts";
-import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
-import { CommitMetadata } from "#web/features/commit-inspection/components/commit-metadata.tsx";
+import { CommitMetadata } from "#web/features/commit-inspection/commit-metadata.tsx";
 import {
   RestoreConfirmation,
   type RestorePreview,
   useRestoreFiles,
 } from "#web/features/commit-inspection/restore-files.tsx";
 import { useBlameAction } from "#web/features/file-blame/file-blame.ts";
-import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
+import { DiffWorkerPool } from "#web/features/file-diff/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { useDiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
 
 const CommitDiff = lazy(
-  () => import("#web/features/commit-inspection/components/commit-diff.tsx"),
+  () => import("#web/features/commit-inspection/commit-diff.tsx"),
 );
 
 interface SelectedFile {
@@ -72,8 +72,6 @@ export function CommitInspection({
   const diff = useCommitDiff(scope, details, path, active);
   const shown = restore.preview === undefined ? diff : preview;
   const [preferences, choosePreferences] = useDiffPreferences();
-  const error = inspection.isError ? describeFailure(inspection.error) : null;
-  const retry = () => void inspection.refetch();
   const select = (next: string) => {
     if (details !== undefined)
       setSelected({ oid: details.oid, path: next, focus });
@@ -89,14 +87,10 @@ export function CommitInspection({
           Reconnect to inspect commits.
         </p>
       ) : null}
-      {error ? (
-        <div role="alert" className="p-3 text-body">
-          {error}{" "}
-          <Button size="xs" variant="ghost" onClick={retry}>
-            Retry
-          </Button>
-        </div>
-      ) : null}
+      <QueryStatus
+        error={inspection.error}
+        onRetry={() => void inspection.refetch()}
+      />
       {details ? (
         <>
           <CommitMetadata key={details.oid} details={details} />
@@ -165,7 +159,7 @@ export function CommitInspection({
             </CommitFiles>
           )}
         </>
-      ) : !error ? (
+      ) : !inspection.isError ? (
         <p role="status" className="p-4 text-body text-muted-foreground">
           {inspection.isLoading
             ? "Loading commit…"

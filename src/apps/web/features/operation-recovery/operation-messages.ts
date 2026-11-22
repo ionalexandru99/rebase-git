@@ -1,5 +1,5 @@
 import type { OperationKind } from "#contracts/repository-operations/repository-operations.contract.ts";
-import type { OperationRecoveryState } from "#web/features/operation-recovery/hooks/use-operation-recovery.ts";
+import type { OperationRecoveryState } from "#web/features/operation-recovery/use-operation-recovery.ts";
 
 const labels: Record<OperationKind, string> = {
   idle: "Git operation",

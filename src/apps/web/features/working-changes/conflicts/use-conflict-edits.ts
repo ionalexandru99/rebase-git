@@ -9,7 +9,7 @@ import {
   RepositoryConflictsApi,
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { conflictReason } from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
+import { conflictReason } from "#web/features/working-changes/conflicts/use-conflicts.ts";
 import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 export interface ConflictEdit {

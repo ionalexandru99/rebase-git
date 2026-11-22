@@ -7,10 +7,7 @@ import {
   type TablerIcon,
 } from "@tabler/icons-react";
 import type { ComponentType } from "react";
-import type {
-  DesktopUpdateSnapshot,
-  DesktopUpdates,
-} from "#contracts/desktop-updates/desktop-updates.contract.ts";
+import type { DesktopUpdates } from "#contracts/desktop-updates/desktop-updates.contract.ts";
 import { DiagnosticsSettings } from "#web/features/diagnostics/diagnostics-settings.tsx";
 import { GeneralSettings } from "#web/features/settings/general-settings.tsx";
 import { HistoryStorageSettings } from "#web/features/settings/history-storage-settings.tsx";
@@ -28,8 +25,6 @@ export interface SettingsSectionContext {
   readonly desktopUpdates: DesktopUpdates | undefined;
   readonly productVersion: string;
   readonly selectSection: (section: SettingsSectionId) => void;
-  readonly updateLoadError: string | undefined;
-  readonly updateSnapshot: DesktopUpdateSnapshot | undefined;
 }
 
 interface SettingsSectionDefinition {

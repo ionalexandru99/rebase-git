@@ -5,7 +5,7 @@ import {
   type OpenProjectRepositoryItem,
 } from "#web/features/open-project/open-project-state.ts";
 import { RepositoryBadge } from "#web/features/repository-catalog/repository-badge.tsx";
-import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button.tsx";
+import { RepositorySettingsButton } from "#web/features/repository-settings/repository-settings-button.tsx";
 import { useNow } from "#web/lib/age-label.ts";
 
 export function ProjectList({

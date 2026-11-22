@@ -1,4 +1,3 @@
-import { useEffect, useEffectEvent } from "react";
 import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
 import type {
   WorktreeFolder,
@@ -8,6 +7,7 @@ import {
   refNameProblem,
   type StartPoint,
 } from "#web/features/refs/ref-kinds.ts";
+import { listenerBus } from "#web/lib/listener-bus.ts";
 
 export interface WorktreeDraft {
   readonly name: string;
@@ -19,23 +19,7 @@ export type WorktreePlan =
   | { readonly _tag: "Switch"; readonly path: string; readonly name: string }
   | { readonly _tag: "Create"; readonly start: WorktreeStart };
 
-const draftListeners = new Set<(draft: WorktreeDraft) => void>();
-
-export function requestWorktreeDraft(draft: WorktreeDraft) {
-  for (const listener of draftListeners) listener(draft);
-}
-
-export function useWorktreeDraftRequest(
-  handle: (draft: WorktreeDraft) => void,
-) {
-  const listener = useEffectEvent(handle);
-  useEffect(() => {
-    draftListeners.add(listener);
-    return () => {
-      draftListeners.delete(listener);
-    };
-  }, []);
-}
+export const worktreeDrafts = listenerBus<WorktreeDraft>();
 
 export function worktreeName(path: string) {
   return (

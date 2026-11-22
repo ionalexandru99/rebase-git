@@ -18,6 +18,10 @@ import {
   keyAction,
   runAction,
 } from "#web/components/ui/action-menu.tsx";
+import {
+  isContextMenuKey,
+  openContextMenuAt,
+} from "#web/components/ui/context-menu.tsx";
 import { IconSwitch } from "#web/components/ui/icon-switch.tsx";
 import { ScrollTopButton } from "#web/components/ui/scroll-top-button.tsx";
 import {
@@ -66,15 +70,16 @@ import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import {
   type RefActionRow,
   refActions,
+  refIntents,
   selectedBranchActions,
   selectedTagActions,
-  useRefIntent,
 } from "#web/features/refs/ref-actions.ts";
 import { useRefEditing } from "#web/features/refs/ref-editing.ts";
 import { RefEditingStatus } from "#web/features/refs/ref-editing-status.tsx";
 import {
   commitStartPoint,
   type RefKind,
+  type StartPoint,
 } from "#web/features/refs/ref-kinds.ts";
 import { RefEditField } from "#web/features/refs/ref-name-field.tsx";
 import {
@@ -97,10 +102,10 @@ import {
   useStashDraft,
   useStashes,
 } from "#web/features/stashes/stashes.ts";
+import { useListener } from "#web/lib/listener-bus.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import { useCommand } from "#web/platform/query/use-command.ts";
 
-const noSelectedRefs: ReadonlySet<string> = new Set();
 const noPullRequests: readonly PullRequest[] = [];
 const noRemoteBranches: readonly RemoteBranch[] = [];
 const noSelectedRows: ReadonlySet<string> = new Set();
@@ -112,26 +117,26 @@ export function BranchesSidebar({
   rebase,
   reset,
   compare,
-  onBranchRenamed = () => undefined,
-  onToggleHistoryRef = () => undefined,
+  onBranchRenamed,
+  onToggleHistoryRef,
   onShowReflog,
-  onOpenStash = () => undefined,
-  selectedHistoryRefKeys = noSelectedRefs,
+  onOpenStash,
+  selectedHistoryRefKeys,
 }: {
-  readonly history?: Pick<RepositoryHistory, "ask"> | undefined;
-  readonly merge?: MergeActions | undefined;
-  readonly pullRequests?: PullRequests | undefined;
-  readonly rebase?: RebaseActions | undefined;
-  readonly reset?: ResetActions | undefined;
-  readonly compare?: CompareActions | undefined;
-  readonly onBranchRenamed?: (rename: {
+  readonly history: Pick<RepositoryHistory, "ask"> | undefined;
+  readonly merge: MergeActions;
+  readonly pullRequests: PullRequests;
+  readonly rebase: Pick<RebaseActions, "actionFor" | "inspect">;
+  readonly reset: Pick<ResetActions, "actionFor">;
+  readonly compare: Pick<CompareActions, "actionFor">;
+  readonly onBranchRenamed: (rename: {
     readonly name: string;
     readonly newName: string;
   }) => void;
-  readonly onToggleHistoryRef?: (target: RepositoryRefTarget) => void;
-  readonly onShowReflog?: (branch: string) => void;
-  readonly onOpenStash?: (oid: string) => void;
-  readonly selectedHistoryRefKeys?: ReadonlySet<string>;
+  readonly onToggleHistoryRef: (target: RepositoryRefTarget) => void;
+  readonly onShowReflog: (branch: string) => void;
+  readonly onOpenStash: (oid: string) => void;
+  readonly selectedHistoryRefKeys: ReadonlySet<string>;
 }): JSX.Element {
   const activeWorktreePath = useRepositoryScope()?.worktreePath ?? "";
   const repositoryRefs = useScopedRepositoryRefs();
@@ -141,7 +146,6 @@ export function BranchesSidebar({
   const tagPush = useTagPush();
   const stashes = useStashes();
   const stashCommands = useStashCommands();
-  const stashDraft = useStashDraft();
   const settling = useCommand(BranchSettlingApi.settle);
   const errorToast = useErrorToast();
   const settle = (names: readonly string[], settled: boolean) =>
@@ -155,6 +159,9 @@ export function BranchesSidebar({
   const [expandedSections, setExpandedSections] = useState(
     defaultExpandedSections,
   );
+  const stashDraft = useStashDraft(() =>
+    setScope((current) => scopeShowing(current, stashesSectionId)),
+  );
   const [view, setView] = useBranchesSidebarView();
   const [expandedFolders, setExpandedFolders] = useState<
     ReadonlyMap<string, boolean>
@@ -165,12 +172,6 @@ export function BranchesSidebar({
   const treeRef = useRef<HTMLDivElement>(null);
   const refs = repositoryRefs.refs;
   const onSelectRef = activation.select;
-  const folderRepositoryRef = useRef(refs?.repositoryId);
-  useEffect(() => {
-    if (folderRepositoryRef.current === refs?.repositoryId) return;
-    folderRepositoryRef.current = refs?.repositoryId;
-    setExpandedFolders(new Map());
-  }, [refs?.repositoryId]);
   const rows = useMemo(
     () =>
       refs === undefined
@@ -210,29 +211,27 @@ export function BranchesSidebar({
     setActiveRowId(refRowId(sectionId, name));
     treeRef.current?.focus();
   };
-  const editing = useRefEditing({
+  const refEditing = useRefEditing({
     refs,
     focusTree,
     reveal,
     onCreated: (name) => onSelectRef({ _tag: "LocalBranch", name }),
     onRenamed: onBranchRenamed,
   });
+  const editing = {
+    ...refEditing,
+    draft: (kind: RefKind, startPoint: StartPoint) => {
+      const sectionId = refSectionId(kind);
+      setScope((current) => scopeShowing(current, sectionId));
+      setExpandedSections((current) =>
+        current.has(sectionId) ? current : toggleSection(current, sectionId),
+      );
+      refEditing.draft(kind, startPoint);
+    },
+  };
   const edit = editing.edit;
   const draftSectionId =
     edit?.kind === "create" ? refSectionId(edit.ref) : undefined;
-  useEffect(() => {
-    if (draftSectionId === undefined) return;
-    setScope((current) => scopeShowing(current, draftSectionId));
-    setExpandedSections((current) =>
-      current.has(draftSectionId)
-        ? current
-        : toggleSection(current, draftSectionId),
-    );
-  }, [draftSectionId]);
-  useEffect(() => {
-    if (stashDraft.selection !== undefined)
-      setScope((current) => scopeShowing(current, stashesSectionId));
-  }, [stashDraft.selection]);
   const detailsRowId = rows.find(
     (row) =>
       row.id === activeRowId && row.kind === "ref" && row.target._tag === "Tag",
@@ -275,19 +274,16 @@ export function BranchesSidebar({
           { activeWorktreePath, writable: editing.writable },
           {
             checkout: onSelectRef,
-            compare: compare?.actionFor,
-            merge: merge?.actionFor,
-            rebase: rebase?.actionFor,
-            reset: reset?.actionFor,
+            compare: compare.actionFor,
+            merge: merge.actionFor,
+            rebase: rebase.actionFor,
+            reset: reset.actionFor,
             showReflog: onShowReflog,
-            pullRequests:
-              pullRequests === undefined
-                ? undefined
-                : (target) =>
-                    pullRequests.actionsFor(target, () => {
-                      setLinking(row.name);
-                      branchCard.open(branchCardTriggerId(row.id));
-                    }),
+            pullRequests: (target) =>
+              pullRequests.actionsFor(target, () => {
+                setLinking(row.name);
+                branchCard.open(branchCardTriggerId(row.id));
+              }),
             pull: pull.allowed
               ? {
                   pulling: pull.pulling,
@@ -300,7 +296,7 @@ export function BranchesSidebar({
           },
         );
 
-  useRefIntent((intent) => {
+  useListener(refIntents, (intent) => {
     if (intent._tag === "DraftRef") {
       editing.draft(intent.kind, commitStartPoint(intent.oid));
       return;
@@ -373,27 +369,14 @@ export function BranchesSidebar({
     else setRowExpanded(row, !row.expanded);
   };
 
-  const openRowMenu = (rowId: string) => {
-    const row = document.getElementById(rowElementId(rowId));
-    if (row === null) return;
-    const bounds = row.getBoundingClientRect();
-    row.dispatchEvent(
-      new MouseEvent("contextmenu", {
-        bubbles: true,
-        clientX: bounds.left + 32,
-        clientY: bounds.bottom,
-      }),
-    );
-  };
-
   const handleTreeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const activeRow = rows.find((row) => row.id === activeRowId);
     if (
       (activeRow?.kind === "ref" || activeRow?.kind === "stash") &&
-      (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey))
+      isContextMenuKey(event)
     ) {
       event.preventDefault();
-      openRowMenu(activeRow.id);
+      openContextMenuAt(document.getElementById(rowElementId(activeRow.id)));
       return;
     }
     if (
@@ -527,12 +510,12 @@ export function BranchesSidebar({
           setActiveRowId(
             next.size === 0 || next.has(row.id) ? row.id : [...next].at(-1),
           );
-          merge?.inspect(row.target);
-          rebase?.inspect(row.target);
+          merge.inspect(row.target);
+          rebase.inspect(row.target);
         }}
         onToggleHistory={() => onToggleHistoryRef(row.target)}
         pullRequests={
-          row.target._tag === "LocalBranch" && pullRequests !== undefined
+          row.target._tag === "LocalBranch"
             ? pullRequests.forBranch(row.name)
             : noPullRequests
         }

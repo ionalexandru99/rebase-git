@@ -17,8 +17,8 @@ export function HistoryScopeStrip({
   scope,
   selections,
 }: {
-  readonly onRemove: ((target: HistorySelection) => void) | undefined;
-  readonly onReset?: (() => void) | undefined;
+  readonly onRemove: (target: HistorySelection) => void;
+  readonly onReset: (() => void) | undefined;
   readonly roots: readonly RepositoryHistoryRefTarget[];
   readonly scope: HistoryScope;
   readonly selections: readonly HistorySelection[];
@@ -56,9 +56,7 @@ export function HistoryScopeStrip({
                           ? "commit"
                           : "branch",
                 }}
-                onRemove={
-                  onRemove === undefined ? undefined : () => onRemove(selection)
-                }
+                onRemove={() => onRemove(selection)}
               />
             ))}
             {selections.length === 0 && detachedHead !== undefined ? (

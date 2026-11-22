@@ -46,7 +46,7 @@ describe("commit graph commands", () => {
     await expect
       .element(screen.getByRole("menu"))
       .toHaveTextContent(
-        "Create branch here…Create worktree here…Create tag here…Copy",
+        "Open detailsCreate branch here…Create worktree here…Create tag here…Copy",
       );
     await userEvent.keyboard("{Escape}");
 
@@ -60,7 +60,9 @@ describe("commit graph commands", () => {
       .getByRole("grid")
       .getByRole("row", { name: /^Commit 1,/ })
       .click({ button: "right" });
-    await expect.element(screen.getByRole("menu")).toHaveTextContent("Copy");
+    await expect
+      .element(screen.getByRole("menu"))
+      .toHaveTextContent("Open detailsCopy");
     await expect
       .element(screen.getByRole("menuitem", { name: "Create tag here…" }))
       .not.toBeInTheDocument();
@@ -158,7 +160,7 @@ function ScopedGraph({
           reader={reader}
           repositoryName="rebase-test"
           roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}
-          onOpenDetails={onOpenDetails}
+          {...(onOpenDetails === undefined ? {} : { onOpenDetails })}
         />
       </RepositoryScopeProvider>
     </div>

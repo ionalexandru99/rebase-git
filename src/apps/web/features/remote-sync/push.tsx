@@ -2,11 +2,11 @@ import { IconArrowUp } from "@tabler/icons-react";
 import { useRef, useState } from "react";
 import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
 import { ToolbarButton } from "#web/components/ui/toolbar-button.tsx";
-import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
 import {
   useErrorToast,
   useStatusToast,
 } from "#web/features/notifications/notifications.tsx";
+import { ConfirmNotice } from "#web/features/notifications/persistent-notification.tsx";
 import {
   describeProgress,
   describePushed,

@@ -6,7 +6,7 @@ import type {
   HistoryStorage,
 } from "#web/features/repository-history/history-worker-protocol.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
-import { RepositoryCacheSettings } from "#web/features/repository-settings/components/repository-cache-settings.tsx";
+import { RepositoryCacheSettings } from "#web/features/repository-settings/repository-cache-settings.tsx";
 import { createStore } from "#web/platform/store/store.ts";
 
 const identity = {

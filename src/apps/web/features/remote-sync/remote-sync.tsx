@@ -1,7 +1,7 @@
 import { IconArrowBarToDown } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 import { ToolbarButton } from "#web/components/ui/toolbar-button.tsx";
-import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
+import { useWorktreeOperation } from "#web/features/operation-recovery/use-operation.ts";
 import {
   useActiveHead,
   useScopedRepositoryRefs,

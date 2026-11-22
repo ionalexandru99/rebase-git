@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
+import { sidebarRows } from "#tests-support/branches-sidebar-rows.ts";
 import { repositoryRefs, worktree } from "#tests-support/fixtures.ts";
-import {
-  buildBranchesSidebarRows,
-  defaultExpandedSections,
-} from "#web/features/branches-sidebar/branches-sidebar-state.ts";
+import { defaultExpandedSections } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 
 const refs = repositoryRefs({
   branches: [
@@ -21,19 +19,15 @@ const refs = repositoryRefs({
 });
 
 function tree(query = "", folders: ReadonlyMap<string, boolean> = new Map()) {
-  return buildBranchesSidebarRows(
-    refs,
-    "/repo",
-    defaultExpandedSections,
-    query,
-    "all",
-    { view: "tree", folders },
-  );
+  return sidebarRows(refs, "/repo", defaultExpandedSections, query, "all", {
+    view: "tree",
+    folders,
+  });
 }
 
 describe("branch prefix tree", () => {
   it("sorts folders before individual branches at every level", () => {
-    const rows = buildBranchesSidebarRows(
+    const rows = sidebarRows(
       {
         ...refs,
         branches: [
@@ -121,7 +115,7 @@ describe("branch prefix tree", () => {
   });
 
   it("keeps remote and tag folders separate from local folders", () => {
-    const rows = buildBranchesSidebarRows(
+    const rows = sidebarRows(
       refs,
       "/repo",
       new Set(["branches", "remote:origin", "tags"]),

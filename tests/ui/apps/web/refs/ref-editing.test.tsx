@@ -20,6 +20,7 @@ import {
   RepositoryRefsApi,
 } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
+import { BranchesSidebarFixture } from "#tests-support/branches-sidebar-fixture.tsx";
 import {
   fakeRequests,
   rejected,
@@ -37,7 +38,6 @@ import {
   upstream,
 } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
-import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
 import { CommitActionMenu } from "#web/features/commit-graph/commit-actions.tsx";
 import { CommitRefPill } from "#web/features/commit-graph/components/commit-ref-labels.tsx";
 import { createRefActions } from "#web/features/refs/ref-actions.ts";
@@ -896,7 +896,7 @@ function BranchWorkspace({
       )}
       <OperationReader />
       <div style={{ height: 520, width: 320 }}>
-        <BranchesSidebar onBranchRenamed={onBranchRenamed} />
+        <BranchesSidebarFixture onBranchRenamed={onBranchRenamed} />
       </div>
     </>
   );

@@ -11,7 +11,7 @@ import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import {
   splitConflicts,
   useConflicts,
-} from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
+} from "#web/features/working-changes/conflicts/use-conflicts.ts";
 import {
   type SelectedChange,
   useChangeSelection,

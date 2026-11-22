@@ -18,6 +18,8 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
+  isContextMenuKey,
+  openContextMenuAt,
 } from "#web/components/ui/context-menu.tsx";
 import { copyCommitMenu } from "#web/features/clipboard/copy-commit-menu.ts";
 import type { CommitInput } from "#web/features/commit-inspection/commit-input.ts";
@@ -25,11 +27,11 @@ import { RangeRow } from "#web/features/file-blame/range-row.tsx";
 import {
   diffSurfaceCSS,
   diffThemes,
-} from "#web/features/file-diff/components/diff-content.tsx";
-import { openMenu } from "#web/features/file-history/file-history-list.tsx";
+} from "#web/features/file-diff/diff-content.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useTheme } from "#web/features/theme/theme.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
+import { listKeyIndex } from "#web/lib/list-key-index.ts";
 
 export interface BlameHandlers {
   readonly onSelectCommit?: ((oid: string) => void) | undefined;
@@ -149,20 +151,11 @@ export function BlameLines({
     if (range !== undefined) open(range);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const last = ranges.length - 1;
-    if (event.key === "ArrowDown")
-      select(selected === undefined ? 0 : Math.min(last, selected + 1));
-    else if (event.key === "ArrowUp")
-      select(selected === undefined ? 0 : Math.max(0, selected - 1));
-    else if (event.key === "Home") select(0);
-    else if (event.key === "End") select(last);
+    const target = listKeyIndex(event.key, selected ?? -1, ranges.length);
+    if (target !== undefined) select(target);
     else if (event.key === "Enter" && active !== undefined) open(active);
-    else if (
-      (event.key === "ContextMenu" ||
-        (event.key === "F10" && event.shiftKey)) &&
-      selected !== undefined
-    )
-      openMenu(rowId(selected));
+    else if (isContextMenuKey(event) && selected !== undefined)
+      openContextMenuAt(document.getElementById(rowId(selected)));
     else return;
     event.preventDefault();
   };

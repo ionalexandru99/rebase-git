@@ -11,8 +11,11 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
+  isContextMenuKey,
+  openContextMenuAt,
 } from "#web/components/ui/context-menu.tsx";
 import { useNow } from "#web/lib/age-label.ts";
+import { listKeyIndex } from "#web/lib/list-key-index.ts";
 
 export interface ReflogRow {
   readonly id: string;
@@ -59,7 +62,7 @@ export function ReflogList({
   };
 
   const moveTo = (index: number) => {
-    const row = rows[Math.max(0, Math.min(rows.length - 1, index))];
+    const row = rows[index];
     if (row === undefined) return;
     setActiveId(row.id);
     document
@@ -69,13 +72,10 @@ export function ReflogList({
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (active === undefined) return;
-    const index = rows.indexOf(active);
-    if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey))
-      openMenu(active);
-    else if (event.key === "ArrowDown") moveTo(index + 1);
-    else if (event.key === "ArrowUp") moveTo(index - 1);
-    else if (event.key === "Home") moveTo(0);
-    else if (event.key === "End") moveTo(rows.length - 1);
+    const target = listKeyIndex(event.key, rows.indexOf(active), rows.length);
+    if (isContextMenuKey(event))
+      openContextMenuAt(document.getElementById(rowElementId(active.id)));
+    else if (target !== undefined) moveTo(target);
     else if (event.key === "ArrowRight") toggleGroup(active, true);
     else if (event.key === "ArrowLeft") toggleGroup(active, false);
     else if (!runAction(keyAction(actionsFor(active), event.key))) return;
@@ -277,19 +277,6 @@ function reflogRows(
       ),
     ];
   });
-}
-
-function openMenu(row: ReflogRow) {
-  const element = document.getElementById(rowElementId(row.id));
-  if (element === null) return;
-  const bounds = element.getBoundingClientRect();
-  element.dispatchEvent(
-    new globalThis.MouseEvent("contextmenu", {
-      bubbles: true,
-      clientX: bounds.left + 48,
-      clientY: bounds.bottom,
-    }),
-  );
 }
 
 function rowElementId(id: string) {

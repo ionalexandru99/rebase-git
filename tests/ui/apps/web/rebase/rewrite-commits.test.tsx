@@ -88,7 +88,7 @@ describe("drop and squash commits from the graph", () => {
     await expect
       .element(f.screen.getByRole("menuitem", { name: "Drop commit" }))
       .toBeVisible();
-    await userEvent.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}");
     await expect
       .element(f.screen.getByRole("menuitem", { name: "Drop commit" }))
       .toHaveFocus();

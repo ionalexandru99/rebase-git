@@ -4,7 +4,14 @@ import {
   IconFolder,
   IconFolderOpen,
 } from "@tabler/icons-react";
-import { type KeyboardEvent, type ReactNode, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   type Action,
   ActionMenuItems,
@@ -13,10 +20,14 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
+  isContextMenuKey,
+  openContextMenuAt,
 } from "#web/components/ui/context-menu.tsx";
 import { FileIcon } from "#web/components/ui/file-icon.tsx";
-import type { ChangeTreeRow } from "#web/features/file-diff/file-tree.ts";
-import { useFileRows } from "#web/features/file-diff/hooks/use-file-rows.ts";
+import {
+  type ChangeTreeRow,
+  changeTreeRows,
+} from "#web/features/file-diff/file-tree.ts";
 import { cn } from "#web/lib/utils.ts";
 
 interface FileRowContext<File extends { readonly path: string }> {
@@ -70,15 +81,29 @@ export function FileListSection<File extends { readonly path: string }>({
   ) => ReactNode;
 }) {
   const [open, setOpen] = useState(true);
-  const { rows, collapsed, scrollRef, items, totalSize, toggle } = useFileRows(
-    files,
-    {
-      tree,
-      filter,
-      open,
-      rowHeight: (row) => (tree || row.file === undefined ? 32 : 44),
-    },
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const rows = useMemo(
+    () => changeTreeRows(files, tree, filter, collapsed),
+    [files, tree, filter, collapsed],
   );
+  const virtualizer = useVirtualizer({
+    count: open ? rows.length : 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (index) =>
+      tree || rows[index]?.file === undefined ? 32 : 44,
+    overscan: 6,
+    getItemKey: (index) => rows[index]?.key ?? index,
+  });
+  const items = virtualizer.getVirtualItems();
+  const totalSize = virtualizer.getTotalSize();
+  const toggle = (key: string) =>
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const filled = grow && open && files.length > 0;
   const header = (
     <button
@@ -196,17 +221,9 @@ export function FileListSection<File extends { readonly path: string }>({
 }
 
 export function openMenu(event: KeyboardEvent<HTMLElement>) {
-  if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey))
-    return;
+  if (!isContextMenuKey(event)) return;
   event.preventDefault();
-  const bounds = event.currentTarget.getBoundingClientRect();
-  event.currentTarget.dispatchEvent(
-    new globalThis.MouseEvent("contextmenu", {
-      bubbles: true,
-      clientX: bounds.left + 32,
-      clientY: bounds.bottom,
-    }),
-  );
+  openContextMenuAt(event.currentTarget);
 }
 
 export function RowLead<File extends { readonly path: string }>({

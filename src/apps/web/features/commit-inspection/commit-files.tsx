@@ -19,12 +19,12 @@ import {
   FileListSection,
   openMenu,
   RowLead,
-} from "#web/features/file-diff/components/file-list-section.tsx";
-import { FileListToolbar } from "#web/features/file-diff/components/file-list-toolbar.tsx";
+} from "#web/features/file-diff/file-list-section.tsx";
+import { FileListToolbar } from "#web/features/file-diff/file-list-toolbar.tsx";
 import {
   FileRowName,
   LineCounts,
-} from "#web/features/file-diff/components/file-row-name.tsx";
+} from "#web/features/file-diff/file-row-name.tsx";
 import type { ChangeTreeRow } from "#web/features/file-diff/file-tree.ts";
 import type { DiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { cn } from "#web/lib/utils.ts";

@@ -10,7 +10,7 @@ import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import {
   useOperationAction,
   useWorktreeOperation,
-} from "#web/features/operation-recovery/hooks/use-operation.ts";
+} from "#web/features/operation-recovery/use-operation.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import type {
   Command,

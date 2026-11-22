@@ -5,6 +5,7 @@ import {
   PullRequestsApi,
 } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { BranchesSidebarFixture } from "#tests-support/branches-sidebar-fixture.tsx";
 import {
   fakeRequests,
   idleOperation,
@@ -26,7 +27,6 @@ import {
   historyOid,
 } from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
-import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
 import { usePullRequests } from "#web/features/pull-requests/pull-requests.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
@@ -200,7 +200,7 @@ function CardHarness() {
   const pullRequests = usePullRequests();
   return (
     <div style={{ height: 480, width: 320 }}>
-      <BranchesSidebar history={history} pullRequests={pullRequests} />
+      <BranchesSidebarFixture history={history} pullRequests={pullRequests} />
     </div>
   );
 }

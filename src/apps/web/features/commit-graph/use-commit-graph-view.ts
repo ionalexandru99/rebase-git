@@ -10,12 +10,12 @@ import {
 import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
 import type { CommitGraphViewportHandle } from "#web/features/commit-graph/components/commit-graph-virtual-window.tsx";
 import { historyLabelTarget } from "#web/features/commit-graph/components/commit-ref-labels.tsx";
+import type { HistorySelection } from "#web/features/commit-graph/scope/history-scope.ts";
 import {
   type CommitGraphSelectionMode,
   useCommitGraphSelection,
-} from "#web/features/commit-graph/hooks/use-commit-graph-selection.ts";
-import { useGraphRows } from "#web/features/commit-graph/hooks/use-graph-rows.ts";
-import type { HistorySelection } from "#web/features/commit-graph/scope/history-scope.ts";
+} from "#web/features/commit-graph/use-commit-graph-selection.ts";
+import { useGraphRows } from "#web/features/commit-graph/use-graph-rows.ts";
 import type { FarEdgeEnd } from "#web/features/repository-history/commit-lanes.ts";
 import { useRepositoryHistoryOrder } from "#web/features/repository-history/history-order.ts";
 import type { HistoryScopeQuery } from "#web/features/repository-history/history-view.ts";
@@ -40,23 +40,22 @@ export function useCommitGraphView({
   onActiveCommitChange,
 }: {
   readonly history: RepositoryHistory | undefined;
-  readonly historyIdentity:
-    | { readonly environmentId: string; readonly repositoryId: string }
-    | undefined;
+  readonly historyIdentity: {
+    readonly environmentId: string;
+    readonly repositoryId: string;
+  };
   readonly roots: readonly RepositoryHistoryRefTarget[] | undefined;
   readonly scrollRef: RefObject<HTMLTableElement | null>;
   readonly viewportRef: RefObject<CommitGraphViewportHandle | null>;
-  readonly onRevealHistoryRef: ((target: HistorySelection) => void) | undefined;
-  readonly onActiveCommitChange:
-    | ((oid: string | undefined) => void)
-    | undefined;
+  readonly onRevealHistoryRef: (target: HistorySelection) => void;
+  readonly onActiveCommitChange: (oid: string | undefined) => void;
 }) {
   const [expanded, setExpanded] = useState<
     ReadonlyMap<string, readonly string[]>
   >(new Map());
   const order = useRepositoryHistoryOrder(
-    historyIdentity?.environmentId,
-    historyIdentity?.repositoryId,
+    historyIdentity.environmentId,
+    historyIdentity.repositoryId,
   );
   const snapshot = useStore(history ?? emptyHistory);
   const [pageSize, setPageSize] = useState(12);
@@ -222,7 +221,7 @@ export function useCommitGraphView({
     const root = target.root;
     if (follow && root !== undefined) return;
     const selection = root === undefined ? undefined : historyLabelTarget(root);
-    if (selection !== undefined) onRevealHistoryRef?.(selection);
+    if (selection !== undefined) onRevealHistoryRef(selection);
     if (target.expanded.length > 0)
       setExpanded((previous) => {
         const next = new Map(previous);

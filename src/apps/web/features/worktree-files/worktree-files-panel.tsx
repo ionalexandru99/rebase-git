@@ -14,7 +14,7 @@ import {
   type WorktreeFile,
   WorktreeFilesApi,
 } from "#contracts/worktree-files/worktree-files.contract.ts";
-import { Button } from "#web/components/ui/button.tsx";
+import { QueryStatus } from "#web/components/ui/query-status.tsx";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -23,8 +23,8 @@ import {
 import {
   diffSurfaceCSS,
   diffThemes,
-} from "#web/features/file-diff/components/diff-content.tsx";
-import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
+} from "#web/features/file-diff/diff-content.tsx";
+import { DiffWorkerPool } from "#web/features/file-diff/diff-worker-pool.tsx";
 import { useTheme } from "#web/features/theme/theme.ts";
 import { useWorkingChanges } from "#web/features/working-changes/hooks/use-working-changes.ts";
 import {
@@ -40,7 +40,6 @@ import {
 } from "#web/features/worktree-files/worktree-search.tsx";
 import { WorktreeTree } from "#web/features/worktree-files/worktree-tree.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
 
 const lineHeight = 20;
 const filePadding = 8;
@@ -124,14 +123,11 @@ function WorktreeFiles({
               onValue={setQuery}
               onKind={setKind}
             />
-            {failedSearch.error === null ? null : (
-              <div role="alert" className="px-3 pb-2 text-body">
-                {describeFailure(failedSearch.error)}{" "}
-                <Button size="xs" variant="ghost" onClick={failedSearch.retry}>
-                  Retry
-                </Button>
-              </div>
-            )}
+            <QueryStatus
+              className="px-3 pb-2"
+              error={failedSearch.error}
+              onRetry={failedSearch.retry}
+            />
             <WorktreeTree
               scope={scope}
               changes={changes}
@@ -206,14 +202,9 @@ function FileView({
           </div>
         )}
       </header>
-      {read.isError ? (
-        <div role="alert" className="p-3 text-body">
-          {describeFailure(read.error)}{" "}
-          <Button size="xs" variant="ghost" onClick={() => void read.refetch()}>
-            Retry
-          </Button>
-        </div>
-      ) : read.data === undefined ? null : (
+      {read.isError || read.data === undefined ? (
+        <QueryStatus error={read.error} onRetry={() => void read.refetch()} />
+      ) : (
         <FileContents path={file.path} file={read.data} line={file.line} />
       )}
     </section>

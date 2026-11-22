@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import type { CommitInspection } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { render } from "#tests-support/render.tsx";
-import { CommitMetadata } from "#web/features/commit-inspection/components/commit-metadata.tsx";
+import { CommitMetadata } from "#web/features/commit-inspection/commit-metadata.tsx";
 
 const details: CommitInspection = {
   oid: "a".repeat(40),

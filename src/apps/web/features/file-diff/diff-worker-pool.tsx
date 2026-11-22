@@ -4,7 +4,7 @@ import {
 } from "@pierre/diffs/react";
 import DiffWorker from "@pierre/diffs/worker/worker.js?worker";
 import type { ComponentProps, ReactNode } from "react";
-import { diffThemes } from "#web/features/file-diff/components/diff-content.tsx";
+import { diffThemes } from "#web/features/file-diff/diff-content.tsx";
 
 const poolOptions: WorkerPoolOptions = {
   workerFactory: () => new DiffWorker(),

@@ -8,16 +8,16 @@ import {
   useState,
 } from "react";
 import {
-  confirmsInPlace,
-  noticeId,
-  PersistentNotificationOutlet,
-} from "#web/features/notifications/components/persistent-notification.tsx";
-import {
   type NoticeChoice,
   type NoticeData,
   NotificationStack,
   type NotifiedRepository,
 } from "#web/features/notifications/notification-stack.tsx";
+import {
+  confirmsInPlace,
+  noticeId,
+  PersistentNotificationOutlet,
+} from "#web/features/notifications/persistent-notification.tsx";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import {
   describeFailure,
@@ -66,7 +66,6 @@ const errorTitles = {
   dropStash: "Couldn't drop the stash",
   removeWorktree: "Couldn't remove the worktree",
   unlockWorktree: "Couldn't unlock the worktree",
-  saveWorktreeFolder: "Couldn't save the worktree folder",
   resolveConflict: "Couldn't resolve the conflict",
   continue: "Couldn't continue the operation",
   skip: "Couldn't skip the commit",

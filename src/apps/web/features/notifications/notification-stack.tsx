@@ -11,7 +11,7 @@ import {
 import {
   NoticeCard,
   NoticeIcon,
-} from "#web/features/notifications/components/notice-card.tsx";
+} from "#web/features/notifications/notice-card.tsx";
 
 export type NoticeChoice = {
   readonly label: string;

@@ -31,7 +31,7 @@ import {
   worktree,
 } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
-import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
+import { useOperation } from "#web/features/operation-recovery/use-operation.ts";
 import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 

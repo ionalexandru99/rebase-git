@@ -1,17 +1,12 @@
 "use client";
 
 import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog";
+import type { ReactNode } from "react";
 import { buttonVariants } from "#web/components/ui/button.tsx";
 import { cn } from "#web/lib/utils.ts";
 
 function AlertDialog(props: AlertDialogPrimitive.Root.Props) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
-}
-
-function AlertDialogTrigger(props: AlertDialogPrimitive.Trigger.Props) {
-  return (
-    <AlertDialogPrimitive.Trigger data-slot="alert-dialog-trigger" {...props} />
-  );
 }
 
 function AlertDialogContent({
@@ -103,13 +98,38 @@ function AlertDialogAction({
   );
 }
 
-export {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-};
+function ConfirmDialog({
+  open,
+  title,
+  description,
+  action,
+  onConfirm,
+  onClose,
+}: {
+  readonly open: boolean;
+  readonly title: string;
+  readonly description: ReactNode;
+  readonly action: string;
+  readonly onConfirm: () => void;
+  readonly onClose: () => void;
+}) {
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogTitle>{title}</AlertDialogTitle>
+        <AlertDialogDescription>{description}</AlertDialogDescription>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>{action}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+export { ConfirmDialog };

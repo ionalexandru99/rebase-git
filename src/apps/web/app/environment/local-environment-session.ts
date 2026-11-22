@@ -57,7 +57,6 @@ export interface LocalEnvironmentSessionOptions {
   readonly gateway: LocalEnvironmentGateway;
   readonly invalidation: EnvironmentInvalidation;
   readonly onConnect?: (credential: EnvironmentCredential) => void;
-  readonly waitBeforeReconnect?: (attempt: number) => Promise<void>;
 }
 
 type Publish = (state: LocalEnvironmentSessionState) => void;
@@ -111,7 +110,7 @@ async function authorizeSession(
 ) {
   for (let attempt = 0; !signal.aborted; attempt += 1) {
     if (attempt === 0) publish({ _tag: "Authorizing" });
-    else await reconnectAfter(options, publish, attempt);
+    else await reconnectAfter(publish, attempt);
     if (signal.aborted) return undefined;
     try {
       return await options.gateway.authorize();
@@ -138,7 +137,7 @@ async function maintainConnection(
   let environmentId: string | undefined;
   while (!signal.aborted) {
     if (attempt === 0) publish({ _tag: "Connecting" });
-    else await reconnectAfter(options, publish, attempt, environmentId);
+    else await reconnectAfter(publish, attempt, environmentId);
     if (signal.aborted) return;
     let failure = unavailable;
     try {
@@ -187,7 +186,6 @@ async function serveConnection(
 }
 
 function reconnectAfter(
-  options: LocalEnvironmentSessionOptions,
   publish: Publish,
   attempt: number,
   environmentId?: string,
@@ -197,9 +195,8 @@ function reconnectAfter(
     attempt,
     ...(environmentId === undefined ? {} : { environmentId }),
   });
-  return (
-    options.waitBeforeReconnect?.(attempt) ??
-    new Promise<void>((resolve) => setTimeout(resolve, reconnectDelay(attempt)))
+  return new Promise<void>((resolve) =>
+    setTimeout(resolve, reconnectDelay(attempt)),
   );
 }
 

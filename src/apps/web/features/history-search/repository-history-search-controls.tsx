@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "#web/components/ui/dropdown-menu.tsx";
 import { Input } from "#web/components/ui/input.tsx";
-import { HistorySearchResults } from "#web/features/history-search/components/history-search-results.tsx";
+import { HistorySearchResults } from "#web/features/history-search/history-search-results.tsx";
 import {
   type CodeSearchScope,
   type SearchMode,

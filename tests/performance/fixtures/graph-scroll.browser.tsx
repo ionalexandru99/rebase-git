@@ -4,11 +4,13 @@ import type {
   RepositoryCommit,
   RepositoryHistoryRefTarget,
 } from "#contracts/repository-history/repository-history.contract.ts";
+import { noCommitGraphActions } from "#tests-support/workspace-actions.ts";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
 import {
   commitGraphNodePosition,
   graphRowHeight,
 } from "#web/features/commit-graph/layout/graph-geometry.ts";
+import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope.ts";
 import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { HistoryGraph } from "#web/features/repository-history/history-graph.ts";
 import {
@@ -152,10 +154,17 @@ export function mountGraph(laneCount: number) {
           openGitSettings={() => {}}
         >
           <CommitGraph
+            {...noCommitGraphActions}
             history={history}
-            roots={roots}
             repositoryName="100,000 commits"
-            scope={{ _tag: "Automatic" }}
+            historyScope={{
+              identity: { environmentId: "performance", repositoryId: "graph" },
+              roots,
+              scope: automaticHistoryScope,
+              selections: [],
+              toggleRef: () => {},
+              reset: undefined,
+            }}
           />
         </NotificationsProvider>
       </EnvironmentProvider>

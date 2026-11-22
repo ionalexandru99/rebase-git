@@ -84,6 +84,25 @@ function ContextMenuSeparator({
 
 const ContextMenuSubmenu = ContextMenuPrimitive.SubmenuRoot;
 
+function isContextMenuKey(event: {
+  readonly key: string;
+  readonly shiftKey: boolean;
+}) {
+  return event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey);
+}
+
+function openContextMenuAt(element: Element | null) {
+  if (element === null) return;
+  const bounds = element.getBoundingClientRect();
+  element.dispatchEvent(
+    new MouseEvent("contextmenu", {
+      bubbles: true,
+      clientX: bounds.left + 32,
+      clientY: bounds.bottom,
+    }),
+  );
+}
+
 export {
   ContextMenu,
   ContextMenuContent,
@@ -92,4 +111,6 @@ export {
   ContextMenuSubmenu,
   ContextMenuSubmenuTrigger,
   ContextMenuTrigger,
+  isContextMenuKey,
+  openContextMenuAt,
 };

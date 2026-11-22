@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { render } from "#tests-support/render.tsx";
-import { RepositoryDetailsSettings } from "#web/features/repository-settings/components/repository-details-settings.tsx";
+import { RepositoryDetailsSettings } from "#web/features/repository-settings/repository-details-settings.tsx";
 
 describe("repository details settings", () => {
   it("shows a failed copy as a notification", async () => {

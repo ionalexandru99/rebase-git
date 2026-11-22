@@ -2,7 +2,12 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
-import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
+import { noCommitGraphActions } from "#tests-support/workspace-actions.ts";
+import {
+  CommitGraph,
+  type CommitGraphScope,
+} from "#web/features/commit-graph/commit-graph.tsx";
+import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope.ts";
 import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { HistoryGraph } from "#web/features/repository-history/history-graph.ts";
 import { HistoryView } from "#web/features/repository-history/history-view.ts";
@@ -141,7 +146,13 @@ declare global {
   }
 }
 
-function StorageGraph(props: ComponentProps<typeof CommitGraph>) {
+function StorageGraph({
+  history,
+  roots,
+  repositoryName,
+}: Pick<ComponentProps<typeof CommitGraph>, "history" | "repositoryName"> & {
+  readonly roots: CommitGraphScope["roots"];
+}) {
   return (
     <QueryClientProvider client={queryClient}>
       <EnvironmentProvider environment={offlineEnvironment}>
@@ -151,7 +162,22 @@ function StorageGraph(props: ComponentProps<typeof CommitGraph>) {
           openRepository={() => {}}
           openGitSettings={() => {}}
         >
-          <CommitGraph {...props} />
+          <CommitGraph
+            {...noCommitGraphActions}
+            history={history}
+            repositoryName={repositoryName}
+            historyScope={{
+              identity: {
+                environmentId: "performance",
+                repositoryId: "storage",
+              },
+              roots,
+              scope: automaticHistoryScope,
+              selections: [],
+              toggleRef: () => {},
+              reset: undefined,
+            }}
+          />
         </NotificationsProvider>
       </EnvironmentProvider>
     </QueryClientProvider>

@@ -8,7 +8,8 @@ import {
 } from "#contracts/repository-comparison/compare-revisions.contract.ts";
 import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
-import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
+import { QueryStatus } from "#web/components/ui/query-status.tsx";
+import { CommitFiles } from "#web/features/commit-inspection/commit-files.tsx";
 import {
   type CompareInput,
   isCompareInput,
@@ -19,7 +20,7 @@ import {
   ComparisonCommits,
 } from "#web/features/comparison/comparison-commits.tsx";
 import { RefPicker } from "#web/features/comparison/ref-picker.tsx";
-import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
+import { DiffWorkerPool } from "#web/features/file-diff/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { useDiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 import { useScopedRepositoryRefs } from "#web/features/refs/repository-refs.ts";
@@ -30,10 +31,9 @@ import {
   type RepositoryScope,
   useRepositoryScope,
 } from "#web/platform/query/repository-scope.tsx";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
 
 const CommitDiff = lazy(
-  () => import("#web/features/commit-inspection/components/commit-diff.tsx"),
+  () => import("#web/features/commit-inspection/commit-diff.tsx"),
 );
 
 export function ComparisonPanel({
@@ -106,24 +106,13 @@ function ComparisonBody({
     { changes: "none", enabled: active },
   );
   const { refs } = useScopedRepositoryRefs();
-  if (comparison.isError)
+  if (comparison.isError || comparison.data === undefined)
     return (
-      <div role="alert" className="p-3 text-body">
-        {describeFailure(comparison.error)}{" "}
-        <Button
-          size="xs"
-          variant="ghost"
-          onClick={() => void comparison.refetch()}
-        >
-          Retry
-        </Button>
-      </div>
-    );
-  if (comparison.data === undefined)
-    return (
-      <p role="status" className="p-4 text-body text-muted-foreground">
-        Loading comparison…
-      </p>
+      <QueryStatus
+        error={comparison.error}
+        loading="Loading comparison…"
+        onRetry={() => void comparison.refetch()}
+      />
     );
   const moved = movedSides(refs, input, comparison.data);
   return (

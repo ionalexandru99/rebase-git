@@ -1,14 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogTitle,
-} from "#web/components/ui/alert-dialog.tsx";
+import { ConfirmDialog } from "#web/components/ui/alert-dialog.tsx";
 import { Button } from "#web/components/ui/button.tsx";
 import { SettingsPage } from "#web/components/ui/settings-layout.tsx";
 import { HistoryStorageBreakdown } from "#web/features/history-storage/history-storage-breakdown.tsx";
@@ -107,21 +99,14 @@ export function HistoryStorageSettings() {
           </p>
         )}
       </div>
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogContent>
-          <AlertDialogTitle>Clear all history?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Repository files stay on disk. Reopen a repository to download its
-            history again.
-          </AlertDialogDescription>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void run(clearAll)}>
-              Clear all history
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirming}
+        title="Clear all history?"
+        description="Repository files stay on disk. Reopen a repository to download its history again."
+        action="Clear all history"
+        onConfirm={() => void run(clearAll)}
+        onClose={() => setConfirming(false)}
+      />
     </SettingsPage>
   );
 }

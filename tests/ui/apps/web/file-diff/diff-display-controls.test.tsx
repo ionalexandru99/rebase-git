@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
-import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls.tsx";
+import { DiffDisplayControls } from "#web/features/file-diff/diff-display-controls.tsx";
 import { defaultDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 
 function Controls({ width }: { readonly width: number }) {

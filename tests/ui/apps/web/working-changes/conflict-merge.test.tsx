@@ -7,7 +7,7 @@ import {
 import { fakeRequests, respond } from "#tests-support/fake-requests.ts";
 import { conflictDocument, repositoryId } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
-import { ConflictMerge } from "#web/features/working-changes/conflicts/components/conflict-merge.tsx";
+import { ConflictMerge } from "#web/features/working-changes/conflicts/conflict-merge.tsx";
 
 const path = "src/steps.ts";
 const content = Array.from({ length: 12 }, (_, index) => [

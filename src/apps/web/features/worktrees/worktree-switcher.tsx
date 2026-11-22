@@ -5,11 +5,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#web/components/ui/popover.tsx";
-import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
+import { ConfirmNotice } from "#web/features/notifications/persistent-notification.tsx";
 import type { StartPoint } from "#web/features/refs/ref-kinds.ts";
 import {
-  useWorktreeDraftRequest,
   type WorktreeDraft,
+  worktreeDrafts,
 } from "#web/features/worktrees/worktree-draft.ts";
 import { WorktreeForm } from "#web/features/worktrees/worktree-form.tsx";
 import { WorktreeList } from "#web/features/worktrees/worktree-list.tsx";
@@ -18,13 +18,14 @@ import {
   type WorktreeRow,
   type Worktrees,
 } from "#web/features/worktrees/worktrees.ts";
+import { useListener } from "#web/lib/listener-bus.ts";
 
 export function WorktreeSwitcher() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<WorktreeDraft>();
   const [hovered, setHovered] = useState(false);
   const worktrees = useWorktrees(open || hovered);
-  useWorktreeDraftRequest((next) => {
+  useListener(worktreeDrafts, (next) => {
     setDraft(next);
     setOpen(true);
   });

@@ -1,12 +1,4 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogTitle,
-} from "#web/components/ui/alert-dialog.tsx";
+import { ConfirmDialog } from "#web/components/ui/alert-dialog.tsx";
 import { Button } from "#web/components/ui/button.tsx";
 import { SettingsRow } from "#web/components/ui/settings-layout.tsx";
 import { formatCacheSize } from "#web/features/history-storage/format-cache-size.ts";
@@ -21,6 +13,10 @@ export function RepositoryCacheSettings(
   },
 ) {
   const cache = useHistoryCacheManagement(props);
+  const confirming =
+    cache.confirmation === undefined
+      ? undefined
+      : historyCacheActions[cache.confirmation];
   const current = cache.diagnostics?.caches.find(
     ({ environmentId, repositoryId }) =>
       environmentId === props.identity.environmentId &&
@@ -113,39 +109,17 @@ export function RepositoryCacheSettings(
           </Button>
         </div>
       )}
-      <AlertDialog
-        open={cache.confirmation !== undefined}
-        onOpenChange={(open) => {
-          if (!open) cache.setConfirmation(undefined);
+      <ConfirmDialog
+        open={confirming !== undefined}
+        title={`${confirming?.label ?? "Manage cache"}?`}
+        description={confirming?.description ?? ""}
+        action={confirming?.label ?? "Confirm"}
+        onConfirm={() => {
+          if (cache.confirmation !== undefined)
+            void cache.manage(cache.confirmation);
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogTitle>
-            {cache.confirmation === undefined
-              ? "Manage cache"
-              : historyCacheActions[cache.confirmation].label}
-            ?
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            {cache.confirmation === undefined
-              ? ""
-              : historyCacheActions[cache.confirmation].description}
-          </AlertDialogDescription>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (cache.confirmation !== undefined)
-                  void cache.manage(cache.confirmation);
-              }}
-            >
-              {cache.confirmation === undefined
-                ? "Confirm"
-                : historyCacheActions[cache.confirmation].label}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onClose={() => cache.setConfirmation(undefined)}
+      />
     </>
   );
 }

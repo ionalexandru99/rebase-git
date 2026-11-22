@@ -9,7 +9,7 @@ import {
   type ViewedChange,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { useDiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
-import { splitConflicts } from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
+import { splitConflicts } from "#web/features/working-changes/conflicts/use-conflicts.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import {

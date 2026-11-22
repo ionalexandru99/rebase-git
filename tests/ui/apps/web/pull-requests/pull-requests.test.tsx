@@ -5,6 +5,7 @@ import {
   PullRequestsApi,
 } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { BranchesSidebarFixture } from "#tests-support/branches-sidebar-fixture.tsx";
 import {
   fakeRequests,
   idleOperation,
@@ -20,7 +21,6 @@ import {
   topicPath,
 } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
-import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
 import {
   CurrentPullRequest,
   usePullRequests,
@@ -123,7 +123,7 @@ function PullRequestsHarness() {
     <>
       <CurrentPullRequest pullRequests={pullRequests} />
       <div style={{ height: 480, width: 320 }}>
-        <BranchesSidebar pullRequests={pullRequests} />
+        <BranchesSidebarFixture pullRequests={pullRequests} />
       </div>
     </>
   );

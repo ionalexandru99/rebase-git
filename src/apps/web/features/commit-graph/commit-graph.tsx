@@ -14,6 +14,10 @@ import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/r
 import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { type Action, runAction } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
+import {
+  isContextMenuKey,
+  openContextMenuAt,
+} from "#web/components/ui/context-menu.tsx";
 import { ScrollTopButton } from "#web/components/ui/scroll-top-button.tsx";
 import type { CherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
 import {
@@ -44,7 +48,6 @@ import {
   UncommittedChangesRow,
   uncommittedLink,
 } from "#web/features/commit-graph/components/uncommitted-changes-row.tsx";
-import { useCommitGraphView } from "#web/features/commit-graph/hooks/use-commit-graph-view.ts";
 import { useGraphColors } from "#web/features/commit-graph/layout/graph-colors.ts";
 import {
   commitGraphGutterWidth,
@@ -61,9 +64,10 @@ import type {
   HistoryScope,
   HistorySelection,
 } from "#web/features/commit-graph/scope/history-scope.ts";
+import { useCommitGraphView } from "#web/features/commit-graph/use-commit-graph-view.ts";
 import type { CodeMatchTarget } from "#web/features/commit-inspection/commit-input.ts";
 import type { CompareActions } from "#web/features/comparison/comparison.ts";
-import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls.tsx";
+import { RepositoryHistorySearchControls } from "#web/features/history-search/repository-history-search-controls.tsx";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
 import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import type { RewriteCommits } from "#web/features/rebase/rewrite-commits.tsx";
@@ -83,21 +87,27 @@ export interface CommitGraphHandle {
 
 const emptyRefLabels: readonly RepositoryHistoryRefTarget[] = [];
 
+export interface CommitGraphScope {
+  readonly identity: {
+    readonly environmentId: string;
+    readonly repositoryId: string;
+  };
+  readonly roots: readonly RepositoryHistoryRefTarget[] | undefined;
+  readonly scope: HistoryScope;
+  readonly selections: readonly HistorySelection[];
+  readonly toggleRef: (target: HistorySelection) => void;
+  readonly reset: (() => void) | undefined;
+}
+
 export function CommitGraph({
   ref,
-  historyIdentity,
-  onRemoveHistoryRef,
-  onRevealHistoryRef,
-  onResetHistoryScope,
+  historyScope,
   history,
   repositoryName,
-  roots,
-  scope,
-  selections,
   remoteProviders,
   titleActions,
   toolbarActions,
-  toolbarInset = false,
+  toolbarInset,
   merge,
   rebase,
   reset,
@@ -109,37 +119,26 @@ export function CommitGraph({
   onOpenChanges,
   onActiveCommitChange,
 }: {
-  readonly merge?: MergeActions | undefined;
-  readonly rebase?: RebaseActions | undefined;
-  readonly reset?: ResetActions | undefined;
-  readonly compare?: CompareActions | undefined;
-  readonly cherryPick?: CherryPick | undefined;
-  readonly rewrite?: RewriteCommits | undefined;
-  readonly onOpenDetails?: ((oid: string) => void) | undefined;
-  readonly onOpenCodeMatch?:
-    | ((oid: string, match: CodeMatchTarget) => void)
-    | undefined;
-  readonly onOpenChanges?: (() => void) | undefined;
-  readonly onActiveCommitChange?:
-    | ((oid: string | undefined) => void)
-    | undefined;
-  readonly titleActions?: ReactNode;
-  readonly toolbarActions?: ReactNode;
-  readonly toolbarInset?: boolean;
+  readonly merge: MergeActions;
+  readonly rebase: RebaseActions;
+  readonly reset: Pick<ResetActions, "actionFor">;
+  readonly compare: CompareActions;
+  readonly cherryPick: Pick<CherryPick, "action" | "open">;
+  readonly rewrite: Pick<RewriteCommits, "actions" | "open">;
+  readonly onOpenDetails: (oid: string) => void;
+  readonly onOpenCodeMatch: (oid: string, match: CodeMatchTarget) => void;
+  readonly onOpenChanges: () => void;
+  readonly onActiveCommitChange: (oid: string | undefined) => void;
+  readonly titleActions: ReactNode;
+  readonly toolbarActions: ReactNode;
+  readonly toolbarInset: boolean;
   readonly ref?: Ref<CommitGraphHandle>;
-  readonly historyIdentity?:
-    | { readonly environmentId: string; readonly repositoryId: string }
-    | undefined;
-  readonly onResetHistoryScope?: (() => void) | undefined;
-  readonly onRemoveHistoryRef?: (target: HistorySelection) => void;
-  readonly onRevealHistoryRef?: (target: HistorySelection) => void;
+  readonly historyScope: CommitGraphScope;
   readonly history: RepositoryHistory | undefined;
   readonly repositoryName: string;
-  readonly roots: readonly RepositoryHistoryRefTarget[] | undefined;
-  readonly scope?: HistoryScope;
-  readonly selections?: readonly HistorySelection[];
-  readonly remoteProviders?: RepositoryRefs["remoteProviders"];
+  readonly remoteProviders: RepositoryRefs["remoteProviders"];
 }): JSX.Element {
+  const { roots } = historyScope;
   const [menuOid, setMenuOid] = useState<string>();
   const connected = useRepositoryScope()?.connected;
   const scrollRef = useRef<HTMLTableElement>(null);
@@ -166,11 +165,11 @@ export function CommitGraph({
     setPageSize,
   } = useCommitGraphView({
     history,
-    historyIdentity,
+    historyIdentity: historyScope.identity,
     roots,
     scrollRef,
     viewportRef,
-    onRevealHistoryRef,
+    onRevealHistoryRef: historyScope.toggleRef,
     onActiveCommitChange,
   });
   const colors = useGraphColors(history, laneRows, snapshot.refTargets);
@@ -199,7 +198,7 @@ export function CommitGraph({
     scope: scopeQuery,
     cherryPick,
     merge,
-    rebase: rebase && {
+    rebase: {
       actionFor: (oid) => highlighted(rebase.actionFor(oid), setPreviewing),
     },
     rewrite,
@@ -208,27 +207,13 @@ export function CommitGraph({
     onOpenDetails,
   });
   const moving = new Set(
-    previewing && menuOid !== undefined ? rebase?.moving(menuOid) : [],
+    previewing && menuOid !== undefined ? rebase.moving(menuOid) : [],
   );
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented) return;
-    if (
-      (event.key === "ContextMenu" ||
-        (event.key === "F10" && event.shiftKey)) &&
-      activeCommitOid !== undefined
-    ) {
+    if (isContextMenuKey(event) && activeCommitOid !== undefined) {
       event.preventDefault();
-      const row = document.getElementById(commitRowId(activeCommitOid));
-      if (row !== null) {
-        const bounds = row.getBoundingClientRect();
-        row.dispatchEvent(
-          new globalThis.MouseEvent("contextmenu", {
-            bubbles: true,
-            clientX: bounds.left + 32,
-            clientY: bounds.top + bounds.height / 2,
-          }),
-        );
-      }
+      openContextMenuAt(document.getElementById(commitRowId(activeCommitOid)));
       return;
     }
     if (
@@ -268,13 +253,13 @@ export function CommitGraph({
     if (oid === undefined || index === undefined) return;
     beginNavigation();
     setMenuOid(oid);
-    merge?.inspect(oid);
-    rebase?.inspect(oid);
+    merge.inspect(oid);
+    rebase.inspect(oid);
     const selection = navigation.selected.has(oid)
       ? [...navigation.selected]
       : [oid];
-    cherryPick?.open(selection, scopeQuery);
-    rewrite?.open(selection, scopeQuery);
+    cherryPick.open(selection, scopeQuery);
+    rewrite.open(selection, scopeQuery);
     navigation.select(
       oid,
       index,
@@ -312,7 +297,7 @@ export function CommitGraph({
               roots: [...new Set((roots ?? []).map((root) => root.oid))],
               open: async (oid, match, signal) => {
                 await navigateToOid(oid, signal, true);
-                onOpenCodeMatch?.(oid, match);
+                onOpenCodeMatch(oid, match);
               },
             }}
             offline={connected === false}
@@ -324,15 +309,13 @@ export function CommitGraph({
         colors={colors.refs}
         remoteProviders={remoteProviders}
       >
-        {scope === undefined || selections === undefined ? null : (
-          <HistoryScopeStrip
-            onRemove={onRemoveHistoryRef}
-            onReset={onResetHistoryScope}
-            roots={roots ?? []}
-            scope={scope}
-            selections={selections}
-          />
-        )}
+        <HistoryScopeStrip
+          onRemove={historyScope.toggleRef}
+          onReset={historyScope.reset}
+          roots={roots ?? []}
+          scope={historyScope.scope}
+          selections={historyScope.selections}
+        />
         <CommitGraphVirtualWindow
           ref={viewportRef}
           scrollRef={scrollRef}

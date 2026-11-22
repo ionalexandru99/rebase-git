@@ -5,8 +5,8 @@ import {
   RepositoryStashesApi,
   type StashContents,
 } from "#contracts/repository-stashes/repository-stashes.contract.ts";
-import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
-import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
+import { CommitFiles } from "#web/features/commit-inspection/commit-files.tsx";
+import { DiffWorkerPool } from "#web/features/file-diff/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { useDiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
@@ -17,7 +17,7 @@ import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
 
 const CommitDiff = lazy(
-  () => import("#web/features/commit-inspection/components/commit-diff.tsx"),
+  () => import("#web/features/commit-inspection/commit-diff.tsx"),
 );
 
 export function StashPanel() {

@@ -7,7 +7,7 @@ import {
 import { fakeRequests, respond } from "#tests-support/fake-requests.ts";
 import { commitInspection, repositoryScope } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
-import { CommitMetadata } from "#web/features/commit-inspection/components/commit-metadata.tsx";
+import { CommitMetadata } from "#web/features/commit-inspection/commit-metadata.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 const key = "SHA256:aFbW+AMOCtKlhfHTnE0UV4Ra0aQIWfa6u3japROpK2c";

@@ -4,13 +4,13 @@ import { page, userEvent } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import {
-  ConfirmNotice,
-  PersistentNotification,
-} from "#web/features/notifications/components/persistent-notification.tsx";
-import {
   useErrorToast,
   useStatusToast,
 } from "#web/features/notifications/notifications.tsx";
+import {
+  ConfirmNotice,
+  PersistentNotification,
+} from "#web/features/notifications/persistent-notification.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 afterEach(() => {

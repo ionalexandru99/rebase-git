@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { DiscardedChanges } from "#contracts/repository-changes/repository-changes.contract.ts";
-import { fileName } from "#web/features/file-diff/components/file-row-name.tsx";
+import { fileName } from "#web/features/file-diff/file-row-name.tsx";
 
 export interface Discard {
   readonly discarded: DiscardedChanges;

@@ -4,10 +4,10 @@ import type {
   ChangeSection,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { FileIcon } from "#web/components/ui/file-icon.tsx";
-import { DiffContent } from "#web/features/file-diff/components/diff-content.tsx";
-import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls.tsx";
-import { LineCounts } from "#web/features/file-diff/components/file-row-name.tsx";
+import { DiffContent } from "#web/features/file-diff/diff-content.tsx";
+import { DiffDisplayControls } from "#web/features/file-diff/diff-display-controls.tsx";
 import { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
+import { LineCounts } from "#web/features/file-diff/file-row-name.tsx";
 import {
   type FolderSelection,
   inFolder,

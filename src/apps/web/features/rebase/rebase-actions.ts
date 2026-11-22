@@ -3,7 +3,7 @@ import { useState } from "react";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { useOperationStart } from "#web/features/operation-recovery/hooks/use-operation.ts";
+import { useOperationStart } from "#web/features/operation-recovery/use-operation.ts";
 import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
 import {
   type RefSource,

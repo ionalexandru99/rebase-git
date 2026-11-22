@@ -27,7 +27,7 @@ import {
   TestWorkspacePanel,
   workspacePanelScope,
 } from "#tests-support/workspace-panel.tsx";
-import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
+import { OperationRecoveryNotice } from "#web/features/operation-recovery/operation-recovery-toast.tsx";
 import { WorkingChanges } from "#web/features/working-changes/working-changes.tsx";
 import { PanelFeatureContext } from "#web/features/workspace-panel/api.ts";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
