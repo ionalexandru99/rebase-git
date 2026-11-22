@@ -66,7 +66,6 @@ const errorTitles = {
   dropStash: "Couldn't drop the stash",
   removeWorktree: "Couldn't remove the worktree",
   unlockWorktree: "Couldn't unlock the worktree",
-  saveWorktreeFolder: "Couldn't save the worktree folder",
   resolveConflict: "Couldn't resolve the conflict",
   continue: "Couldn't continue the operation",
   skip: "Couldn't skip the commit",
