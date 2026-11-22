@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vite-plus/test";
-import { signingRejection } from "#server/adapters/local-git/git-commands.ts";
+import { rejectionFromGit } from "#server/repository/git-rejection.ts";
 
 const commitFailed = "\n\nfatal: failed to write commit object";
 
-describe("signing rejection", () => {
+describe("rejection from Git", () => {
   it.each([
+    [
+      "*** Please tell me who you are.\n\nfatal: unable to auto-detect email address",
+      "IdentityMissing",
+      "Add your name and email to commit.",
+    ],
+    [
+      "git-lfs filter-process: git-lfs: command not found",
+      "LfsMissing",
+      "Git LFS isn't installed on this server.",
+    ],
     [
       "fatal: either user.signingkey or gpg.ssh.defaultKeyCommand needs to be configured",
       "SigningUnavailable",
@@ -56,18 +66,21 @@ describe("signing rejection", () => {
       "GPG couldn't sign: Bad passphrase.",
     ],
   ])("turns %j into a %s rejection", (detail, reason, message) => {
-    expect(signingRejection(detail)).toEqual({
+    expect(rejectionFromGit(detail)).toEqual({
       _tag: "RepositoryRejected",
       reason,
       detail: message,
     });
   });
 
-  it("leaves failures that are not about signing to the caller", () => {
-    expect(
-      signingRejection(
-        "error: cannot run .git/hooks/pre-commit: No such file or directory",
-      ),
-    ).toBeUndefined();
+  it("keeps Git's detail for any other failure", () => {
+    const detail =
+      "error: cannot run .git/hooks/pre-commit: No such file or directory";
+
+    expect(rejectionFromGit(detail)).toEqual({
+      _tag: "RepositoryRejected",
+      reason: "GitFailed",
+      detail,
+    });
   });
 });

@@ -1,10 +1,10 @@
 import {
   type GitCommandRunner,
-  type GitObjectFormat,
   runRepositoryGit,
   streamRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import { parseHistoryOutput } from "#server/features/repository-history/git/history-failures.ts";
+import type { GitObjectFormat } from "#server/features/repository-history/git/history-layout.ts";
 import {
   createGitHistoryBatchParser,
   gitHistoryFormat,
