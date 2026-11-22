@@ -15,10 +15,7 @@ import {
   isRebasePlanTarget,
   type PlanHistory,
 } from "#web/features/rebase/rebase-plan.ts";
-import {
-  activeHead,
-  useScopedRepositoryRefs,
-} from "#web/features/refs/repository-refs.ts";
+import { useActiveHead } from "#web/features/refs/repository-refs.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 import { cn } from "#web/lib/utils.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
@@ -32,8 +29,7 @@ export function RebasePanel({
 }) {
   const scope = useRepositoryScope();
   const feature = usePanelFeature();
-  const { refs } = useScopedRepositoryRefs();
-  const operation = useOperation(scope, false).data;
+  const operation = useOperation(scope).data;
   const running = operation?.kind === "rebase" && operation.steps !== null;
   const shown = useRef(false);
   useEffect(() => {
@@ -43,10 +39,7 @@ export function RebasePanel({
       onClose();
     }
   }, [running, operation?.kind, onClose]);
-  const head =
-    refs === undefined || scope === undefined
-      ? undefined
-      : activeHead(refs, scope.worktreePath);
+  const head = useActiveHead();
   const target = isRebasePlanTarget(feature?.input) ? feature.input : undefined;
   if (scope === undefined) return null;
   return (
@@ -62,15 +55,8 @@ export function RebasePanel({
           key={`${head.commit}:${target.commit}:${target.from}`}
           scope={scope}
           history={history}
-          head={head.commit}
+          head={head}
           target={target}
-          blocked={
-            operation !== undefined && operation.kind !== "idle"
-              ? "Another operation is in progress."
-              : head.branch === undefined
-                ? "HEAD is detached."
-                : undefined
-          }
           close={onClose}
         />
       )}

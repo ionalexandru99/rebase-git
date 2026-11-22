@@ -433,9 +433,6 @@ function refs(behind: number) {
 }
 
 function OperationProbe() {
-  const operation = useOperation(
-    { repositoryId, worktreePath: "/repo" },
-    false,
-  );
+  const operation = useOperation({ repositoryId, worktreePath: "/repo" });
   return <p>Operation {operation.data?.phase}</p>;
 }

@@ -1,6 +1,5 @@
 import { type ReactElement, useRef, useState } from "react";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
-import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
   type Action,
   ActionMenuItems,
@@ -19,20 +18,14 @@ import {
   type ErrorToast,
   useErrorToast,
 } from "#web/features/notifications/notifications.tsx";
-import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
-import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
+import { useOperationStart } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import type { RewriteCommits } from "#web/features/rebase/rewrite-commits.tsx";
 import { createRefActions } from "#web/features/refs/ref-actions.ts";
-import {
-  activeHead,
-  useScopedRepositoryRefs,
-} from "#web/features/refs/repository-refs.ts";
 import type { HistoryScopeQuery } from "#web/features/repository-history/history-view.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import type { ResetActions } from "#web/features/reset/reset-actions.tsx";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
-import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 const maximumReverted = 256;
 
@@ -117,23 +110,10 @@ function useRevertActions(
   errorToast: ErrorToast,
 ) {
   const repository = useRepositoryScope();
-  const { refs } = useScopedRepositoryRefs();
-  const operation = useOperation(repository, false).data;
-  const start = useCommand(RepositoryOperationsApi.start, {
-    answers: (value, { repositoryId, worktreePath }) => [
-      answer(
-        RepositoryOperationsApi.read,
-        { repositoryId, worktreePath },
-        value.operation,
-      ),
-    ],
-  });
+  const start = useOperationStart("Reverting…");
+  const { head } = start;
   const [preview, setPreview] = useState<readonly string[]>([]);
   const highlight = useRef(0);
-  const head =
-    refs === undefined || repository === undefined
-      ? undefined
-      : activeHead(refs, repository.worktreePath);
   const newestFirst = async (commits: readonly string[]) => {
     if (commits.length < 2 || history === undefined || scope === undefined)
       return commits;
@@ -171,13 +151,10 @@ function useRevertActions(
           () => errorToast.show("revert"),
         );
     const reason =
-      operation !== undefined && operation.kind !== "idle"
-        ? `${operationKindLabel(operation.kind)} in progress`
-        : start.running
-          ? "Reverting…"
-          : commits.length > maximumReverted
-            ? `${maximumReverted} commits at most`
-            : undefined;
+      start.blocked ??
+      (commits.length > maximumReverted
+        ? `${maximumReverted} commits at most`
+        : undefined);
     const shared = {
       enabled: reason === undefined && start.canRun,
       ...(reason === undefined ? {} : { reason }),

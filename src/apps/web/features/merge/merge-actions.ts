@@ -1,16 +1,14 @@
 import { useState } from "react";
 import type { RouteFailure } from "#contracts/environment-connection/environment-route.contract.ts";
-import {
-  type MergeMode,
+import type {
+  MergeMode,
   RepositoryOperationsApi,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
 import { fileName } from "#web/features/file-diff/components/file-row-name.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
-import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
+import { useOperationStart } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import {
-  activeHead,
   type RefSource,
   type RefSourceTarget,
   refSource,
@@ -24,7 +22,6 @@ import {
   type FailureMessages,
   gitMessage,
 } from "#web/platform/query/request-failure.ts";
-import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 export interface MergeActions {
   readonly actionFor: (target: RefSourceTarget) => MergeAction | undefined;
@@ -45,26 +42,14 @@ export function useMergeActions(
 ): MergeActions {
   const scope = useRepositoryScope();
   const { refs } = useScopedRepositoryRefs();
-  const operation = useOperation(scope, false).data;
+  const command = useOperationStart("Merging…");
+  const { head } = command;
   const panel = useWorkspacePanel();
   const errorToast = useErrorToast();
-  const command = useCommand(RepositoryOperationsApi.start, {
-    answers: (value, { repositoryId, worktreePath }) => [
-      answer(
-        RepositoryOperationsApi.read,
-        { repositoryId, worktreePath },
-        value.operation,
-      ),
-    ],
-  });
   const [relation, setRelation] = useState<{
     readonly key: string;
     readonly value: HistoryRelation | undefined;
   }>();
-  const head =
-    refs === undefined || scope === undefined
-      ? undefined
-      : activeHead(refs, scope.worktreePath);
   const sourceOf = (target: RefSourceTarget) =>
     refs === undefined ? undefined : refSource(refs, target);
   const relationKey = (source: RefSource) =>
@@ -125,13 +110,7 @@ export function useMergeActions(
     const reason =
       head.branch === undefined
         ? "Detached HEAD"
-        : operation !== undefined && operation.kind !== "idle"
-          ? `${operationKindLabel(operation.kind)} in progress`
-          : command.running
-            ? "Merging…"
-            : known?.ahead === 0
-              ? "Up to date"
-              : undefined;
+        : (command.blocked ?? (known?.ahead === 0 ? "Up to date" : undefined));
     const branch = head.branch ?? "HEAD";
     return {
       id: "merge",

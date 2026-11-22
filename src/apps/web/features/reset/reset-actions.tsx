@@ -10,9 +10,9 @@ import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
 import {
-  activeHead,
   type RefSourceTarget,
   refSource,
+  useActiveHead,
   useScopedRepositoryRefs,
 } from "#web/features/refs/repository-refs.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
@@ -47,14 +47,11 @@ const modes: readonly { readonly mode: ResetMode; readonly label: string }[] = [
 export function useResetActions(): ResetActions {
   const scope = useRepositoryScope();
   const { refs } = useScopedRepositoryRefs();
-  const operation = useOperation(scope, false).data;
+  const head = useActiveHead();
+  const operation = useOperation(scope).data;
   const errorToast = useErrorToast();
   const command = useCommand(RepositoryReflogApi.reset);
   const [pending, setPending] = useState<PendingDiscard>();
-  const head =
-    refs === undefined || scope === undefined
-      ? undefined
-      : activeHead(refs, scope.worktreePath);
   const branch = head?.branch ?? "HEAD";
 
   const run = async (

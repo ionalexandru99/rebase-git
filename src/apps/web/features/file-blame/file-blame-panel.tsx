@@ -10,10 +10,7 @@ import {
   isBlameInput,
 } from "#web/features/file-blame/file-blame.ts";
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
-import {
-  activeHead,
-  useScopedRepositoryRefs,
-} from "#web/features/refs/repository-refs.ts";
+import { useActiveHead } from "#web/features/refs/repository-refs.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import {
@@ -48,9 +45,7 @@ function FileBlame({
   readonly input: BlameInput;
 }) {
   const feature = usePanelFeature();
-  const { refs } = useScopedRepositoryRefs();
-  const head =
-    refs === undefined ? undefined : activeHead(refs, scope.worktreePath);
+  const head = useActiveHead();
   const blame = useEnvironmentQuery(
     FileBlameApi.read,
     {

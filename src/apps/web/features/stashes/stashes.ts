@@ -12,10 +12,7 @@ import {
   useErrorToast,
   useStatusToast,
 } from "#web/features/notifications/notifications.tsx";
-import {
-  activeHead,
-  useScopedRepositoryRefs,
-} from "#web/features/refs/repository-refs.ts";
+import { useActiveHead } from "#web/features/refs/repository-refs.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import type { FailureMessages } from "#web/platform/query/request-failure.ts";
@@ -88,12 +85,7 @@ const noStashes: readonly RepositoryStash[] = [];
 export function useStashMenu() {
   const stashes = useStashes();
   const commands = useStashCommands();
-  const { refs } = useScopedRepositoryRefs();
-  const worktreePath = useRepositoryScope()?.worktreePath;
-  const branch =
-    refs === undefined || worktreePath === undefined
-      ? undefined
-      : activeHead(refs, worktreePath)?.branch;
+  const branch = useActiveHead()?.branch;
   return (selection: StashSelection | undefined): Action => {
     const enabled = selection !== undefined && commands.writable;
     const store = (into: RepositoryStash | undefined) => {

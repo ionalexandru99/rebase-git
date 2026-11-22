@@ -2,7 +2,7 @@ import { IconCheck } from "@tabler/icons-react";
 import { type KeyboardEvent, useId } from "react";
 import { Button } from "#web/components/ui/button.tsx";
 import { Input } from "#web/components/ui/input.tsx";
-import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation-status.ts";
+import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 

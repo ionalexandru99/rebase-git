@@ -28,10 +28,7 @@ import { useDiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 import { isFileHistoryInput } from "#web/features/file-history/file-history.ts";
 import { HistoryList } from "#web/features/file-history/file-history-list.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import {
-  activeHead,
-  useScopedRepositoryRefs,
-} from "#web/features/refs/repository-refs.ts";
+import { useActiveHead } from "#web/features/refs/repository-refs.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import {
@@ -80,9 +77,7 @@ function FileHistory({
   readonly onOpenDetails: ((oid: string) => void) | undefined;
 }) {
   const feature = usePanelFeature();
-  const { refs } = useScopedRepositoryRefs();
-  const head =
-    refs === undefined ? undefined : activeHead(refs, scope.worktreePath);
+  const head = useActiveHead();
   const branch = head?.branch ?? head?.commit.slice(0, 8);
   const active = feature?.active !== false;
   const [limit, setLimit] = useState(fileHistoryPage);

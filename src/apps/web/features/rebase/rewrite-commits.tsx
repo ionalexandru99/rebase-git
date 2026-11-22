@@ -1,14 +1,10 @@
 import { useRef, useState } from "react";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
-import {
-  type PlanStep,
-  RepositoryOperationsApi,
-} from "#contracts/repository-operations/repository-operations.contract.ts";
+import type { PlanStep } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
 import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
-import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
+import { useOperationStart } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { useChangedFileCount } from "#web/features/rebase/rebase-actions.ts";
 import {
   type ReadyPlan,
@@ -16,15 +12,11 @@ import {
   type RewritePlan,
   rewritePlan,
 } from "#web/features/rebase/rewrite-plan.ts";
-import {
-  activeHead,
-  useScopedRepositoryRefs,
-} from "#web/features/refs/repository-refs.ts";
+import { useScopedRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import type { HistoryScopeQuery } from "#web/features/repository-history/history-view.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { useEnvironmentQueries } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
-import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 interface PendingDrop {
   readonly branch: string;
@@ -38,17 +30,9 @@ export function useRewriteCommits(
 ) {
   const repository = useRepositoryScope();
   const { refs } = useScopedRepositoryRefs();
-  const operation = useOperation(repository, false).data;
+  const command = useOperationStart("Rebasing…");
+  const { head } = command;
   const errorToast = useErrorToast();
-  const command = useCommand(RepositoryOperationsApi.start, {
-    answers: (value, { repositoryId, worktreePath }) => [
-      answer(
-        RepositoryOperationsApi.read,
-        { repositoryId, worktreePath },
-        value.operation,
-      ),
-    ],
-  });
   const [plans, setPlans] = useState<
     Partial<Record<Rewrite, RewritePlan | undefined>>
   >({});
@@ -56,10 +40,6 @@ export function useRewriteCommits(
   const request = useRef(0);
   const changed = useChangedFileCount(plans.drop !== undefined);
   const message = useSquashMessage(plans.squash);
-  const head =
-    refs === undefined || repository === undefined
-      ? undefined
-      : activeHead(refs, repository.worktreePath);
   const upstream = refs?.branches.find(
     ({ name }) => name === head?.branch,
   )?.upstream;
@@ -110,15 +90,12 @@ export function useRewriteCommits(
         ? "Read only"
         : branch === undefined
           ? "Detached HEAD"
-          : operation !== undefined && operation.kind !== "idle"
-            ? `${operationKindLabel(operation.kind)} in progress`
-            : command.running
-              ? "Rebasing…"
-              : plan._tag === "Blocked"
-                ? plan.reason
-                : changed === undefined
-                  ? "Checking changes…"
-                  : undefined;
+          : (command.blocked ??
+            (plan._tag === "Blocked"
+              ? plan.reason
+              : changed === undefined
+                ? "Checking changes…"
+                : undefined));
     const availability = (reason: string | undefined) => ({
       group: "operation" as const,
       enabled: reason === undefined && command.canRun,

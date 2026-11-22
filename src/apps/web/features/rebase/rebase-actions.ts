@@ -1,14 +1,11 @@
 import { skipToken } from "@tanstack/react-query";
 import { useState } from "react";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
-import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
-import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
+import { useOperationStart } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
 import {
-  activeHead,
   type RefSource,
   type RefSourceTarget,
   refSource,
@@ -18,7 +15,6 @@ import type { HistoryRange } from "#web/features/repository-history/history-grap
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
-import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 export type RebaseActionId = "rebase" | "rebase.onto" | "rebase.interactive";
 
@@ -41,27 +37,15 @@ export function useRebaseActions(
 ): RebaseActions {
   const scope = useRepositoryScope();
   const { refs } = useScopedRepositoryRefs();
-  const operation = useOperation(scope, false).data;
+  const command = useOperationStart("Rebasing…");
+  const { head } = command;
   const errorToast = useErrorToast();
-  const command = useCommand(RepositoryOperationsApi.start, {
-    answers: (value, { repositoryId, worktreePath }) => [
-      answer(
-        RepositoryOperationsApi.read,
-        { repositoryId, worktreePath },
-        value.operation,
-      ),
-    ],
-  });
   const [inspected, setInspected] = useState(false);
   const [range, setRange] = useState<{
     readonly key: string;
     readonly value: HistoryRange | undefined;
   }>();
   const changed = useChangedFileCount(inspected);
-  const head =
-    refs === undefined || scope === undefined
-      ? undefined
-      : activeHead(refs, scope.worktreePath);
   const sourceOf = (target: RefSourceTarget) =>
     refs === undefined ? undefined : refSource(refs, target);
   const rangeKey = (source: RefSource) =>
@@ -121,15 +105,12 @@ export function useRebaseActions(
     const reason =
       head.branch === undefined
         ? "Detached HEAD"
-        : operation !== undefined && operation.kind !== "idle"
-          ? `${operationKindLabel(operation.kind)} in progress`
-          : command.running
-            ? "Rebasing…"
-            : planned?.based
-              ? "Already on it"
-              : changed === undefined
-                ? "Checking changes…"
-                : undefined;
+        : (command.blocked ??
+          (planned?.based
+            ? "Already on it"
+            : changed === undefined
+              ? "Checking changes…"
+              : undefined));
     return {
       alone: "Rebase onto here",
       action: {
@@ -160,11 +141,7 @@ export function useRebaseActions(
       planned?.based === true;
     if (planned?.count === 0 && !from) return undefined;
     const reason =
-      head.branch === undefined
-        ? "Detached HEAD"
-        : operation !== undefined && operation.kind !== "idle"
-          ? `${operationKindLabel(operation.kind)} in progress`
-          : undefined;
+      head.branch === undefined ? "Detached HEAD" : command.blocked;
     const plan: RebasePlanTarget = {
       ref: from ? null : source.ref,
       commit: source.commit,

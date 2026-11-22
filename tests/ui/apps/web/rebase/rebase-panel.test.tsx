@@ -156,9 +156,7 @@ describe("interactive rebase tab", () => {
     await expect
       .element(f.screen.getByRole("button", { name: "Continue merge" }))
       .toBeVisible();
-    await expect
-      .element(f.screen.getByText("Another operation is in progress."))
-      .toBeVisible();
+    await expect.element(f.screen.getByText("Merge in progress")).toBeVisible();
   });
 });
 
