@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Deferred, Effect, Fiber, Option } from "effect";
 import { expect, it } from "vite-plus/test";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
@@ -20,39 +19,32 @@ it.each([
 ] as const)(
   "serializes $mutation and checkout across features, linked worktree: $linked",
   async ({ mutation, linked }) => {
-    const commitEntered = Deferred.makeUnsafe<void>();
-    const releaseCommit = Deferred.makeUnsafe<void>();
-    const checkoutEntered = Deferred.makeUnsafe<void>();
-    const checkoutRequested = Deferred.makeUnsafe<void>();
+    const commitEntered = Promise.withResolvers<void>();
+    const releaseCommit = Promise.withResolvers<void>();
+    const checkoutRequested = Promise.withResolvers<void>();
     const events: string[] = [];
     const environment = await openTestEnvironment({
       git: (local) => ({
         ...local,
-        run: (command) =>
-          Effect.gen(function* () {
-            if (command.arguments.includes(mutation)) {
-              events.push("mutation-start");
-              yield* Deferred.succeed(commitEntered, undefined);
-              yield* Deferred.await(releaseCommit);
-              const result = yield* local.run(command);
-              events.push("mutation-end");
-              return result;
-            }
-            if (command.arguments[0] === "switch") {
-              events.push("checkout");
-              yield* Deferred.succeed(checkoutEntered, undefined);
-            }
-            return yield* local.run(command);
-          }),
+        run: async (command) => {
+          if (command.arguments.includes(mutation)) {
+            events.push("mutation-start");
+            commitEntered.resolve();
+            await releaseCommit.promise;
+            const result = await local.run(command);
+            events.push("mutation-end");
+            return result;
+          }
+          if (command.arguments[0] === "switch") events.push("checkout");
+          return local.run(command);
+        },
       }),
       coordination: (coordination) => ({
         ...coordination,
-        run: (path, policy, operation) =>
-          policy.name === "checkout"
-            ? Deferred.succeed(checkoutRequested, undefined).pipe(
-                Effect.andThen(coordination.run(path, policy, operation)),
-              )
-            : coordination.run(path, policy, operation),
+        run: (path, policy, operation) => {
+          if (policy.name === "checkout") checkoutRequested.resolve();
+          return coordination.run(path, policy, operation);
+        },
       }),
     });
     const root = environment.home;
@@ -79,47 +71,29 @@ it.each([
     const refs = environment.routes(RepositoryRefsApi);
     const pull = environment.routes(RepositoryPullApi);
 
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const scope = { repositoryId, worktreePath: directory, amend: false };
-          const snapshot = yield* changes.read(scope);
-          const committing = yield* (
-            mutation === "fetch"
-              ? pull.fetch({ repositoryId }).pipe(Effect.ignore)
-              : changes
-                  .commit({
-                    ...scope,
-                    revision: snapshot.revision,
-                    message: "Coordinated",
-                  })
-                  .pipe(Effect.asVoid)
-          ).pipe(Effect.forkScoped);
-          yield* Deferred.await(commitEntered);
-          const checkingOut = yield* refs
-            .checkout({
-              repositoryId,
-              worktreePath: checkoutDirectory,
-              target: { _tag: "LocalBranch", name: "next" },
-            })
-            .pipe(Effect.forkScoped);
-          yield* Deferred.await(checkoutRequested);
-          const prematureCheckout = yield* Deferred.await(checkoutEntered).pipe(
-            Effect.timeoutOption("50 millis"),
-          );
-          yield* Deferred.succeed(releaseCommit, undefined);
-          yield* Fiber.join(committing);
-          const result = yield* Fiber.join(checkingOut);
-          expect(Option.isNone(prematureCheckout)).toBe(true);
-          expect(result.head.branch).toBe("next");
-          expect(events).toEqual([
-            "mutation-start",
-            "mutation-end",
-            "checkout",
-          ]);
-        }),
-      ),
-    );
+    const scope = { repositoryId, worktreePath: directory, amend: false };
+    const snapshot = await changes.read(scope);
+    const committing =
+      mutation === "fetch"
+        ? pull.fetch({ repositoryId }).catch(() => {})
+        : changes.commit({
+            ...scope,
+            revision: snapshot.revision,
+            message: "Coordinated",
+          });
+    await commitEntered.promise;
+    const checkingOut = refs.checkout({
+      repositoryId,
+      worktreePath: checkoutDirectory,
+      target: { _tag: "LocalBranch", name: "next" },
+    });
+    await checkoutRequested.promise;
+    expect(events).toEqual(["mutation-start"]);
+    releaseCommit.resolve();
+    await committing;
+    const result = await checkingOut;
+    expect(result.head.branch).toBe("next");
+    expect(events).toEqual(["mutation-start", "mutation-end", "checkout"]);
     expect((await git("log", "main", "-1", "--format=%s")).stdout.trim()).toBe(
       mutation === "commit" ? "Coordinated" : "Initial",
     );
@@ -127,18 +101,18 @@ it.each([
 );
 
 it("reads changes while a commit holds the worktree", async () => {
-  const commitEntered = Deferred.makeUnsafe<void>();
-  const releaseCommit = Deferred.makeUnsafe<void>();
+  const commitEntered = Promise.withResolvers<void>();
+  const releaseCommit = Promise.withResolvers<void>();
   const environment = await openTestEnvironment({
     git: (local) => ({
       ...local,
-      run: (command) =>
-        command.arguments[0] === "commit"
-          ? Deferred.succeed(commitEntered, undefined).pipe(
-              Effect.andThen(Deferred.await(releaseCommit)),
-              Effect.andThen(local.run(command)),
-            )
-          : local.run(command),
+      run: async (command) => {
+        if (command.arguments[0] === "commit") {
+          commitEntered.resolve();
+          await releaseCommit.promise;
+        }
+        return local.run(command);
+      },
     }),
   });
   const directory = join(environment.home, "repository");
@@ -155,24 +129,20 @@ it("reads changes while a commit holds the worktree", async () => {
   const repositoryId = (await environment.remember(directory)).id;
   const changes = environment.routes(RepositoryChangesApi);
 
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const scope = { repositoryId, worktreePath: directory, amend: false };
-        const snapshot = yield* changes.read(scope);
-        const committing = yield* changes
-          .commit({ ...scope, revision: snapshot.revision, message: "Held" })
-          .pipe(Effect.forkScoped);
-        yield* Deferred.await(commitEntered);
+  const scope = { repositoryId, worktreePath: directory, amend: false };
+  const snapshot = await changes.read(scope);
+  const committing = changes.commit({
+    ...scope,
+    revision: snapshot.revision,
+    message: "Held",
+  });
+  await commitEntered.promise;
 
-        yield* Effect.all([
-          changes.read(scope),
-          changes.diff({ ...scope, section: "staged", path: "file.txt" }),
-        ]);
-        yield* Deferred.succeed(releaseCommit, undefined);
-        yield* Fiber.join(committing);
-      }),
-    ),
-  );
+  await Promise.all([
+    changes.read(scope),
+    changes.diff({ ...scope, section: "staged", path: "file.txt" }),
+  ]);
+  releaseCommit.resolve();
+  await committing;
   expect((await git("log", "-1", "--format=%s")).stdout.trim()).toBe("Held");
 });

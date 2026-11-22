@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import {
   type ChangesMutated,
   type ChangesScope,
@@ -13,10 +12,11 @@ import {
   type UndoDiscard,
   type ViewedChange,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
+  type EnvironmentFeature,
   type RepositoryDependencies,
   repositoryRoutes,
+  uninterruptible,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
@@ -45,137 +45,133 @@ import {
 import type { GitLfs } from "#server/features/repository-lfs/git-lfs.ts";
 import { atRebaseEditStop } from "#server/repository/repository-coordination.ts";
 
-export function readRepositoryChanges(
+export async function readRepositoryChanges(
   scope: ChangesScope,
   git: GitCommandRunner,
 ) {
-  return readChanges(git, scope).pipe(Effect.map((value) => value.snapshot));
+  return (await readChanges(git, scope)).snapshot;
 }
 
-export function readRepositoryChangeDiff(
+export async function readRepositoryChangeDiff(
   command: ReadChangeDiff,
   git: GitCommandRunner,
 ) {
-  return Effect.gen(function* () {
-    yield* safeChangePath(command.worktreePath, command.path);
-    const base = yield* readComparisonBase(git, command);
-    const previousPath =
-      command.section === "unstaged"
-        ? null
-        : yield* readStagedPreviousPath(
-            git,
-            command.worktreePath,
-            base,
-            command.path,
-          );
-    return yield* readChangeDiff(git, command, { base, previousPath });
-  });
+  await safeChangePath(command.worktreePath, command.path);
+  const base = await readComparisonBase(git, command);
+  const previousPath =
+    command.section === "unstaged"
+      ? null
+      : await readStagedPreviousPath(
+          git,
+          command.worktreePath,
+          base,
+          command.path,
+        );
+  return readChangeDiff(git, command, { base, previousPath });
 }
 
-export function mutateRepositoryChanges(
+export async function mutateRepositoryChanges(
   command: MutateChanges,
   git: GitCommandRunner,
   lfs: GitLfs,
 ) {
   const directory = command.worktreePath;
-  return Effect.gen(function* () {
-    const discarded = yield* withChangeIndex(git, directory, (indexFile) =>
-      Effect.gen(function* () {
-        const current = yield* verifyChanges(git, command);
-        const unchanged = verifyChangedFiles(directory, current.files);
-        const { touched, apply } = yield* planChanges(
-          git,
-          { indexFile },
-          command,
-          current,
-          unchanged,
-          yield* lfs.installed,
-        );
-        if (command.action !== "discard")
-          return yield* apply.pipe(Effect.andThen(unchanged), Effect.as(null));
-        const capture = snapshotChanges(git, directory, indexFile, {
-          paths: touched,
-          conflicted: conflictedPaths(current.snapshot),
-        });
-        const before = yield* capture;
-        yield* apply;
-        return { before, after: yield* capture };
-      }),
+  const discarded = await withChangeIndex(git, directory, async (indexFile) => {
+    const current = await verifyChanges(git, command);
+    const unchanged = () => verifyChangedFiles(directory, current.files);
+    const { touched, apply } = await planChanges(
+      git,
+      { indexFile },
+      command,
+      current,
+      unchanged,
+      await lfs.installed(),
     );
-    const written = yield* readWritten(git, command, command.viewed);
-    return { ...written, discarded } satisfies ChangesMutated;
+    if (command.action !== "discard") {
+      await apply();
+      await unchanged();
+      return null;
+    }
+    const capture = () =>
+      snapshotChanges(git, directory, indexFile, {
+        paths: touched,
+        conflicted: conflictedPaths(current.snapshot),
+      });
+    const before = await capture();
+    await apply();
+    return { before, after: await capture() };
   });
+  const written = await readWritten(git, command, command.viewed);
+  return { ...written, discarded } satisfies ChangesMutated;
 }
 
-export function undoRepositoryDiscard(
+export async function undoRepositoryDiscard(
   command: UndoDiscard,
   git: GitCommandRunner,
 ) {
-  return withChangeIndex(git, command.worktreePath, (indexFile) =>
+  await withChangeIndex(git, command.worktreePath, (indexFile) =>
     restoreDiscarded(git, command.worktreePath, indexFile, command.discarded),
-  ).pipe(Effect.andThen(() => readWritten(git, command, command.viewed)));
+  );
+  return readWritten(git, command, command.viewed);
 }
 
-export function ignoreRepositoryPaths(
+export async function ignoreRepositoryPaths(
   command: IgnorePaths,
   git: GitCommandRunner,
 ) {
-  return withChangeIndex(git, command.worktreePath, (indexFile) =>
+  await withChangeIndex(git, command.worktreePath, (indexFile) =>
     ignorePaths(git, { indexFile }, command),
-  ).pipe(Effect.andThen(() => readWritten(git, command, command.viewed)));
+  );
+  return readWritten(git, command, command.viewed);
 }
 
-export function commitRepositoryChanges(
+export async function commitRepositoryChanges(
   command: CommitChanges,
   git: GitCommandRunner,
   lfs: GitLfs,
 ) {
-  return withChangeIndex(git, command.worktreePath, (indexFile) =>
-    Effect.gen(function* () {
-      const current = yield* verifyChanges(git, command);
-      yield* requireCommittable(command, current.snapshot);
-      if (!command.amend && current.snapshot.staged.length === 0)
-        yield* stageEverything(
-          git,
-          indexFile,
-          command,
-          current,
-          yield* lfs.installed,
-        );
-      yield* Effect.uninterruptible(
-        runRepositoryGit(
-          git,
-          command.worktreePath,
-          [
-            "commit",
-            ...(command.amend ? ["--amend", "--allow-empty"] : []),
-            "--file=-",
-          ],
-          {
-            globalArguments: ["-c", "user.useConfigOnly=true"],
-            indexFile,
-            input: command.message,
-            timeoutMilliseconds: 120_000,
-          },
-        ),
+  await withChangeIndex(git, command.worktreePath, async (indexFile) => {
+    const current = await verifyChanges(git, command);
+    requireCommittable(command, current.snapshot);
+    if (!command.amend && current.snapshot.staged.length === 0)
+      await stageEverything(
+        git,
+        indexFile,
+        command,
+        current,
+        await lfs.installed(),
       );
-    }),
-  ).pipe(
-    Effect.andThen(() =>
-      readWritten(git, { ...command, amend: false }, command.viewed),
-    ),
-  );
+    await uninterruptible(() =>
+      runRepositoryGit(
+        git,
+        command.worktreePath,
+        [
+          "commit",
+          ...(command.amend ? ["--amend", "--allow-empty"] : []),
+          "--file=-",
+        ],
+        {
+          globalArguments: ["-c", "user.useConfigOnly=true"],
+          indexFile,
+          input: command.message,
+          timeoutMilliseconds: 120_000,
+        },
+      ),
+    );
+  });
+  return readWritten(git, { ...command, amend: false }, command.viewed);
 }
 
-function stageEverything(
+async function stageEverything(
   git: GitCommandRunner,
   indexFile: string,
   command: CommitChanges,
-  current: Effect.Success<ReturnType<typeof verifyChanges>>,
+  current: Awaited<ReturnType<typeof verifyChanges>>,
   lfsInstalled: boolean,
 ) {
-  const unchanged = verifyChangedFiles(command.worktreePath, current.files);
-  return planChanges(
+  const unchanged = () =>
+    verifyChangedFiles(command.worktreePath, current.files);
+  const { apply } = await planChanges(
     git,
     { indexFile },
     {
@@ -190,7 +186,9 @@ function stageEverything(
     current,
     unchanged,
     lfsInstalled,
-  ).pipe(Effect.flatMap(({ apply }) => apply.pipe(Effect.andThen(unchanged))));
+  );
+  await apply();
+  await unchanged();
 }
 
 function requireCommittable(
@@ -198,52 +196,46 @@ function requireCommittable(
   snapshot: RepositoryChanges,
 ) {
   if (!command.message.trim())
-    return Effect.fail(
-      changesFailed("Unsupported", "Write a commit message first."),
-    );
+    throw changesFailed("Unsupported", "Write a commit message first.");
   if (!command.amend && snapshot.staged.length + snapshot.unstaged.length === 0)
-    return Effect.fail(
-      changesFailed("Unsupported", "There is nothing to commit."),
-    );
+    throw changesFailed("Unsupported", "There is nothing to commit.");
   if (
     [...snapshot.unstaged, ...snapshot.staged].some(
       (file) => file.status === "U",
     )
   )
-    return Effect.fail(
-      changesFailed(
-        "Conflict",
-        "Resolve all merge conflicts before committing.",
-      ),
+    throw changesFailed(
+      "Conflict",
+      "Resolve all merge conflicts before committing.",
     );
-  return Effect.void;
 }
 
-function readWritten(
+async function readWritten(
   git: GitCommandRunner,
   scope: ChangesScope,
   viewed: ViewedChange | undefined,
 ) {
-  return Effect.gen(function* () {
-    const { snapshot, base } = yield* readChanges(git, scope);
-    const file =
-      viewed &&
-      snapshot[viewed.section].find((file) => file.path === viewed.path);
-    const diff =
-      viewed && file
-        ? yield* readChangeDiff(
-            git,
-            {
-              repositoryId: scope.repositoryId,
-              worktreePath: scope.worktreePath,
-              amend: scope.amend,
-              ...viewed,
-            },
-            { base, previousPath: file.previousPath },
-          ).pipe(Effect.catch(() => Effect.succeed(null)))
-        : null;
-    return { changes: snapshot, diff } satisfies ChangesWritten;
-  });
+  const { snapshot, base } = await readChanges(git, scope);
+  const file =
+    viewed &&
+    snapshot[viewed.section].find((file) => file.path === viewed.path);
+  const diff =
+    viewed && file
+      ? await readChangeDiff(
+          git,
+          {
+            repositoryId: scope.repositoryId,
+            worktreePath: scope.worktreePath,
+            amend: scope.amend,
+            ...viewed,
+          },
+          { base, previousPath: file.previousPath },
+        ).catch((error) => {
+          if (error instanceof Error) throw error;
+          return null;
+        })
+      : null;
+  return { changes: snapshot, diff } satisfies ChangesWritten;
 }
 
 function conflictedPaths(snapshot: RepositoryChanges) {
@@ -256,35 +248,27 @@ function conflictedPaths(snapshot: RepositoryChanges) {
   ];
 }
 
-function verifyChanges(
+async function verifyChanges(
   git: GitCommandRunner,
   scope: ChangesScope & { readonly revision: string },
 ) {
-  return readChanges(git, scope).pipe(
-    Effect.flatMap((current) =>
-      current.snapshot.revision === scope.revision
-        ? Effect.succeed(current)
-        : Effect.fail(staleChanges()),
-    ),
-  );
+  const current = await readChanges(git, scope);
+  if (current.snapshot.revision !== scope.revision) throw staleChanges();
+  return current;
 }
 
-function verifyChangedFiles(
+async function verifyChangedFiles(
   directory: string,
   files: {
     readonly paths: readonly string[];
     readonly identities: readonly string[];
   },
 ) {
-  return worktreeIdentities(directory, files.paths).pipe(
-    Effect.flatMap((identities) =>
-      identities.every(
-        (identity, index) => identity === files.identities[index],
-      )
-        ? Effect.void
-        : Effect.fail(staleChanges()),
-    ),
-  );
+  const identities = await worktreeIdentities(directory, files.paths);
+  if (
+    !identities.every((identity, index) => identity === files.identities[index])
+  )
+    throw staleChanges();
 }
 
 function staleChanges() {

@@ -1,5 +1,4 @@
 import { createTwoFilesPatch, diffLines } from "diff";
-import { Effect } from "effect";
 import {
   changesFailed,
   type MutateChanges,
@@ -9,68 +8,63 @@ import type { ChangeDiff } from "#contracts/repository-comparison/repository-com
 import {
   type GitCommandOptions,
   type GitCommandRunner,
+  isGitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import { safeChangePath } from "#server/features/repository-changes/git/change-files.ts";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff.ts";
 
-export function planChanges<E>(
+type Verify = () => Promise<void>;
+
+export async function planChanges(
   git: GitCommandRunner,
   index: GitCommandOptions,
   command: MutateChanges,
   { snapshot, base }: { snapshot: RepositoryChanges; base: string },
-  verify: Effect.Effect<void, E>,
+  verify: Verify,
   lfsInstalled: boolean,
 ) {
-  return Effect.gen(function* () {
-    if (
-      (command.action === "stage" && command.section !== "unstaged") ||
-      (command.action === "unstage" && command.section !== "staged")
-    )
-      return yield* Effect.fail(
-        changesFailed(
-          "Unsupported",
-          "This action does not match the selected section.",
-        ),
+  if (
+    (command.action === "stage" && command.section !== "unstaged") ||
+    (command.action === "unstage" && command.section !== "staged")
+  )
+    throw changesFailed(
+      "Unsupported",
+      "This action does not match the selected section.",
+    );
+  const files = snapshot[command.section];
+  const selection = command.selection;
+  const paths =
+    selection._tag === "All"
+      ? files.map((file) => file.path)
+      : selection._tag === "Files"
+        ? [...new Set(selection.paths)]
+        : [selection.path];
+  if (paths.length === 0) return { touched: [], apply: async () => {} };
+  for (const path of paths) {
+    const file = files.find((file) => file.path === path);
+    if (file === undefined)
+      throw changesFailed(
+        "Stale",
+        "A selected file has changed. Refresh the changes and try again.",
       );
-    const files = snapshot[command.section];
-    const selection = command.selection;
-    const paths =
-      selection._tag === "All"
-        ? files.map((file) => file.path)
-        : selection._tag === "Files"
-          ? [...new Set(selection.paths)]
-          : [selection.path];
-    if (paths.length === 0) return { touched: [], apply: Effect.void };
-    for (const path of paths) {
-      const file = files.find((file) => file.path === path);
-      if (file === undefined)
-        return yield* Effect.fail(
-          changesFailed(
-            "Stale",
-            "A selected file has changed. Refresh the changes and try again.",
-          ),
-        );
-      if (file.lfs && !lfsInstalled && command.action !== "unstage")
-        return yield* Effect.fail(
-          changesFailed(
-            "Unsupported",
-            "Git LFS isn't installed on this server.",
-          ),
-        );
-      if (file.status === "U" && command.action !== "stage")
-        return yield* Effect.fail(
-          changesFailed(
-            "Conflict",
-            "Resolve this file's merge conflict before unstaging or discarding it.",
-          ),
-        );
-      yield* safeChangePath(command.worktreePath, path);
-    }
-    const sources = renameSources(files, paths);
-    return {
-      touched: [...paths, ...sources],
-      apply: applyMutation(
+    if (file.lfs && !lfsInstalled && command.action !== "unstage")
+      throw changesFailed(
+        "Unsupported",
+        "Git LFS isn't installed on this server.",
+      );
+    if (file.status === "U" && command.action !== "stage")
+      throw changesFailed(
+        "Conflict",
+        "Resolve this file's merge conflict before unstaging or discarding it.",
+      );
+    await safeChangePath(command.worktreePath, path);
+  }
+  const sources = renameSources(files, paths);
+  return {
+    touched: [...paths, ...sources],
+    apply: () =>
+      applyMutation(
         git,
         index,
         command,
@@ -78,160 +72,154 @@ export function planChanges<E>(
         { paths, sources },
         verify,
       ),
-    };
-  });
+  };
 }
 
-function applyMutation<E>(
+async function applyMutation(
   git: GitCommandRunner,
   index: GitCommandOptions,
   command: MutateChanges,
   { snapshot, base }: { snapshot: RepositoryChanges; base: string },
   { paths, sources }: { paths: readonly string[]; sources: readonly string[] },
-  verify: Effect.Effect<void, E>,
+  verify: Verify,
 ) {
-  return Effect.gen(function* () {
-    const selection = command.selection;
-    if (selection._tag === "Lines") {
-      const diff = yield* readChangeDiff(
-        git,
-        { ...command, path: selection.path, whole: true },
-        { base, previousPath: sources[0] ?? null },
-        index,
+  const selection = command.selection;
+  if (selection._tag === "Lines") {
+    const diff = await readChangeDiff(
+      git,
+      { ...command, path: selection.path, whole: true },
+      { base, previousPath: sources[0] ?? null },
+      index,
+    );
+    if (diff.revision !== selection.revision)
+      throw changesFailed(
+        "Stale",
+        "The file changed since these lines were selected. Review the updated diff.",
       );
-      if (diff.revision !== selection.revision)
-        return yield* Effect.fail(
-          changesFailed(
-            "Stale",
-            "The file changed since these lines were selected. Review the updated diff.",
-          ),
-        );
-      if (diff.kind !== "text")
-        return yield* Effect.fail(
-          changesFailed(
-            "Unsupported",
-            "This file supports whole-file actions only.",
-          ),
-        );
-      const reverse = command.action !== "stage";
-      const target = yield* Effect.try({
-        try: () =>
-          selectedChangeText(
-            diff.before ?? "",
-            diff.after ?? "",
-            selection.lines,
-            reverse,
-          ),
-        catch: () =>
-          changesFailed(
-            "Stale",
-            "The selected lines no longer match the file.",
-          ),
-      });
-      const current = reverse ? diff.after : diff.before;
-      const destination =
-        target === "" && (reverse ? diff.before : diff.after) === null
-          ? null
-          : target;
-      const patch = contentPatch(diff, current, destination);
-      yield* verify;
-      yield* applyChangePatch(git, index, command, patch);
-      return;
-    }
-    if (command.action === "stage" || command.action === "unstage") {
-      yield* pathspecGit(
-        git,
-        index,
-        command.worktreePath,
-        command.action === "stage"
-          ? ["add"]
-          : ["restore", `--source=${base}`, "--staged"],
-        [...paths, ...sources],
+    if (diff.kind !== "text")
+      throw changesFailed(
+        "Unsupported",
+        "This file supports whole-file actions only.",
       );
-      return;
-    }
-    yield* discardFiles(
+    const reverse = command.action !== "stage";
+    const target = selectedLinesText(diff, selection.lines, reverse);
+    const current = reverse ? diff.after : diff.before;
+    const destination =
+      target === "" && (reverse ? diff.before : diff.after) === null
+        ? null
+        : target;
+    const patch = contentPatch(diff, current, destination);
+    await verify();
+    await applyChangePatch(git, index, command, patch);
+    return;
+  }
+  if (command.action === "stage" || command.action === "unstage") {
+    await pathspecGit(
       git,
       index,
-      command,
-      { snapshot, base },
-      { paths, sources },
-      verify,
+      command.worktreePath,
+      command.action === "stage"
+        ? ["add"]
+        : ["restore", `--source=${base}`, "--staged"],
+      [...paths, ...sources],
     );
-  });
+    return;
+  }
+  await discardFiles(
+    git,
+    index,
+    command,
+    { snapshot, base },
+    { paths, sources },
+    verify,
+  );
 }
 
-function discardFiles<E>(
+function selectedLinesText(
+  diff: ChangeDiff,
+  lines: readonly string[],
+  reverse: boolean,
+) {
+  try {
+    return selectedChangeText(
+      diff.before ?? "",
+      diff.after ?? "",
+      lines,
+      reverse,
+    );
+  } catch {
+    throw changesFailed(
+      "Stale",
+      "The selected lines no longer match the file.",
+    );
+  }
+}
+
+async function discardFiles(
   git: GitCommandRunner,
   index: GitCommandOptions,
   command: MutateChanges,
   { snapshot, base }: { snapshot: RepositoryChanges; base: string },
   { paths, sources }: { paths: readonly string[]; sources: readonly string[] },
-  verify: Effect.Effect<void, E>,
+  verify: Verify,
 ) {
-  return Effect.gen(function* () {
-    const directory = command.worktreePath;
-    const unstaged = new Map(
-      snapshot.unstaged.map((file) => [file.path, file.status]),
+  const directory = command.worktreePath;
+  const unstaged = new Map(
+    snapshot.unstaged.map((file) => [file.path, file.status]),
+  );
+  if (command.section === "unstaged") {
+    const created = new Set(
+      paths.filter((path) => {
+        const status = unstaged.get(path);
+        return status === "?" || status === "A";
+      }),
     );
-    if (command.section === "unstaged") {
-      const created = new Set(
-        paths.filter((path) => {
-          const status = unstaged.get(path);
-          return status === "?" || status === "A";
-        }),
-      );
-      const patch = yield* createdFilesPatch(git, index, directory, [
-        ...created,
-      ]);
-      yield* verify;
-      yield* applyChangePatch(git, index, command, patch, true);
-      yield* pathspecGit(
-        git,
-        index,
-        directory,
-        ["restore", "--worktree"],
-        paths.filter((path) => !created.has(path)),
-      );
-      return;
-    }
-    if (sources.some((path) => unstaged.has(path)))
-      return yield* Effect.fail(
-        changesFailed(
-          "Conflict",
-          "A new file exists at the renamed file's original path. Move it before discarding the rename.",
-        ),
-      );
-    const edited = paths.filter((path) => unstaged.has(path));
-    const patch =
-      edited.length === 0
-        ? ""
-        : yield* runRepositoryGit(
-            git,
-            directory,
-            [
-              "diff",
-              ...patchOptions,
-              "--no-renames",
-              "--cached",
-              base,
-              "--",
-              ...edited,
-            ],
-            index,
-          );
-    yield* verify;
-    yield* applyChangePatch(git, index, command, patch, true);
-    const restore = ["restore", `--source=${base}`, "--staged", "--worktree"];
-    yield* pathspecGit(
+    const patch = await createdFilesPatch(git, index, directory, [...created]);
+    await verify();
+    await applyChangePatch(git, index, command, patch, true);
+    await pathspecGit(
       git,
       index,
       directory,
-      restore,
-      paths.filter((path) => !unstaged.has(path)),
+      ["restore", "--worktree"],
+      paths.filter((path) => !created.has(path)),
     );
-    yield* pathspecGit(git, index, directory, restore, sources);
-  });
+    return;
+  }
+  if (sources.some((path) => unstaged.has(path)))
+    throw changesFailed(
+      "Conflict",
+      "A new file exists at the renamed file's original path. Move it before discarding the rename.",
+    );
+  const edited = paths.filter((path) => unstaged.has(path));
+  const patch =
+    edited.length === 0
+      ? ""
+      : await runRepositoryGit(
+          git,
+          directory,
+          [
+            "diff",
+            ...patchOptions,
+            "--no-renames",
+            "--cached",
+            base,
+            "--",
+            ...edited,
+          ],
+          index,
+        );
+  await verify();
+  await applyChangePatch(git, index, command, patch, true);
+  const restore = ["restore", `--source=${base}`, "--staged", "--worktree"];
+  await pathspecGit(
+    git,
+    index,
+    directory,
+    restore,
+    paths.filter((path) => !unstaged.has(path)),
+  );
+  await pathspecGit(git, index, directory, restore, sources);
 }
 
 function renameSources(
@@ -255,36 +243,39 @@ export const patchOptions = [
   "--dst-prefix=b/",
 ];
 
-export function createdFilesPatch(
+export async function createdFilesPatch(
   git: GitCommandRunner,
   index: GitCommandOptions,
   directory: string,
   paths: readonly string[],
 ) {
-  return Effect.forEach(paths, (path) =>
-    runRepositoryGit(
-      git,
-      directory,
-      ["diff", "--no-index", ...patchOptions, "--", "/dev/null", path],
-      { ...index, exitCodes: [0, 1] },
-    ),
-  ).pipe(Effect.map((patches) => patches.join("\n")));
+  const patches: string[] = [];
+  for (const path of paths)
+    patches.push(
+      await runRepositoryGit(
+        git,
+        directory,
+        ["diff", "--no-index", ...patchOptions, "--", "/dev/null", path],
+        { ...index, exitCodes: [0, 1] },
+      ),
+    );
+  return patches.join("\n");
 }
 
-function pathspecGit(
+async function pathspecGit(
   git: GitCommandRunner,
   index: GitCommandOptions,
   directory: string,
   args: readonly string[],
   paths: readonly string[],
 ) {
-  if (paths.length === 0) return Effect.void;
-  return runRepositoryGit(
+  if (paths.length === 0) return;
+  await runRepositoryGit(
     git,
     directory,
     [...args, "--pathspec-from-file=-", "--pathspec-file-nul"],
     { ...index, input: `${paths.join("\0")}\0` },
-  ).pipe(Effect.asVoid);
+  );
 }
 
 function contentPatch(
@@ -303,42 +294,37 @@ function contentPatch(
   );
 }
 
-function applyChangePatch(
+async function applyChangePatch(
   git: GitCommandRunner,
   index: GitCommandOptions,
   command: MutateChanges,
   patch: string,
   reverse = false,
 ) {
-  if (!patch.trim()) return Effect.void;
+  if (!patch.trim()) return;
   const args = [
     "apply",
     "--whitespace=nowarn",
     ...(reverse ? ["--reverse"] : []),
   ];
-  const directory = command.worktreePath;
-  const rejected = () =>
-    changesFailed(
-      "Conflict",
-      "These changes overlap other edits or no longer apply. Nothing was discarded. Refresh the diff and review the overlapping lines.",
-    );
+  const apply = (extra: readonly string[]) =>
+    runRepositoryGit(git, command.worktreePath, [...args, ...extra], {
+      ...index,
+      input: patch,
+    }).catch((error) => {
+      throw isGitFailed(error)
+        ? changesFailed(
+            "Conflict",
+            "These changes overlap other edits or no longer apply. Nothing was discarded. Refresh the diff and review the overlapping lines.",
+          )
+        : error;
+    });
   if (command.action === "discard" && command.section === "unstaged") {
-    return runRepositoryGit(git, directory, args, {
-      ...index,
-      input: patch,
-    }).pipe(Effect.mapError(rejected), Effect.asVoid);
+    await apply([]);
+    return;
   }
-  return Effect.gen(function* () {
-    yield* runRepositoryGit(git, directory, [...args, "--cached"], {
-      ...index,
-      input: patch,
-    }).pipe(Effect.mapError(rejected));
-    if (command.action === "discard")
-      yield* runRepositoryGit(git, directory, args, {
-        ...index,
-        input: patch,
-      }).pipe(Effect.mapError(rejected));
-  });
+  await apply(["--cached"]);
+  if (command.action === "discard") await apply([]);
 }
 
 export function selectedChangeText(

@@ -1,6 +1,5 @@
 import { chmod, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import {
   RepositoryOperationsApi,
@@ -20,26 +19,22 @@ async function fixture() {
     expectedHead,
     ...overrides
   }: Partial<Omit<StartRebase, "_tag">> & { expectedHead?: string } = {}) =>
-    Effect.runPromise(
-      service.start({
-        ...scope,
-        expectedHead: expectedHead ?? (await tip("HEAD")),
-        operation: {
-          _tag: "Rebase",
-          onto: { ref: "main", commit: await tip("main") },
-          stash: false,
-          ...overrides,
-        },
-      }),
-    );
+    service.start({
+      ...scope,
+      expectedHead: expectedHead ?? (await tip("HEAD")),
+      operation: {
+        _tag: "Rebase",
+        onto: { ref: "main", commit: await tip("main") },
+        stash: false,
+        ...overrides,
+      },
+    });
   const execute = async (action: "continue" | "abort") =>
-    Effect.runPromise(
-      service.execute({
-        ...scope,
-        revision: (await Effect.runPromise(service.read(scope))).revision,
-        action,
-      }),
-    );
+    service.execute({
+      ...scope,
+      revision: (await service.read(scope)).revision,
+      action,
+    });
   return { directory, tip, start, execute };
 }
 

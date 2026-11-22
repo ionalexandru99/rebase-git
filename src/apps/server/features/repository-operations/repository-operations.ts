@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   type ExecuteOperation,
@@ -9,6 +8,7 @@ import type { EnvironmentFeature } from "#server/adapters/environment-transport/
 import {
   type RepositoryDependencies,
   repositoryRoutes,
+  uninterruptible,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { continueStagedCherryPick } from "#server/features/repository-operations/cherry-pick.ts";
@@ -36,7 +36,10 @@ export function repositoryOperationsFeature(
           locks: { refs: "wait", worktree: "wait" },
           duringOperation: "proceed",
         },
-        (input, git) => recoverRepositoryOperation(git, coordination, input),
+        (input, git) =>
+          uninterruptible(() =>
+            recoverRepositoryOperation(git, coordination, input),
+          ),
       ),
       command(
         api.start,
@@ -51,40 +54,37 @@ export function repositoryOperationsFeature(
   };
 }
 
-function recoverRepositoryOperation(
+async function recoverRepositoryOperation(
   git: GitCommandRunner,
   coordination: RepositoryCoordination,
   command: ExecuteOperation,
 ) {
-  return Effect.gen(function* () {
-    const state = yield* coordination.operation(command.worktreePath);
-    yield* validateRecoveryAction(state, command);
-    if (
-      state.kind === "cherry-pick" &&
-      command.action === "continue" &&
-      (yield* continueStagedCherryPick(git, command.worktreePath))
-    )
-      return yield* coordination.operation(command.worktreePath);
-    const exit = yield* runChange(git, {
-      directory: command.worktreePath,
-      arguments:
-        state.kind === "squash"
-          ? ["reset", "--merge"]
-          : [state.kind, `--${command.action}`],
-      timeoutMilliseconds: 120_000,
-    });
-    const operation = yield* coordination.operation(command.worktreePath);
-    if (command.action !== "abort" && advancedToStop(state, operation))
-      return operation;
-    yield* requireLanded(
-      exit,
-      Effect.succeed(
-        operation.kind === "idle" ||
-          (command.action !== "abort" && advanced(state, operation)),
-      ),
-    );
+  const state = await coordination.operation(command.worktreePath);
+  validateRecoveryAction(state, command);
+  if (
+    state.kind === "cherry-pick" &&
+    command.action === "continue" &&
+    (await continueStagedCherryPick(git, command.worktreePath))
+  )
+    return await coordination.operation(command.worktreePath);
+  const exit = await runChange(git, {
+    directory: command.worktreePath,
+    arguments:
+      state.kind === "squash"
+        ? ["reset", "--merge"]
+        : [state.kind, `--${command.action}`],
+    timeoutMilliseconds: 120_000,
+  });
+  const operation = await coordination.operation(command.worktreePath);
+  if (command.action !== "abort" && advancedToStop(state, operation))
     return operation;
-  }).pipe(Effect.uninterruptible);
+  await requireLanded(
+    exit,
+    async () =>
+      operation.kind === "idle" ||
+      (command.action !== "abort" && advanced(state, operation)),
+  );
+  return operation;
 }
 
 function advancedToStop(
@@ -112,21 +112,17 @@ function validateRecoveryAction(
   command: ExecuteOperation,
 ) {
   if (state.revision !== command.revision)
-    return Effect.fail(
-      operationError(
-        "Stale",
-        "Git state changed. Review the refreshed operation before trying again.",
-      ),
+    throw operationError(
+      "Stale",
+      "Git state changed. Review the refreshed operation before trying again.",
     );
   const action = state.actions.find(
     (candidate) => candidate.action === command.action,
   );
-  if (action?.enabled) return Effect.void;
+  if (action?.enabled) return;
   const detail =
     action?.reason ?? "This action is not supported by the current Git state.";
-  return Effect.fail(
-    state.lock
-      ? repositoryRejected("Busy", detail)
-      : operationError("Incompatible", detail),
-  );
+  throw state.lock
+    ? repositoryRejected("Busy", detail)
+    : operationError("Incompatible", detail);
 }

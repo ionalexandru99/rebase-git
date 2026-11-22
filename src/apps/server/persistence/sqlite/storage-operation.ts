@@ -1,41 +1,24 @@
-import { Data, Effect, type Semaphore } from "effect";
 import { errorMessage } from "#server/error-inspection.ts";
 
-export class EnvironmentStorageError extends Data.TaggedError(
-  "EnvironmentStorageError",
-)<{
-  readonly cause: unknown;
-  readonly message: string;
-}> {}
-
-export function serializedPromise<A>(
-  writer: Semaphore.Semaphore,
-  message: string,
-  operation: () => A | PromiseLike<A>,
-) {
-  return writer.withPermit(storagePromise(message, operation));
+export function storageError(message: string, cause: unknown) {
+  return new Error(`${message}: ${errorMessage(cause)}`, { cause });
 }
 
-export function storagePromise<A>(
+export async function storageOperation<A>(
   message: string,
   operation: () => A | PromiseLike<A>,
 ) {
-  return Effect.tryPromise({
-    try: async () => operation(),
-    catch: (cause) => storageError(message, cause),
-  });
+  try {
+    return await operation();
+  } catch (cause) {
+    throw storageError(message, cause);
+  }
 }
 
 export function storageSync<A>(message: string, operation: () => A) {
-  return Effect.try({
-    try: operation,
-    catch: (cause) => storageError(message, cause),
-  });
-}
-
-function storageError(message: string, cause: unknown) {
-  return new EnvironmentStorageError({
-    cause,
-    message: `${message}: ${errorMessage(cause)}`,
-  });
+  try {
+    return operation();
+  } catch (cause) {
+    throw storageError(message, cause);
+  }
 }

@@ -1,5 +1,4 @@
 import { homedir } from "node:os";
-import { Effect } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   FetchPrune,
@@ -7,7 +6,7 @@ import type {
 } from "#contracts/repository-pull/repository-pull.contract.ts";
 import {
   type GitCommandRunner,
-  type GitFailed,
+  isGitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
@@ -23,69 +22,71 @@ export function createFetchPrunes(
   git: GitCommandRunner,
   access: RepositoryAccess,
 ) {
-  const server = readPrune(git, homedir(), ["--global"]).pipe(
-    Effect.map((prune) => prune ?? pruneByDefault),
-  );
-  const repository = (path: string) =>
-    Effect.all({
-      repository: readPrune(git, path, ["--local"]),
-      server,
-    }) satisfies Effect.Effect<FetchPrune, GitFailed>;
-  const inRepository = <Success>(
+  const server = async () =>
+    (await readPrune(git, homedir(), ["--global"])) ?? pruneByDefault;
+  const repository = async (path: string): Promise<FetchPrune> => {
+    const repository = await readPrune(git, path, ["--local"]);
+    return { repository, server: await server() };
+  };
+  const inRepository = async <Success>(
     repositoryId: string,
-    run: (path: string) => Effect.Effect<Success, GitFailed>,
-  ) =>
-    access.repository(repositoryId).pipe(
-      Effect.flatMap(({ path }) => run(path)),
-      Effect.catchTag("GitFailed", ({ detail }) =>
-        Effect.fail(repositoryRejected("GitFailed", detail)),
-      ),
-    );
+    run: (path: string) => Promise<Success>,
+  ) => {
+    const { path } = await access.repository(repositoryId);
+    try {
+      return await run(path);
+    } catch (error) {
+      throw isGitFailed(error)
+        ? repositoryRejected("GitFailed", error.detail)
+        : error;
+    }
+  };
+  const failingWithPrune = async <Success>(run: () => Promise<Success>) => {
+    try {
+      return await run();
+    } catch (error) {
+      throw isGitFailed(error) ? pruneFailed(error.detail) : error;
+    }
+  };
 
   return {
-    server: server.pipe(Effect.mapError(pruneFailed)),
+    server: () => failingWithPrune(server),
     saveServer: (prune: boolean) =>
-      writePrune(git, homedir(), "--global", prune).pipe(
-        Effect.andThen(server),
-        Effect.mapError(pruneFailed),
-      ),
+      failingWithPrune(async () => {
+        await writePrune(git, homedir(), "--global", prune);
+        return server();
+      }),
     repository: (repositoryId: string) =>
       inRepository(repositoryId, repository),
     saveRepository: (repositoryId: string, prune: boolean | null) =>
-      inRepository(repositoryId, (path) =>
-        writePrune(git, path, "--local", prune).pipe(
-          Effect.andThen(repository(path)),
-        ),
-      ),
+      inRepository(repositoryId, async (path) => {
+        await writePrune(git, path, "--local", prune);
+        return repository(path);
+      }),
   };
 }
 
-export function defaultPruneArguments(git: GitCommandRunner, path: string) {
-  return readPrune(git, path, []).pipe(
-    Effect.map((prune) =>
-      prune === null ? ["-c", `${key}=${pruneByDefault}`] : [],
-    ),
-  );
+export async function defaultPruneArguments(
+  git: GitCommandRunner,
+  path: string,
+) {
+  const prune = await readPrune(git, path, []);
+  return prune === null ? ["-c", `${key}=${pruneByDefault}`] : [];
 }
 
-function readPrune(
+async function readPrune(
   git: GitCommandRunner,
   directory: string,
   scope: readonly ConfigScope[],
 ) {
-  return runRepositoryGit(
+  const output = await runRepositoryGit(
     git,
     directory,
     ["config", ...scope, "--includes", "--type=bool", "--get", key],
-    {
-      exitCodes: [0, 1],
-    },
-  ).pipe(
-    Effect.map((output) => {
-      const value = output.trim();
-      return value === "" ? null : value === "true";
-    }),
+    { exitCodes: [0, 1] },
   );
+  const value = output.trim();
+  return value === "" ? null : value === "true";
 }
 
 function writePrune(
@@ -104,6 +105,6 @@ function writePrune(
   );
 }
 
-function pruneFailed({ detail }: GitFailed): FetchPruneFailed {
+function pruneFailed(detail: string): FetchPruneFailed {
   return { _tag: "FetchPruneFailed", detail: detail.slice(0, 2_048) };
 }

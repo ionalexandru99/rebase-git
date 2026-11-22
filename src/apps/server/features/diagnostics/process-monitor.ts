@@ -2,7 +2,6 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { Cause, Effect, Queue, type Scope } from "effect";
 import type { DiagnosticsMonitor } from "#contracts/diagnostics/diagnostics.contract.ts";
 
 export interface MonitoredProcess {
@@ -22,14 +21,15 @@ export interface ProcessSnapshot {
 }
 
 export interface ProcessMonitor {
-  readonly sample: Effect.Effect<ProcessSnapshot | undefined>;
+  readonly sample: () => Promise<ProcessSnapshot | undefined>;
   readonly status: () => DiagnosticsMonitor;
   readonly retry: () => void;
+  readonly close: () => void;
 }
 
 interface Helper {
   readonly child: ChildProcessWithoutNullStreams;
-  readonly lines: Queue.Queue<string, Error>;
+  readonly nextLine: () => Promise<string>;
 }
 
 const unavailable = "The process monitor isn't included in this build.";
@@ -57,101 +57,118 @@ export function processMonitorPath() {
 export function acquireProcessMonitor(
   path: string | undefined,
   onFailure: (detail: string) => void,
-): Effect.Effect<ProcessMonitor, never, Scope.Scope> {
-  return Effect.gen(function* () {
-    let helper: Helper | undefined;
-    let status: DiagnosticsMonitor =
-      path === undefined
-        ? { _tag: "Unavailable", detail: unavailable }
-        : { _tag: "Starting" };
-    let failed = false;
-    const stopHelper = () => {
-      helper?.child.kill();
-      helper = undefined;
-    };
-    yield* Effect.addFinalizer(() => Effect.sync(stopHelper));
+): ProcessMonitor {
+  let helper: Helper | undefined;
+  let status: DiagnosticsMonitor =
+    path === undefined
+      ? { _tag: "Unavailable", detail: unavailable }
+      : { _tag: "Starting" };
+  let failed = false;
+  let closed = false;
+  const stopHelper = () => {
+    helper?.child.kill();
+    helper = undefined;
+  };
 
-    const sample = Effect.gen(function* () {
-      if (path === undefined || failed) return undefined;
-      if (helper === undefined) helper = yield* startHelper(path);
-      const { child, lines } = helper;
-      child.stdin.write("\n");
-      const line = yield* Queue.take(lines).pipe(
-        Effect.timeoutOrElse({
-          duration: sampleDeadline,
-          orElse: () =>
-            Effect.fail(new Error("The process monitor stopped responding.")),
-        }),
-      );
-      const parsed = yield* Effect.try({
-        try: () => JSON.parse(line) as Omit<ProcessSnapshot, "monitorPid">,
-        catch: () =>
-          new Error("The process monitor sent an unreadable sample."),
-      });
-      status = { _tag: "Running" };
-      return { ...parsed, monitorPid: child.pid ?? 0 };
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.sync(() => {
-          const detail = error instanceof Error ? error.message : String(error);
-          stopHelper();
-          failed = true;
-          status = { _tag: "Unavailable", detail };
-          onFailure(detail);
-          return undefined;
-        }),
-      ),
-    );
+  const readSample = async (path: string) => {
+    helper ??= startHelper(path);
+    const { child, nextLine } = helper;
+    child.stdin.write("\n");
+    const line = await withDeadline(nextLine());
+    let parsed: Omit<ProcessSnapshot, "monitorPid">;
+    try {
+      parsed = JSON.parse(line) as Omit<ProcessSnapshot, "monitorPid">;
+    } catch {
+      throw new Error("The process monitor sent an unreadable sample.");
+    }
+    status = { _tag: "Running" };
+    return { ...parsed, monitorPid: child.pid ?? 0 };
+  };
 
-    return {
-      sample,
-      status: () => status,
-      retry: () => {
-        failed = false;
-      },
-    } satisfies ProcessMonitor;
-  });
+  return {
+    sample: async () => {
+      if (path === undefined || failed || closed) return undefined;
+      try {
+        return await readSample(path);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        stopHelper();
+        failed = true;
+        status = { _tag: "Unavailable", detail };
+        onFailure(detail);
+        return undefined;
+      }
+    },
+    status: () => status,
+    retry: () => {
+      failed = false;
+    },
+    close: () => {
+      closed = true;
+      stopHelper();
+    },
+  };
 }
 
-function startHelper(path: string) {
-  return Effect.flatMap(Queue.unbounded<string, Error>(), (lines) =>
-    Effect.try({
-      try: (): Helper => {
-        const child = spawn(path, [String(process.pid)], {
-          stdio: ["pipe", "pipe", "pipe"],
-          windowsHide: true,
-        });
-        let stderr = "";
-        createInterface({ input: child.stdout }).on("line", (line) =>
-          Queue.offerUnsafe(lines, line),
-        );
-        child.stderr.setEncoding("utf8");
-        child.stderr.on("data", (chunk: string) => {
-          stderr = (stderr + chunk).slice(-2_048);
-        });
-        child.stdin.once("error", () => undefined);
-        child.once("error", (error) =>
-          Queue.failCauseUnsafe(lines, Cause.fail(error)),
-        );
-        child.once("exit", (code, signal) =>
-          Queue.failCauseUnsafe(
-            lines,
-            Cause.fail(
-              new Error(
-                [
-                  `The process monitor stopped (${signal ?? `exit code ${code}`}).`,
-                  stderr.trim().split("\n").at(-1),
-                ]
-                  .filter(Boolean)
-                  .join(" "),
-              ),
-            ),
-          ),
-        );
-        return { child, lines };
-      },
-      catch: (error) =>
-        error instanceof Error ? error : new Error(String(error)),
-    }),
+function withDeadline(line: Promise<string>) {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("The process monitor stopped responding.")),
+      sampleDeadline,
+    );
+  });
+  return Promise.race([line, deadline]).finally(() => clearTimeout(timer));
+}
+
+function startHelper(path: string): Helper {
+  const lines: string[] = [];
+  let ended: Error | undefined;
+  let waiting: PromiseWithResolvers<string> | undefined;
+  const push = (line: string) => {
+    if (ended !== undefined) return;
+    if (waiting === undefined) lines.push(line);
+    else waiting.resolve(line);
+    waiting = undefined;
+  };
+  const end = (error: Error) => {
+    if (ended !== undefined) return;
+    ended = error;
+    waiting?.reject(error);
+    waiting = undefined;
+  };
+  const child = spawn(path, [String(process.pid)], {
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  let stderr = "";
+  createInterface({ input: child.stdout }).on("line", push);
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk: string) => {
+    stderr = (stderr + chunk).slice(-2_048);
+  });
+  child.stdin.once("error", () => undefined);
+  child.once("error", end);
+  child.once("exit", (code, signal) =>
+    end(
+      new Error(
+        [
+          `The process monitor stopped (${signal ?? `exit code ${code}`}).`,
+          stderr.trim().split("\n").at(-1),
+        ]
+          .filter(Boolean)
+          .join(" "),
+      ),
+    ),
   );
+  return {
+    child,
+    nextLine: () => {
+      const line = lines.shift();
+      if (line !== undefined) return Promise.resolve(line);
+      if (ended !== undefined) return Promise.reject(ended);
+      waiting = Promise.withResolvers<string>();
+      return waiting.promise;
+    },
+  };
 }

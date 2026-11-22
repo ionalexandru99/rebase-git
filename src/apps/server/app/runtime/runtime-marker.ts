@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { Data, Effect, type Scope } from "effect";
 import { errorMessage, isFileSystemError } from "#server/error-inspection.ts";
 
 interface RuntimeMarker {
@@ -12,94 +11,76 @@ interface RuntimeMarker {
   readonly startedAt: string;
 }
 
-export class RuntimeMarkerError extends Data.TaggedError("RuntimeMarkerError")<{
-  readonly cause: unknown;
-  readonly message: string;
-}> {}
-
-export function acquireRuntimeMarker(
+export async function acquireRuntimeMarker(
   marker: RuntimeMarker,
   runtimePath: string,
-): Effect.Effect<void, RuntimeMarkerError, Scope.Scope> {
-  return Effect.acquireRelease(writeRuntimeMarker(runtimePath, marker), () =>
-    removeRuntimeMarker(runtimePath, marker.pid).pipe(
-      Effect.catchTag("RuntimeMarkerError", reportCleanupFailure),
-    ),
-  ).pipe(Effect.asVoid);
+) {
+  await writeRuntimeMarker(runtimePath, marker);
+  return {
+    close: () =>
+      removeRuntimeMarker(runtimePath, marker.pid).catch((error: unknown) => {
+        process.stderr.write(`${errorMessage(error)}\n`);
+      }),
+  };
 }
 
-function writeRuntimeMarker(runtimePath: string, marker: RuntimeMarker) {
+async function writeRuntimeMarker(runtimePath: string, marker: RuntimeMarker) {
   const temporaryPath = `${runtimePath}.${process.pid}.${randomUUID()}.tmp`;
-
-  return Effect.gen(function* () {
-    yield* fileSystemOperation(() =>
+  try {
+    await fileSystemOperation(() =>
       mkdir(dirname(runtimePath), { recursive: true }),
     );
-    yield* fileSystemOperation(() =>
+    await fileSystemOperation(() =>
       writeFile(temporaryPath, `${JSON.stringify(marker)}\n`, { mode: 0o600 }),
     );
-    yield* replaceFile(temporaryPath, runtimePath);
-  }).pipe(
-    Effect.ensuring(
-      fileSystemOperation(() => rm(temporaryPath, { force: true })).pipe(
-        Effect.orDie,
-      ),
-    ),
-  );
+    await replaceFile(temporaryPath, runtimePath);
+  } finally {
+    await rm(temporaryPath, { force: true });
+  }
 }
 
-function removeRuntimeMarker(runtimePath: string, pid: number) {
-  return Effect.gen(function* () {
-    const contents = yield* fileSystemOperation(() =>
-      readFile(runtimePath, "utf8"),
-    );
-    const marker = yield* Effect.try({
-      try: () => JSON.parse(contents) as { pid?: unknown },
-      catch: runtimeMarkerError,
-    });
-    if (marker.pid === pid) {
-      yield* fileSystemOperation(() => rm(runtimePath));
-    }
-  }).pipe(
-    Effect.catchTag("RuntimeMarkerError", (error) =>
-      isMissingFile(error.cause) ? Effect.void : Effect.fail(error),
-    ),
+async function removeRuntimeMarker(runtimePath: string, pid: number) {
+  let contents: string;
+  try {
+    contents = await readFile(runtimePath, "utf8");
+  } catch (error) {
+    if (isMissingFile(error)) return;
+    throw runtimeMarkerError(error);
+  }
+  const marker = await fileSystemOperation(
+    async () => JSON.parse(contents) as { pid?: unknown },
   );
+  if (marker.pid !== pid) return;
+  try {
+    await rm(runtimePath);
+  } catch (error) {
+    if (!isMissingFile(error)) throw runtimeMarkerError(error);
+  }
 }
 
-function replaceFile(source: string, destination: string) {
-  return fileSystemOperation(() => rename(source, destination)).pipe(
-    Effect.catchTag("RuntimeMarkerError", (error) => {
-      if (!isReplaceConflict(error.cause)) {
-        return Effect.fail(error);
-      }
-
-      return Effect.gen(function* () {
-        yield* fileSystemOperation(() => rm(destination, { force: true }));
-        yield* fileSystemOperation(() => rename(source, destination));
-      });
-    }),
-  );
+async function replaceFile(source: string, destination: string) {
+  try {
+    await rename(source, destination);
+  } catch (error) {
+    if (!isReplaceConflict(error)) throw runtimeMarkerError(error);
+    await fileSystemOperation(() => rm(destination, { force: true }));
+    await fileSystemOperation(() => rename(source, destination));
+  }
 }
 
-function fileSystemOperation<A>(operation: () => Promise<A>) {
-  return Effect.tryPromise({
-    try: operation,
-    catch: runtimeMarkerError,
-  });
+async function fileSystemOperation<A>(operation: () => Promise<A>) {
+  try {
+    return await operation();
+  } catch (error) {
+    throw runtimeMarkerError(error);
+  }
 }
 
 function runtimeMarkerError(cause: unknown) {
-  return new RuntimeMarkerError({
-    cause,
-    message: `Could not update the runtime marker: ${errorMessage(cause)}`,
-  });
-}
-
-function reportCleanupFailure(error: RuntimeMarkerError) {
-  return Effect.sync(() => {
-    process.stderr.write(`${error.message}\n`);
-  });
+  return new Error(
+    `Could not update the runtime marker: ${errorMessage(cause)}`,
+    { cause },
+  );
 }
 
 function isMissingFile(error: unknown) {

@@ -1,8 +1,5 @@
-import { Effect, Schema } from "effect";
-import type {
-  PullRequest,
-  PullRequestsUnavailable,
-} from "#contracts/pull-requests/pull-requests.contract.ts";
+import { z } from "zod";
+import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
   avatarUrl,
@@ -25,16 +22,14 @@ import {
 } from "#server/features/source-control/git-host.ts";
 
 export interface GitHubCli {
-  readonly version: Effect.Effect<string | undefined>;
-  readonly account: Effect.Effect<string | undefined>;
-  readonly protocol: Effect.Effect<string | undefined>;
-  readonly repositories: (
-    page: number,
-  ) => Effect.Effect<string, PullRequestsUnavailable>;
+  readonly version: () => Promise<string | undefined>;
+  readonly account: () => Promise<string | undefined>;
+  readonly protocol: () => Promise<string | undefined>;
+  readonly repositories: (page: number) => Promise<string>;
   readonly graphql: (
     query: string,
     variables: Readonly<Record<string, string>>,
-  ) => Effect.Effect<string, PullRequestsUnavailable>;
+  ) => Promise<string>;
 }
 
 const branchesPerRequest = 50;
@@ -42,28 +37,19 @@ const pullRequestsPerBranch = 10;
 const env = { GH_PROMPT_DISABLED: "1" };
 
 export function createGitHubCli(): GitHubCli {
+  const gh = async (args: readonly string[]) => {
+    const { succeeded, stdout } = await runHostCommand("gh", args, { env });
+    return succeeded ? stdout : undefined;
+  };
   return {
-    version: runHostCommand("gh", ["--version"], { env }).pipe(
-      Effect.map(({ succeeded, stdout }) =>
-        succeeded ? stdout.split("\n")[0]?.trim() || undefined : undefined,
-      ),
-    ),
-    account: runHostCommand("gh", ["api", "user", "--jq", ".login"], {
-      env,
-    }).pipe(
-      Effect.map(({ succeeded, stdout }) =>
-        succeeded ? stdout.trim() || undefined : undefined,
-      ),
-    ),
-    protocol: runHostCommand(
-      "gh",
-      ["config", "get", "git_protocol", "--host", "github.com"],
-      { env },
-    ).pipe(
-      Effect.map(({ succeeded, stdout }) =>
-        succeeded ? stdout.trim() || undefined : undefined,
-      ),
-    ),
+    version: async () =>
+      (await gh(["--version"]))?.split("\n")[0]?.trim() || undefined,
+    account: async () =>
+      (await gh(["api", "user", "--jq", ".login"]))?.trim() || undefined,
+    protocol: async () =>
+      (
+        await gh(["config", "get", "git_protocol", "--host", "github.com"])
+      )?.trim() || undefined,
     repositories: (page) =>
       hostCommandOutput(
         "gh",
@@ -96,99 +82,90 @@ export function createGitHubHost(cli: GitHubCli): GitHost {
     kind: "github",
     tool: signedInTool(cli.version, singleAccount("github.com", cli.account)),
     repositoryId: (remoteUrl) => githubRepository(remoteUrl)?.id,
-    cloneable: Effect.gen(function* () {
-      const account = yield* cli.account;
-      if (account === undefined) return [];
-      const ssh = (yield* cli.protocol) === "ssh";
-      const repositories = yield* readRepositoryPages((page) =>
-        cli.repositories(page).pipe(Effect.flatMap(decodeRepositoryPage)),
-      );
-      return [
-        {
-          kind: "github" as const,
-          host: "github.com",
-          account,
-          repositories: repositories.map((repository) =>
-            cloneableRepository({
-              name: repository.full_name,
-              url: ssh ? repository.ssh_url : repository.clone_url,
-              private: repository.private,
-              description: repository.description,
-              updatedAt: repository.pushed_at,
-            }),
-          ),
-        },
-      ];
-    }).pipe(Effect.orElseSucceed(() => [])),
-    repository: (remoteUrl) => {
+    cloneable: async () => {
+      try {
+        const account = await cli.account();
+        if (account === undefined) return [];
+        const ssh = (await cli.protocol()) === "ssh";
+        const repositories = await readRepositoryPages(async (page) =>
+          decodeRepositoryPage(await cli.repositories(page)),
+        );
+        return [
+          {
+            kind: "github" as const,
+            host: "github.com",
+            account,
+            repositories: repositories.map((repository) =>
+              cloneableRepository({
+                name: repository.full_name,
+                url: ssh ? repository.ssh_url : repository.clone_url,
+                private: repository.private,
+                description: repository.description,
+                updatedAt: repository.pushed_at,
+              }),
+            ),
+          },
+        ];
+      } catch {
+        return [];
+      }
+    },
+    repository: async (remoteUrl) => {
       const repository = githubRepository(remoteUrl);
-      return Effect.succeed(
+      return (
         repository && {
           id: repository.id,
           pullRequests: (heads) =>
-            inBatches(heads, branchesPerRequest, (batch) =>
-              cli
-                .graphql(pullRequestsQuery(batch.length), {
+            inBatches(heads, branchesPerRequest, async (batch) => {
+              const answers = decodeResponse(
+                await cli.graphql(pullRequestsQuery(batch.length), {
                   owner: repository.owner,
                   name: repository.name,
                   ...Object.fromEntries(
                     batch.map((head, index) => [`b${index}`, head]),
                   ),
-                })
-                .pipe(
-                  Effect.flatMap(decodeResponse),
-                  Effect.flatMap(({ data: { repository: answers } }) =>
-                    answers === null
-                      ? Effect.fail(unavailable)
-                      : Effect.succeed(
-                          batch.map((_, index) =>
-                            headAnswer(
-                              answers[`b${index}`]?.nodes,
-                              repository.owner,
-                            ),
-                          ),
-                        ),
-                  ),
-                ),
-            ),
-          pullRequest: (number) =>
-            cli
-              .graphql(pullRequestQuery(number), {
-                owner: repository.owner,
-                name: repository.name,
-              })
-              .pipe(
-                Effect.flatMap(decodePullRequestResponse),
-                Effect.map(({ data: { repository: answer } }) =>
-                  answer === null || answer.pullRequest === null
-                    ? undefined
-                    : githubPullRequest(answer.pullRequest),
-                ),
-                Effect.orElseSucceed(() => undefined),
-              ),
-          avatar: (author) =>
-            cli
-              .graphql(avatarQuery, {
+                }),
+              ).data.repository;
+              if (answers === null) throw unavailable;
+              return batch.map((_, index) =>
+                headAnswer(answers[`b${index}`]?.nodes, repository.owner),
+              );
+            }),
+          pullRequest: async (number) => {
+            try {
+              const answer = decodePullRequestResponse(
+                await cli.graphql(pullRequestQuery(number), {
+                  owner: repository.owner,
+                  name: repository.name,
+                }),
+              ).data.repository;
+              return answer === null || answer.pullRequest === null
+                ? undefined
+                : githubPullRequest(answer.pullRequest);
+            } catch {
+              return undefined;
+            }
+          },
+          avatar: async (author) => {
+            const { data } = decodeAvatarResponse(
+              await cli.graphql(avatarQuery, {
                 owner: repository.owner,
                 name: repository.name,
                 oid: author.commit,
-              })
-              .pipe(
-                Effect.flatMap(decodeAvatarResponse),
-                Effect.map(({ data }) => {
-                  const found = data.repository?.object?.author;
-                  const url =
-                    found !== undefined &&
-                    found !== null &&
-                    sameEmail(found.email, author)
-                      ? avatarUrl(found.user?.avatarUrl, [
-                          "avatars.githubusercontent.com",
-                        ])
-                      : undefined;
-                  return foundAvatar(url);
-                }),
-              ),
-        },
+              }),
+            );
+            const found = data.repository?.object?.author;
+            const url =
+              found !== undefined &&
+              found !== null &&
+              sameEmail(found.email, author)
+                ? avatarUrl(found.user?.avatarUrl, [
+                    "avatars.githubusercontent.com",
+                  ])
+                : undefined;
+            return foundAvatar(url);
+          },
+        }
       );
     },
   };
@@ -201,39 +178,36 @@ const avatarQuery = `query($owner: String!, $name: String!, $oid: GitObjectID!) 
 }`;
 
 const decodeAvatarResponse = decodeHostJson(
-  Schema.Struct({
-    data: Schema.Struct({
-      repository: Schema.NullOr(
-        Schema.Struct({
-          object: Schema.NullOr(
-            Schema.Struct({
-              author: Schema.optionalKey(
-                Schema.NullOr(
-                  Schema.Struct({
-                    email: Schema.NullOr(Schema.String),
-                    user: Schema.NullOr(
-                      Schema.Struct({ avatarUrl: Schema.String }),
-                    ),
-                  }),
-                ),
-              ),
-            }),
-          ),
-        }),
-      ),
+  z.object({
+    data: z.object({
+      repository: z
+        .object({
+          object: z
+            .object({
+              author: z
+                .object({
+                  email: z.string().nullable(),
+                  user: z.object({ avatarUrl: z.string() }).nullable(),
+                })
+                .nullable()
+                .optional(),
+            })
+            .nullable(),
+        })
+        .nullable(),
     }),
   }),
 );
 
 const decodeRepositoryPage = decodeHostJson(
-  Schema.Array(
-    Schema.Struct({
-      full_name: Schema.String,
-      private: Schema.Boolean,
-      description: Schema.NullOr(Schema.String),
-      pushed_at: Schema.NullOr(Schema.String),
-      clone_url: Schema.String,
-      ssh_url: Schema.String,
+  z.array(
+    z.object({
+      full_name: z.string(),
+      private: z.boolean(),
+      description: z.string().nullable(),
+      pushed_at: z.string().nullable(),
+      clone_url: z.string(),
+      ssh_url: z.string(),
     }),
   ),
 );
@@ -283,50 +257,42 @@ const pullRequestFragment = `fragment pullRequest on PullRequest {
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
 }`;
 
-const PullRequestNode = Schema.Struct({
-  number: Schema.Int,
-  url: Schema.String,
-  title: Schema.String,
-  state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
-  isDraft: Schema.Boolean,
-  headRefOid: Schema.optionalKey(Schema.String),
-  headRepositoryOwner: Schema.NullOr(Schema.Struct({ login: Schema.String })),
-  commits: Schema.Struct({
-    nodes: Schema.Array(
-      Schema.Struct({
-        commit: Schema.Struct({
-          statusCheckRollup: Schema.NullOr(
-            Schema.Struct({ state: Schema.String }),
-          ),
+const PullRequestNode = z.object({
+  number: z.number().int(),
+  url: z.string(),
+  title: z.string(),
+  state: z.enum(["OPEN", "CLOSED", "MERGED"]),
+  isDraft: z.boolean(),
+  headRefOid: z.string().optional(),
+  headRepositoryOwner: z.object({ login: z.string() }).nullable(),
+  commits: z.object({
+    nodes: z.array(
+      z.object({
+        commit: z.object({
+          statusCheckRollup: z.object({ state: z.string() }).nullable(),
         }),
       }),
     ),
   }),
 });
-type PullRequestNode = typeof PullRequestNode.Type;
+type PullRequestNode = z.infer<typeof PullRequestNode>;
 
-const decodeResponse = (output: string) =>
-  Schema.decodeUnknownEffect(
-    Schema.fromJsonString(
-      Schema.Struct({
-        data: Schema.Struct({
-          repository: Schema.NullOr(
-            Schema.Record(
-              Schema.String,
-              Schema.Struct({ nodes: Schema.Array(PullRequestNode) }),
-            ),
-          ),
-        }),
-      }),
-    ),
-  )(output).pipe(Effect.mapError(() => unavailable));
+const decodeResponse = decodeHostJson(
+  z.object({
+    data: z.object({
+      repository: z
+        .record(z.string(), z.object({ nodes: z.array(PullRequestNode) }))
+        .nullable(),
+    }),
+  }),
+);
 
 const decodePullRequestResponse = decodeHostJson(
-  Schema.Struct({
-    data: Schema.Struct({
-      repository: Schema.NullOr(
-        Schema.Struct({ pullRequest: Schema.NullOr(PullRequestNode) }),
-      ),
+  z.object({
+    data: z.object({
+      repository: z
+        .object({ pullRequest: PullRequestNode.nullable() })
+        .nullable(),
     }),
   }),
 );

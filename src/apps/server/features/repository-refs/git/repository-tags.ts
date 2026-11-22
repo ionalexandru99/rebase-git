@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import {
   type RepositoryRejected,
   repositoryRejected,
@@ -18,11 +17,13 @@ import type {
 import {
   type GitCommandRunner,
   type GitFailed,
+  isGitFailed,
   isGitRejection,
   runRepositoryGit,
   signingRejection,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
+  isGitRejected,
   readRefTarget,
   refCommand,
   requireValidRefName,
@@ -30,41 +31,34 @@ import {
 
 const pushCommand = { literalPathspecs: false, timeoutMilliseconds: 120_000 };
 
-export function createTag(
+export async function createTag(
   git: GitCommandRunner,
   { name, target, message, worktreePath }: CreateRepositoryTag,
-): Effect.Effect<RepositoryTag, TagRejected | RepositoryRejected | GitFailed> {
-  return Effect.gen(function* () {
-    yield* requireValidTagName(git, worktreePath, name);
-    if (message === undefined) {
-      yield* requireUnsignedTagsAllowed(git, worktreePath);
-      yield* runRepositoryGit(
-        git,
-        worktreePath,
-        ["tag", "--no-sign", name, target],
-        refCommand,
-      ).pipe(Effect.mapError(tagWriteFailed));
-      return { name, target };
-    }
-    yield* runRepositoryGit(
-      git,
-      worktreePath,
-      ["tag", "--annotate", "--file=-", name, target],
-      { ...refCommand, input: message },
-    ).pipe(Effect.mapError(tagWriteFailed));
-    const object = yield* readRefTarget(git, worktreePath, tagRef(name));
-    return object === undefined ? { name, target } : { name, target, object };
-  });
+): Promise<RepositoryTag> {
+  await requireValidTagName(git, worktreePath, name);
+  if (message === undefined) {
+    await requireUnsignedTagsAllowed(git, worktreePath);
+    await writeTag(git, worktreePath, ["tag", "--no-sign", name, target]);
+    return { name, target };
+  }
+  await writeTag(
+    git,
+    worktreePath,
+    ["tag", "--annotate", "--file=-", name, target],
+    message,
+  );
+  const object = await readRefTarget(git, worktreePath, tagRef(name));
+  return object === undefined ? { name, target } : { name, target, object };
 }
 
-export function deleteTag(
+export async function deleteTag(
   git: GitCommandRunner,
   { name, local, remote, worktreePath }: DeleteRepositoryTag,
-): Effect.Effect<RepositoryTagDeleted, RefMissing | TagRejected | GitFailed> {
-  return Effect.gen(function* () {
-    if (local !== undefined) yield* requireTagObject(git, worktreePath, name);
-    if (remote !== undefined)
-      yield* runRepositoryGit(
+): Promise<RepositoryTagDeleted> {
+  if (local !== undefined) await requireTagObject(git, worktreePath, name);
+  if (remote !== undefined)
+    try {
+      await runRepositoryGit(
         git,
         worktreePath,
         [
@@ -75,29 +69,30 @@ export function deleteTag(
           tagRef(name),
         ],
         pushCommand,
-      ).pipe(
-        Effect.catchIf(
-          (error) => isGitRejection(error) && /stale info/.test(error.detail),
-          () => Effect.fail(tagRejected("RemoteDiffers")),
-        ),
       );
-    if (local !== undefined)
-      yield* runRepositoryGit(
+    } catch (error) {
+      throw isGitRejected(error) && /stale info/.test(error.detail)
+        ? tagRejected("RemoteDiffers")
+        : error;
+    }
+  if (local !== undefined)
+    try {
+      await runRepositoryGit(
         git,
         worktreePath,
         ["update-ref", "-d", tagRef(name), local.object],
         refCommand,
-      ).pipe(
-        Effect.catchIf(isGitRejection, () => Effect.fail(tagRejected("Moved"))),
       );
-    return { name };
-  });
+    } catch (error) {
+      throw isGitRejected(error) ? tagRejected("Moved") : error;
+    }
+  return { name };
 }
 
-export function readTagAnnotation(
+export async function readTagAnnotation(
   git: GitCommandRunner,
   { name, worktreePath }: ReadRepositoryTag,
-): Effect.Effect<RepositoryTagAnnotation, RefMissing | GitFailed> {
+): Promise<RepositoryTagAnnotation> {
   const fields = [
     "%(refname)",
     "%(objecttype)",
@@ -108,7 +103,7 @@ export function readTagAnnotation(
     "%(contents:signature)",
     "%(contents)",
   ];
-  return runRepositoryGit(
+  const output = await runRepositoryGit(
     git,
     worktreePath,
     [
@@ -119,73 +114,85 @@ export function readTagAnnotation(
       tagRef(name),
     ],
     refCommand,
-  ).pipe(
-    Effect.flatMap((output) => {
-      const record = output.replace(/\n$/, "").split("\0");
-      const [refname, type, object, target, tagger = "", date = ""] = record;
-      const signature = record[6] ?? "";
-      const contents = record.slice(7).join("\0");
-      if (
-        refname !== tagRef(name) ||
-        type !== "tag" ||
-        object === undefined ||
-        target === undefined
-      )
-        return Effect.fail<RefMissing>({ _tag: "RefMissing", name });
-      return Effect.succeed({
-        name,
-        object,
-        target,
-        tagger: { name: tagger.slice(0, 512), date: date.slice(0, 64) },
-        message: (contents.endsWith(signature) && signature.length > 0
-          ? contents.slice(0, -signature.length)
-          : contents
-        )
-          .trimEnd()
-          .slice(0, 65_536),
-        signed: signature.length > 0,
-      });
-    }),
   );
+  const record = output.replace(/\n$/, "").split("\0");
+  const [refname, type, object, target, tagger = "", date = ""] = record;
+  const signature = record[6] ?? "";
+  const contents = record.slice(7).join("\0");
+  if (
+    refname !== tagRef(name) ||
+    type !== "tag" ||
+    object === undefined ||
+    target === undefined
+  )
+    throw refMissing(name);
+  return {
+    name,
+    object,
+    target,
+    tagger: { name: tagger.slice(0, 512), date: date.slice(0, 64) },
+    message: (contents.endsWith(signature) && signature.length > 0
+      ? contents.slice(0, -signature.length)
+      : contents
+    )
+      .trimEnd()
+      .slice(0, 65_536),
+    signed: signature.length > 0,
+  };
 }
 
-function requireValidTagName(
+async function requireValidTagName(
   git: GitCommandRunner,
   directory: string,
   name: string,
 ) {
   const invalid = tagRejected("InvalidName");
-  if (name.startsWith("-")) return Effect.fail(invalid);
-  return requireValidRefName(git, directory, tagRef(name), invalid);
+  if (name.startsWith("-")) throw invalid;
+  await requireValidRefName(git, directory, tagRef(name), invalid);
 }
 
-function requireUnsignedTagsAllowed(git: GitCommandRunner, directory: string) {
-  return runRepositoryGit(
+async function requireUnsignedTagsAllowed(
+  git: GitCommandRunner,
+  directory: string,
+) {
+  const value = await runRepositoryGit(
     git,
     directory,
     ["config", "--type=bool", "--get", "tag.gpgSign"],
     { ...refCommand, exitCodes: [0, 1] },
-  ).pipe(
-    Effect.flatMap((value) =>
-      value.trim() === "true"
-        ? Effect.fail(tagRejected("MessageRequired"))
-        : Effect.void,
-    ),
   );
+  if (value.trim() === "true") throw tagRejected("MessageRequired");
 }
 
-function requireTagObject(
+async function requireTagObject(
   git: GitCommandRunner,
   directory: string,
   name: string,
 ) {
-  return readRefTarget(git, directory, tagRef(name)).pipe(
-    Effect.flatMap((object) =>
-      object === undefined
-        ? Effect.fail<RefMissing>({ _tag: "RefMissing", name })
-        : Effect.void,
-    ),
-  );
+  if ((await readRefTarget(git, directory, tagRef(name))) === undefined)
+    throw refMissing(name);
+}
+
+async function writeTag(
+  git: GitCommandRunner,
+  directory: string,
+  args: readonly string[],
+  message?: string,
+) {
+  try {
+    await runRepositoryGit(
+      git,
+      directory,
+      args,
+      message === undefined ? refCommand : { ...refCommand, input: message },
+    );
+  } catch (error) {
+    throw isGitFailed(error) ? tagWriteFailed(error) : error;
+  }
+}
+
+function refMissing(name: string): RefMissing {
+  return { _tag: "RefMissing", name };
 }
 
 function tagRef(name: string) {

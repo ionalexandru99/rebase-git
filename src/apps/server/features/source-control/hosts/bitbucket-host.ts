@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { z } from "zod";
 import type { RouteInput } from "#contracts/environment-connection/environment-route.contract.ts";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import {
@@ -11,11 +11,11 @@ import { remoteLocation } from "#server/features/repository-refs/git/read-reposi
 import {
   type AvatarAuthor,
   avatarUrl,
+  decodeHostJson,
   eachHead,
   foundAvatar,
   type GitHost,
   type HostedPullRequest,
-  type PullRequestsByHead,
   pullRequest,
   unavailable,
 } from "#server/features/source-control/git-host.ts";
@@ -30,7 +30,6 @@ import {
 } from "#server/features/source-control/hosts/bitbucket-repositories.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
 import { bitbucketTokenTable } from "#server/persistence/environment-state.schema.ts";
-import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
 
 export type Bitbucket = ReturnType<typeof createBitbucket>;
 
@@ -60,197 +59,172 @@ export function createBitbucket(
   context: EnvironmentContext,
   client: BitbucketClient,
 ) {
-  const saved = context
-    .read("Could not read the Bitbucket token", (database) =>
-      database.select().from(bitbucketTokenTable).get(),
-    )
-    .pipe(
-      Effect.map((row): SavedToken | undefined =>
-        row === undefined
-          ? undefined
-          : row.email === null
-            ? { _tag: "AccessToken", authorization: bearer(row.token) }
-            : {
-                _tag: "ApiToken",
-                authorization: basic(row.email, row.token),
-                email: row.email,
-                account: row.account ?? row.email,
-              },
-      ),
+  const saved = async (): Promise<SavedToken | undefined> => {
+    const row = await context.read(
+      "Could not read the Bitbucket token",
+      (database) => database.select().from(bitbucketTokenTable).get(),
     );
+    return row === undefined
+      ? undefined
+      : row.email === null
+        ? { _tag: "AccessToken", authorization: bearer(row.token) }
+        : {
+            _tag: "ApiToken",
+            authorization: basic(row.email, row.token),
+            email: row.email,
+            account: row.account ?? row.email,
+          };
+  };
+  const savedOrUnavailable = () =>
+    saved().catch(() => {
+      throw unavailable;
+    });
 
   const host: GitHost = {
     kind: "bitbucket",
-    tool: saved.pipe(
-      Effect.flatMap((current) =>
-        current === undefined
-          ? Effect.succeed(null)
-          : savedToken(client, current),
-      ),
-      Effect.map((token) => ({ _tag: "Token" as const, saved: token })),
-      Effect.orDie,
-    ),
+    tool: async () => {
+      const current = await saved();
+      return {
+        _tag: "Token",
+        saved: current === undefined ? null : await savedToken(client, current),
+      };
+    },
     repositoryId: (remoteUrl) => bitbucketRepository(remoteUrl)?.id,
-    cloneable: Effect.gen(function* () {
-      const current = yield* saved;
-      if (current?._tag !== "ApiToken") return [];
-      const repositories = yield* listCloneable(client, current.authorization);
-      return [
-        {
-          kind: "bitbucket" as const,
-          host: "bitbucket.org",
-          account: current.account,
-          repositories,
-        },
-      ];
-    }).pipe(Effect.orElseSucceed(() => [])),
-    repository: (remoteUrl) => {
+    cloneable: async () => {
+      try {
+        const current = await saved();
+        if (current?._tag !== "ApiToken") return [];
+        const repositories = await listCloneable(client, current.authorization);
+        return [
+          {
+            kind: "bitbucket" as const,
+            host: "bitbucket.org",
+            account: current.account,
+            repositories,
+          },
+        ];
+      } catch {
+        return [];
+      }
+    },
+    repository: async (remoteUrl) => {
       const repository = bitbucketRepository(remoteUrl);
-      return Effect.succeed(
+      return (
         repository && {
           id: repository.id,
-          pullRequests: (heads) =>
-            saved.pipe(
-              Effect.mapError(() => unavailable),
-              Effect.flatMap((current) =>
-                current === undefined
-                  ? Effect.succeed<PullRequestsByHead>(new Map())
-                  : listPullRequests(
-                      client,
-                      current.authorization,
-                      repository,
-                      heads,
-                    ),
-              ),
-            ),
-          pullRequest: (number) =>
-            saved.pipe(
-              Effect.flatMap((current) =>
-                current === undefined
-                  ? Effect.succeed(undefined)
-                  : readPullRequest(
-                      client,
-                      current.authorization,
-                      repository,
-                      number,
-                    ),
-              ),
-              Effect.orElseSucceed(() => undefined),
-            ),
-          avatar: (author) =>
-            saved.pipe(
-              Effect.mapError(() => unavailable),
-              Effect.flatMap((current) =>
-                current === undefined
-                  ? Effect.succeed({ answered: false } as const)
-                  : readAvatar(
-                      client,
-                      current.authorization,
-                      repository,
-                      author,
-                    ),
-              ),
-            ),
-        },
+          pullRequests: async (heads) => {
+            const current = await savedOrUnavailable();
+            return current === undefined
+              ? new Map()
+              : listPullRequests(
+                  client,
+                  current.authorization,
+                  repository,
+                  heads,
+                );
+          },
+          pullRequest: async (number) => {
+            try {
+              const current = await saved();
+              return current === undefined
+                ? undefined
+                : await readPullRequest(
+                    client,
+                    current.authorization,
+                    repository,
+                    number,
+                  );
+            } catch {
+              return undefined;
+            }
+          },
+          avatar: async (author) => {
+            const current = await savedOrUnavailable();
+            return current === undefined
+              ? { answered: false }
+              : readAvatar(client, current.authorization, repository, author);
+          },
+        }
       );
     },
   };
 
   return {
     host,
-    save: (request: SaveBitbucketToken) =>
-      verify(client, request).pipe(
-        Effect.flatMap((account) =>
-          context
-            .write("Could not save the Bitbucket token", (database) => {
-              const row = {
-                singleton: 1,
-                token: request.token,
-                email: request._tag === "ApiToken" ? request.email : null,
-                account,
-              };
-              return database
-                .insert(bitbucketTokenTable)
-                .values(row)
-                .onConflictDoUpdate({
-                  target: bitbucketTokenTable.singleton,
-                  set: row,
-                });
-            })
-            .pipe(
-              Effect.mapError(
-                () =>
-                  new EnvironmentStorageError({
-                    cause: undefined,
-                    message: "Could not save the Bitbucket token",
-                  }),
-              ),
-            ),
-        ),
-        Effect.asVoid,
-      ),
-    remove: context
-      .write("Could not remove the Bitbucket token", (database) =>
+    save: async (request: SaveBitbucketToken) => {
+      const account = await verify(client, request);
+      await context.write("Could not save the Bitbucket token", (database) => {
+        const row = {
+          singleton: 1,
+          token: request.token,
+          email: request._tag === "ApiToken" ? request.email : null,
+          account,
+        };
+        return database
+          .insert(bitbucketTokenTable)
+          .values(row)
+          .onConflictDoUpdate({
+            target: bitbucketTokenTable.singleton,
+            set: row,
+          });
+      });
+    },
+    remove: async () => {
+      await context.write("Could not remove the Bitbucket token", (database) =>
         database.delete(bitbucketTokenTable),
-      )
-      .pipe(Effect.asVoid),
+      );
+    },
   };
 }
 
-function savedToken(
+async function savedToken(
   client: BitbucketClient,
   current: SavedToken,
-): Effect.Effect<BitbucketToken> {
-  if (current._tag === "AccessToken")
-    return Effect.succeed({ _tag: "AccessToken" });
-  return client.get(`${bitbucketApi}/user`, current.authorization).pipe(
-    Effect.timeout("5 seconds"),
-    Effect.map(({ scopes = [] }) =>
+): Promise<BitbucketToken> {
+  if (current._tag === "AccessToken") return { _tag: "AccessToken" };
+  const missingScopes = await client
+    .get(`${bitbucketApi}/user`, current.authorization, 5_000)
+    .then(({ scopes = [] }) =>
       scopes.some((scope) => scope.endsWith(":bitbucket"))
         ? bitbucketApiTokenScopes.filter((scope) => !scopes.includes(scope))
         : [],
-    ),
-    Effect.orElseSucceed(() => []),
-    Effect.map((missingScopes) => ({
-      _tag: "ApiToken",
-      email: current.email,
-      account: current.account,
-      missingScopes,
-    })),
-  );
+    )
+    .catch(() => []);
+  return {
+    _tag: "ApiToken",
+    email: current.email,
+    account: current.account,
+    missingScopes,
+  };
 }
 
-function verify(
+async function verify(
   client: BitbucketClient,
   request: SaveBitbucketToken,
-): Effect.Effect<string | null, BitbucketTokenRejected> {
-  if (request._tag === "AccessToken") return Effect.succeed(null);
-  const rejected = (reason: BitbucketTokenRejected["reason"]) =>
-    Effect.fail<BitbucketTokenRejected>({
-      _tag: "BitbucketTokenRejected",
-      reason,
-    });
+): Promise<string | null> {
+  if (request._tag === "AccessToken") return null;
+  const rejected = (
+    reason: BitbucketTokenRejected["reason"],
+  ): BitbucketTokenRejected => ({ _tag: "BitbucketTokenRejected", reason });
   const authorization = basic(request.email, request.token);
-  const check = (url: string) =>
-    client.get(url, authorization).pipe(
-      Effect.catch(() => rejected("Unreachable")),
-      Effect.flatMap(({ status, body }) => {
-        if (status === 401) return rejected("Invalid");
-        if (status === 403) return rejected("MissingScope");
-        if (status !== 200) return rejected("Unreachable");
-        return Effect.succeed(body);
-      }),
-    );
-  return check(`${bitbucketApi}/user`).pipe(
-    Effect.flatMap((body) =>
-      decodeUser(body).pipe(Effect.catch(() => rejected("Unreachable"))),
-    ),
-    Effect.tap(() => check(workspacesUrl(1))),
-    Effect.map(
-      (user) =>
-        user.username ?? user.nickname ?? user.display_name ?? request.email,
-    ),
-  );
+  const check = async (url: string) => {
+    const { status, body } = await client.get(url, authorization).catch(() => {
+      throw rejected("Unreachable");
+    });
+    if (status === 401) throw rejected("Invalid");
+    if (status === 403) throw rejected("MissingScope");
+    if (status !== 200) throw rejected("Unreachable");
+    return body;
+  };
+  const body = await check(`${bitbucketApi}/user`);
+  let user: z.infer<typeof User>;
+  try {
+    user = decodeHostJson(User)(body);
+  } catch {
+    throw rejected("Unreachable");
+  }
+  await check(workspacesUrl(1));
+  return user.username ?? user.nickname ?? user.display_name ?? request.email;
 }
 
 function bearer(token: string) {
@@ -267,98 +241,85 @@ function listPullRequests(
   repository: BitbucketRepository,
   heads: readonly string[],
 ) {
-  return eachHead(heads, branchesAtOnce, (head) =>
-    readJson(
+  return eachHead(heads, branchesAtOnce, async (head) => {
+    const { values } = await readJson(
       client,
       authorization,
       pullRequestsUrl(repository, head),
-      decodePullRequests,
-    ).pipe(
-      Effect.flatMap(({ values }) =>
-        Effect.forEach(
-          values.filter(
-            (node) =>
-              node.source.repository?.full_name.toLowerCase() === repository.id,
-          ),
-          (node) => withChecks(client, authorization, repository, node),
-          { concurrency: "unbounded" },
-        ),
-      ),
-    ),
-  );
+      PullRequests,
+    );
+    return Promise.all(
+      values
+        .filter(
+          (node) =>
+            node.source.repository?.full_name.toLowerCase() === repository.id,
+        )
+        .map((node) => withChecks(client, authorization, repository, node)),
+    );
+  });
 }
 
-function readPullRequest(
+async function readPullRequest(
   client: BitbucketClient,
   authorization: string,
   repository: BitbucketRepository,
   number: number,
 ) {
-  return readJson(
+  const node = await readJson(
     client,
     authorization,
     pullRequestUrl(repository, number),
-    decodePullRequest,
-  ).pipe(
-    Effect.flatMap((node) =>
-      withChecks(client, authorization, repository, node),
-    ),
+    PullRequestNode,
   );
+  return withChecks(client, authorization, repository, node);
 }
 
-function readAvatar(
+async function readAvatar(
   client: BitbucketClient,
   authorization: string,
   repository: BitbucketRepository,
   author: AvatarAuthor,
 ) {
-  return readJson(
+  const { author: found } = await readJson(
     client,
     authorization,
     `${bitbucketApi}/repositories/${repositoryPath(repository)}/commit/${encodeURIComponent(author.commit)}?${new URLSearchParams(
       { fields: "author.raw,author.user.links.avatar.href" },
     )}`,
-    decodeCommitAuthor,
-  ).pipe(
-    Effect.map(({ author: found }) => {
-      const url = found.raw
-        ?.toLowerCase()
-        .endsWith(`<${author.email.toLowerCase()}>`)
-        ? avatarUrl(found.user?.links.avatar.href, [
-            "avatar-management--avatars.us-west-2.prod.public.atl-paas.net",
-          ])
-        : undefined;
-      return foundAvatar(
-        URL.parse(url ?? "")?.pathname.startsWith("/initials/")
-          ? undefined
-          : url,
-      );
-    }),
+    CommitAuthor,
+  );
+  const url = found.raw
+    ?.toLowerCase()
+    .endsWith(`<${author.email.toLowerCase()}>`)
+    ? avatarUrl(found.user?.links.avatar.href, [
+        "avatar-management--avatars.us-west-2.prod.public.atl-paas.net",
+      ])
+    : undefined;
+  return foundAvatar(
+    URL.parse(url ?? "")?.pathname.startsWith("/initials/") ? undefined : url,
   );
 }
 
-function withChecks(
+async function withChecks(
   client: BitbucketClient,
   authorization: string,
   repository: BitbucketRepository,
   node: PullRequestNode,
 ) {
   const hash = node.source.commit?.hash;
-  return (
+  const checks =
     node.state === "OPEN" && hash !== undefined
-      ? readJson(
+      ? await readJson(
           client,
           authorization,
           statusesUrl(repository, hash),
-          decodeStatuses,
-        ).pipe(
-          Effect.map(({ values }) => checksState(values)),
-          Effect.orElseSucceed(() => undefined),
+          Statuses,
+        ).then(
+          ({ values }) => checksState(values),
+          () => undefined,
         )
-      : Effect.succeed(undefined)
-  ).pipe(
-    Effect.map((checks) => bitbucketPullRequest(repository, node, checks)),
-  );
+      : undefined;
+  return bitbucketPullRequest(repository, node, checks);
 }
 
 function bitbucketRepository(
@@ -421,68 +382,41 @@ function statusesUrl(repository: BitbucketRepository, hash: string) {
   )}`;
 }
 
-const decodeUser = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(
-    Schema.Struct({
-      username: Schema.optionalKey(Schema.String),
-      nickname: Schema.optionalKey(Schema.String),
-      display_name: Schema.optionalKey(Schema.String),
-    }),
-  ),
-);
+const User = z.object({
+  username: z.string().optional(),
+  nickname: z.string().optional(),
+  display_name: z.string().optional(),
+});
 
-const PullRequestNode = Schema.Struct({
-  id: Schema.Int,
-  title: Schema.String,
-  state: Schema.String,
-  draft: Schema.optionalKey(Schema.Boolean),
-  source: Schema.Struct({
-    repository: Schema.optionalKey(
-      Schema.NullOr(Schema.Struct({ full_name: Schema.String })),
-    ),
-    commit: Schema.optionalKey(
-      Schema.NullOr(Schema.Struct({ hash: Schema.String })),
-    ),
+const PullRequestNode = z.object({
+  id: z.number().int(),
+  title: z.string(),
+  state: z.string(),
+  draft: z.boolean().optional(),
+  source: z.object({
+    repository: z.object({ full_name: z.string() }).nullable().optional(),
+    commit: z.object({ hash: z.string() }).nullable().optional(),
   }),
 });
-type PullRequestNode = typeof PullRequestNode.Type;
+type PullRequestNode = z.infer<typeof PullRequestNode>;
 
-const decodePullRequests = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(
-    Schema.Struct({ values: Schema.Array(PullRequestNode) }),
-  ),
-);
+const PullRequests = z.object({ values: z.array(PullRequestNode) });
 
-const decodePullRequest = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(PullRequestNode),
-);
+const CommitAuthor = z.object({
+  author: z.object({
+    raw: z.string().optional(),
+    user: z
+      .object({
+        links: z.object({ avatar: z.object({ href: z.string() }) }),
+      })
+      .nullable()
+      .optional(),
+  }),
+});
 
-const decodeCommitAuthor = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(
-    Schema.Struct({
-      author: Schema.Struct({
-        raw: Schema.optionalKey(Schema.String),
-        user: Schema.optionalKey(
-          Schema.NullOr(
-            Schema.Struct({
-              links: Schema.Struct({
-                avatar: Schema.Struct({ href: Schema.String }),
-              }),
-            }),
-          ),
-        ),
-      }),
-    }),
-  ),
-);
-
-const decodeStatuses = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(
-    Schema.Struct({
-      values: Schema.Array(Schema.Struct({ state: Schema.String })),
-    }),
-  ),
-);
+const Statuses = z.object({
+  values: z.array(z.object({ state: z.string() })),
+});
 
 function bitbucketPullRequest(
   repository: BitbucketRepository,

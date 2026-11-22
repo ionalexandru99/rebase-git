@@ -2,7 +2,6 @@ import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { ORPCError, os } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/ws";
-import { Cause, Effect, Exit, Option, Queue, Stream } from "effect";
 import { type WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
 import type {
@@ -21,19 +20,23 @@ import {
   unauthorizedCloseCode,
 } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
-import type { RunEnvironmentEffect } from "#server/adapters/environment-transport/environment-http-handler.ts";
 import {
   expectedRequestOrigin,
   readSocketCredential,
   validateRequestHost,
   validateRequestOrigin,
 } from "#server/adapters/environment-transport/environment-request-authorization.ts";
-import type {
-  EnvironmentFeature,
-  RouteContext,
-  RouteHandler,
+import {
+  type ConnectionContext,
+  type EnvironmentFeature,
+  inRequest,
+  type RequestScope,
+  type RouteHandler,
 } from "#server/adapters/environment-transport/environment-routes.ts";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
+import {
+  type EnvironmentAuthorization,
+  isEnvironmentAuthorizationError,
+} from "#server/features/environment-authorization/environment-authorization.ts";
 
 export interface EnvironmentRouterOptions {
   readonly environmentId: string;
@@ -46,12 +49,12 @@ export type EnvironmentRouter = ReturnType<typeof environmentRouter>;
 
 const streamWindow = 4;
 const heartbeatMilliseconds = 30_000;
+const maximumPendingChanges = 128;
 
 export function attachEnvironmentSocket(
   server: Server,
   router: EnvironmentRouter,
   authorization: EnvironmentAuthorization,
-  runEnvironmentEffect: RunEnvironmentEffect,
   report: ReportDefect,
 ) {
   const handler = new RPCHandler(router);
@@ -74,21 +77,17 @@ export function attachEnvironmentSocket(
       socket.end("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
       return;
     }
-    runEnvironmentEffect(
-      authorizeUpgrade(request, authorization).pipe(
-        Effect.matchCause({
-          onFailure: () => rejectUpgrade(socket),
-          onSuccess: (authorized) =>
-            webSocketServer.handleUpgrade(request, socket, head, (webSocket) =>
-              authorized._tag === "Unauthorized"
-                ? webSocket.close(unauthorizedCloseCode, authorized.reason)
-                : serveConnection(webSocket, handler, authorization, report, {
-                    device: authorized.device,
-                    origin: expectedRequestOrigin(request),
-                  }),
-            ),
-        }),
-      ),
+    authorizeUpgrade(request, authorization).then(
+      (authorized) =>
+        webSocketServer.handleUpgrade(request, socket, head, (webSocket) =>
+          authorized._tag === "Unauthorized"
+            ? webSocket.close(unauthorizedCloseCode, authorized.reason)
+            : serveConnection(webSocket, handler, authorization, report, {
+                device: authorized.device,
+                origin: expectedRequestOrigin(request),
+              }),
+        ),
+      () => rejectUpgrade(socket),
     );
   };
 
@@ -100,10 +99,10 @@ export function attachEnvironmentSocket(
 
 function serveConnection(
   webSocket: WebSocket,
-  handler: RPCHandler<RouteContext>,
+  handler: RPCHandler<ConnectionContext>,
   authorization: EnvironmentAuthorization,
   report: ReportDefect,
-  context: RouteContext,
+  context: ConnectionContext,
 ) {
   const release = authorization.watchRevocation(context.device.id, () =>
     webSocket.close(unauthorizedCloseCode, "RevokedGrant"),
@@ -116,30 +115,26 @@ function serveConnection(
   void handler.upgrade(webSocket, { context });
 }
 
-function authorizeUpgrade(
+async function authorizeUpgrade(
   request: IncomingMessage,
   authorization: EnvironmentAuthorization,
 ) {
-  return Effect.gen(function* () {
-    yield* validateRequestHost(request);
+  try {
+    validateRequestHost(request);
     const { credential, cookie } = readSocketCredential(request);
-    if (cookie) yield* validateRequestOrigin(request, credential !== undefined);
-    return yield* authorization.authorize(credential);
-  }).pipe(
-    Effect.map((device) => ({ _tag: "Authorized" as const, device })),
-    Effect.catchTag("EnvironmentAuthorizationError", (error) =>
-      Effect.succeed({
-        _tag: "Unauthorized" as const,
-        reason: error.failure._tag,
-      }),
-    ),
-  );
+    if (cookie) validateRequestOrigin(request, credential !== undefined);
+    const device = await authorization.authorize(credential);
+    return { _tag: "Authorized" as const, device };
+  } catch (error) {
+    if (!isEnvironmentAuthorizationError(error)) throw error;
+    return { _tag: "Unauthorized" as const, reason: error.failure._tag };
+  }
 }
 
 export function environmentRouter(options: EnvironmentRouterOptions) {
   const handlers = [...sessionHandlers(options), ...options.features.routes];
   requireEveryRoute(handlers);
-  const procedure = os.$context<RouteContext>();
+  const procedure = os.$context<ConnectionContext>();
   const report = options.reportDefect ?? (() => undefined);
   return Object.fromEntries(
     handlers.map((handler) => [
@@ -167,7 +162,7 @@ export function environmentRouter(options: EnvironmentRouterOptions) {
 
 type RequestHandler = Extract<RouteHandler, { route: EnvironmentRoute }>;
 type StreamHandler = Extract<RouteHandler, { route: EnvironmentStreamRoute }>;
-type ConnectionContext = RouteContext & {
+type ProcedureContext = ConnectionContext & {
   readonly signal: AbortSignal | undefined;
 };
 type ReportDefect = (where: string, error: unknown) => void;
@@ -175,31 +170,36 @@ type ReportDefect = (where: string, error: unknown) => void;
 async function serveRequest(
   { route, handle }: RequestHandler,
   input: unknown,
-  { signal, ...context }: ConnectionContext,
+  { signal, ...connection }: ProcedureContext,
   report: ReportDefect,
 ) {
   const request = parseRequest(route, input);
-  const exit = await Effect.runPromiseExit(
-    handle(request, context),
-    signal === undefined ? undefined : { signal },
-  );
-  if (Exit.isFailure(exit)) throw wireFailure(route, exit.cause, report);
-  return encode(route, exit.value, report);
+  const scope = scopeOf(route, request, signal);
+  try {
+    const value = await inRequest(scope, () =>
+      handle(request, { ...connection, signal: scope.signal }),
+    );
+    return encode(route, value, report);
+  } catch (error) {
+    throw wireFailure(route, error, signal, report);
+  }
 }
 
 async function* serveStream(
   { route, handle }: StreamHandler,
   events: AsyncIterator<unknown>,
-  { signal, ...context }: ConnectionContext,
+  { signal, ...connection }: ProcedureContext,
   report: ReportDefect,
 ) {
   const first = await events.next();
   if (first.done) return;
   const request = parseRequest(route, first.value);
-  const aborted = signal ?? new AbortController().signal;
-  const values = Stream.toAsyncIterable(handle(request, context))[
-    Symbol.asyncIterator
-  ]();
+  const scope = scopeOf(route, request, signal);
+  const values = inRequest(scope, () =>
+    handle(request, { ...connection, signal: scope.signal })[
+      Symbol.asyncIterator
+    ](),
+  );
   let credit = streamWindow;
   try {
     while (true) {
@@ -207,13 +207,16 @@ async function* serveStream(
         if ((await events.next()).done) return;
         credit += 1;
       }
-      const next = await untilAborted(values.next(), aborted);
+      const next = await untilAborted(
+        inRequest(scope, () => values.next()),
+        scope.signal,
+      );
       if (next.done) return;
       credit -= 1;
       yield encode(route, next.value, report);
     }
   } catch (error) {
-    throw wireError(route, error, aborted, report);
+    throw wireFailure(route, error, signal, report);
   } finally {
     void values.return?.();
   }
@@ -230,20 +233,23 @@ function untilAborted<Value>(promise: Promise<Value>, signal: AbortSignal) {
   });
 }
 
-function wireError(
+function scopeOf(
   route: AnyEnvironmentRoute,
-  error: unknown,
-  signal: AbortSignal,
-  report: ReportDefect,
-) {
-  if (error instanceof ORPCError) return error;
-  if (!(error instanceof Error)) {
-    const failure = route.failure.safeParse(error);
-    if (failure.success)
-      return new ORPCError("Rejected", { data: failure.data });
-  }
-  if (!signal.aborted) report(route._tag, error);
-  return new ORPCError("INTERNAL_SERVER_ERROR");
+  request: unknown,
+  signal: AbortSignal | undefined,
+): RequestScope {
+  const repositoryId =
+    typeof request === "object" &&
+    request !== null &&
+    "repositoryId" in request &&
+    typeof request.repositoryId === "string"
+      ? request.repositoryId
+      : undefined;
+  return {
+    procedure: route._tag,
+    signal: signal ?? new AbortController().signal,
+    ...(repositoryId === undefined ? {} : { repositoryId }),
+  };
 }
 
 function parseRequest(route: AnyEnvironmentRoute, input: unknown) {
@@ -267,16 +273,17 @@ function encode(
 
 function wireFailure(
   route: AnyEnvironmentRoute,
-  cause: Cause.Cause<unknown>,
+  error: unknown,
+  signal: AbortSignal | undefined,
   report: ReportDefect,
 ) {
-  const error = Cause.findErrorOption(cause);
-  if (Option.isSome(error)) {
-    const failure = route.failure.safeParse(error.value);
+  if (error instanceof ORPCError) return error;
+  if (!(error instanceof Error)) {
+    const failure = route.failure.safeParse(error);
     if (failure.success)
       return new ORPCError("Rejected", { data: failure.data });
   }
-  if (!Cause.hasInterruptsOnly(cause)) report(route._tag, Cause.squash(cause));
+  if (!signal?.aborted) report(route._tag, error);
   return new ORPCError("INTERNAL_SERVER_ERROR");
 }
 
@@ -284,53 +291,64 @@ function sessionHandlers(options: EnvironmentRouterOptions): RouteHandler[] {
   return [
     {
       route: EnvironmentSessionApi.hello,
-      handle: (input) =>
-        (input as { readonly protocol: number }).protocol ===
-        environmentProtocol
-          ? Effect.succeed({ environmentId: options.environmentId })
-          : Effect.fail({
-              _tag: "ProtocolMismatch",
-              serverProtocol: environmentProtocol,
-            }),
+      handle: async (input) => {
+        if (
+          (input as { readonly protocol: number }).protocol !==
+          environmentProtocol
+        )
+          throw {
+            _tag: "ProtocolMismatch",
+            serverProtocol: environmentProtocol,
+          };
+        return { environmentId: options.environmentId };
+      },
     },
     {
       route: EnvironmentSessionApi.watch,
-      handle: () => environmentChanges(options.events),
+      handle: (_, { signal }) => environmentChanges(options.events, signal),
     },
   ];
 }
 
-function environmentChanges(events: EnvironmentEventPublisher) {
-  return Stream.callback<EnvironmentChanged>(
-    (queue) =>
-      Effect.acquireRelease(
-        Effect.sync(() => {
-          const changed = (
-            sequence: number,
-            repositoryIds?: readonly string[],
-            kind?: EnvironmentChanged["kind"],
-          ) =>
-            Queue.offerUnsafe(queue, {
-              _tag: "EnvironmentChanged",
-              sequence,
-              ...(repositoryIds === undefined ? {} : { repositoryIds }),
-              ...(kind === undefined ? {} : { kind }),
-            });
-          const heartbeat = setInterval(
-            () => changed(events.currentSequence()),
-            heartbeatMilliseconds,
-          );
-          const unsubscribe = events.subscribe(changed);
-          changed(events.currentSequence());
-          return () => {
-            clearInterval(heartbeat);
-            unsubscribe();
-          };
-        }),
-        (release) => Effect.sync(release),
-      ),
-    { bufferSize: 128, strategy: "sliding" },
+async function* environmentChanges(
+  events: EnvironmentEventPublisher,
+  signal: AbortSignal,
+) {
+  const pending: EnvironmentChanged[] = [];
+  let wake: (() => void) | undefined;
+  const push = (change: EnvironmentChanged) => {
+    if (pending.length === maximumPendingChanges) pending.shift();
+    pending.push(change);
+    wake?.();
+  };
+  const unsubscribe = events.subscribe((sequence, repositoryIds, kind) =>
+    push({
+      _tag: "EnvironmentChanged",
+      sequence,
+      ...(repositoryIds === undefined ? {} : { repositoryIds }),
+      ...(kind === undefined ? {} : { kind }),
+    }),
   );
+  const current = () =>
+    push({ _tag: "EnvironmentChanged", sequence: events.currentSequence() });
+  const heartbeat = setInterval(current, heartbeatMilliseconds);
+  const stop = () => wake?.();
+  signal.addEventListener("abort", stop, { once: true });
+  current();
+  try {
+    while (!signal.aborted) {
+      const change = pending.shift();
+      if (change !== undefined) yield change;
+      else
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+        });
+    }
+  } finally {
+    clearInterval(heartbeat);
+    signal.removeEventListener("abort", stop);
+    unsubscribe();
+  }
 }
 
 function requireEveryRoute(handlers: readonly RouteHandler[]) {

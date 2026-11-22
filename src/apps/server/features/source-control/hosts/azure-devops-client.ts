@@ -1,81 +1,77 @@
-import { Effect, Schema } from "effect";
-import type { PullRequestsUnavailable } from "#contracts/pull-requests/pull-requests.contract.ts";
+import { z } from "zod";
 import {
+  decodeHostJson,
   hostCommandOutput,
   hostGet,
   unavailable,
 } from "#server/features/source-control/git-host.ts";
 
 export interface AzureDevOpsClient {
-  readonly version: Effect.Effect<string | undefined>;
-  readonly account: Effect.Effect<string | undefined>;
-  readonly accessToken: Effect.Effect<string, PullRequestsUnavailable>;
-  readonly get: (
-    url: string,
-    accessToken: string,
-  ) => Effect.Effect<string, PullRequestsUnavailable>;
+  readonly version: () => Promise<string | undefined>;
+  readonly account: () => Promise<string | undefined>;
+  readonly accessToken: () => Promise<string>;
+  readonly get: (url: string, accessToken: string) => Promise<string>;
 }
 
 const azureDevOpsResource = "499b84ac-1321-427f-aa17-267ca6975798";
+const decodeVersion = decodeHostJson(z.object({ "azure-cli": z.string() }));
 
 export function createAzureDevOpsClient(): AzureDevOpsClient {
   const az = (args: readonly string[]) =>
     hostCommandOutput("az", args, { shim: true });
   return {
-    version: az(["version", "--output", "json"]).pipe(
-      Effect.flatMap(
-        Schema.decodeUnknownEffect(
-          Schema.fromJsonString(Schema.Struct({ "azure-cli": Schema.String })),
-        ),
-      ),
-      Effect.map((version) => `azure-cli ${version["azure-cli"]}`),
-      Effect.orElseSucceed(() => undefined),
-    ),
-    account: az([
-      "account",
-      "show",
-      "--query",
-      "user.name",
-      "--output",
-      "tsv",
-    ]).pipe(
-      Effect.map((output) => output.trim() || undefined),
-      Effect.orElseSucceed(() => undefined),
-    ),
-    accessToken: az([
-      "account",
-      "get-access-token",
-      "--resource",
-      azureDevOpsResource,
-      "--query",
-      "accessToken",
-      "--output",
-      "tsv",
-    ]).pipe(
-      Effect.map((output) => output.trim()),
-      Effect.filterOrFail(
-        (token) => token !== "",
-        () => unavailable,
-      ),
-    ),
-    get: (url, accessToken) =>
-      hostGet(url, { authorization: `Bearer ${accessToken}` }).pipe(
-        Effect.flatMap(({ status, body }) =>
-          status >= 200 && status < 300
-            ? Effect.succeed(body)
-            : Effect.fail(unavailable),
-        ),
-      ),
+    version: async () => {
+      try {
+        const version = decodeVersion(
+          await az(["version", "--output", "json"]),
+        );
+        return `azure-cli ${version["azure-cli"]}`;
+      } catch {
+        return undefined;
+      }
+    },
+    account: async () => {
+      try {
+        const output = await az([
+          "account",
+          "show",
+          "--query",
+          "user.name",
+          "--output",
+          "tsv",
+        ]);
+        return output.trim() || undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    accessToken: async () => {
+      const token = (
+        await az([
+          "account",
+          "get-access-token",
+          "--resource",
+          azureDevOpsResource,
+          "--query",
+          "accessToken",
+          "--output",
+          "tsv",
+        ])
+      ).trim();
+      if (token === "") throw unavailable;
+      return token;
+    },
+    get: async (url, accessToken) => {
+      const { status, body } = await hostGet(url, {
+        authorization: `Bearer ${accessToken}`,
+      });
+      if (status < 200 || status >= 300) throw unavailable;
+      return body;
+    },
   };
 }
 
 export function reader(client: AzureDevOpsClient, accessToken: string) {
-  return <A>(
-    url: string,
-    decode: (output: string) => Effect.Effect<A, unknown>,
-  ) =>
-    client.get(url, accessToken).pipe(
-      Effect.flatMap(decode),
-      Effect.mapError(() => unavailable),
-    );
+  return async <Schema extends z.ZodType>(url: string, schema: Schema) =>
+    decodeHostJson(schema)(await client.get(url, accessToken));
 }

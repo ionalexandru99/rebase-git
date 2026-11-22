@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { chmod, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   type OperationAction,
@@ -29,11 +28,9 @@ async function fixture() {
   const repositoryId = (await environment.remember(directory)).id;
   const service = environment.routes(RepositoryOperationsApi);
   const scope = { repositoryId, worktreePath: directory };
-  const read = () => Effect.runPromise(service.read(scope));
+  const read = () => service.read(scope);
   const execute = async (action: OperationAction) =>
-    Effect.runPromise(
-      service.execute({ ...scope, revision: (await read()).revision, action }),
-    );
+    service.execute({ ...scope, revision: (await read()).revision, action });
   return {
     directory,
     git,
@@ -74,13 +71,11 @@ describe("Git operation recovery", () => {
     const conflicted = await f.read();
     await writeFile(join(f.directory, "file.txt"), "resolved\n");
     const stale = (action: OperationAction) =>
-      Effect.runPromise(
-        f.service.execute({
-          ...f.scope,
-          revision: conflicted.revision,
-          action,
-        }),
-      );
+      f.service.execute({
+        ...f.scope,
+        revision: conflicted.revision,
+        action,
+      });
     await expect(stale("abort")).rejects.toMatchObject({ reason: "Stale" });
     await f.git("add", ".");
     await expect(stale("continue")).rejects.toMatchObject({ reason: "Stale" });
@@ -194,14 +189,12 @@ describe("Git operation recovery", () => {
     ).rejects.toBeDefined();
     const linkedScope = { ...f.scope, worktreePath: await realpath(linked) };
     expect((await f.read()).kind).toBe("idle");
-    expect(await Effect.runPromise(f.service.read(linkedScope))).toMatchObject({
+    expect(await f.service.read(linkedScope)).toMatchObject({
       kind: "merge",
       unresolvedPaths: ["file.txt"],
     });
     await exec("git", ["-C", linked, "merge", "--abort"]);
-    expect((await Effect.runPromise(f.service.read(linkedScope))).kind).toBe(
-      "idle",
-    );
+    expect((await f.service.read(linkedScope)).kind).toBe("idle");
   });
 
   it("reports real Git locks and hook failures", async () => {

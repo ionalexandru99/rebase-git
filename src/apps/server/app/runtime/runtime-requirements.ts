@@ -1,24 +1,12 @@
 import { execFile } from "node:child_process";
-import { Data, Effect } from "effect";
-
-export class RuntimeRequirementsError extends Data.TaggedError(
-  "RuntimeRequirementsError",
-)<{
-  readonly cause: unknown;
-  readonly message: string;
-}> {}
 
 const minimumNode22Version = [22, 18, 0] as const;
 const minimumGitVersion = [2, 35, 0] as const;
 
-export const verifyRuntimeRequirements = Effect.gen(function* () {
-  yield* captureRequirement(() =>
-    assertSupportedNodeVersion(process.versions.node),
-  );
-
-  const gitVersion = yield* readGitVersion();
-  yield* captureRequirement(() => assertSupportedGitVersion(gitVersion));
-});
+export async function verifyRuntimeRequirements() {
+  assertSupportedNodeVersion(process.versions.node);
+  assertSupportedGitVersion(await readGitVersion());
+}
 
 export function assertSupportedNodeVersion(version: string) {
   const parsed = parseVersion(version, "Node");
@@ -49,14 +37,18 @@ export function parseGitVersion(output: string) {
 }
 
 function readGitVersion() {
-  return Effect.callback<string, RuntimeRequirementsError>((resume, signal) => {
+  return new Promise<string>((resolve, reject) => {
     execFile(
       "git",
       ["--version"],
-      { encoding: "utf8", signal, timeout: 30_000 },
+      { encoding: "utf8", timeout: 30_000 },
       (error, stdout) => {
         if (!error) {
-          resume(captureRequirement(() => parseGitVersion(stdout)));
+          try {
+            resolve(parseGitVersion(stdout));
+          } catch (cause) {
+            reject(cause);
+          }
           return;
         }
 
@@ -64,22 +56,9 @@ function readGitVersion() {
           error.code === "ENOENT"
             ? "Git 2.35 or newer is required, but Git was not found."
             : `Could not run Git: ${error.message}`;
-        resume(
-          Effect.fail(new RuntimeRequirementsError({ cause: error, message })),
-        );
+        reject(new Error(message, { cause: error }));
       },
     );
-  });
-}
-
-function captureRequirement<A>(check: () => A) {
-  return Effect.try({
-    try: check,
-    catch: (cause) =>
-      new RuntimeRequirementsError({
-        cause,
-        message: cause instanceof Error ? cause.message : String(cause),
-      }),
   });
 }
 

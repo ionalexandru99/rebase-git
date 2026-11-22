@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect, Schema } from "effect";
+import { z } from "zod";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   type LargeFiles,
@@ -18,6 +18,7 @@ import {
 import {
   type GitCommandRunner,
   gitFailed,
+  isGitFailed,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
   downloadLargeFiles,
@@ -26,35 +27,30 @@ import {
 } from "#server/features/repository-lfs/git-lfs.ts";
 
 const isPattern = (value: unknown) => LfsPattern.safeParse(value).success;
-const LockRecord = Schema.Struct({
-  path: Schema.String,
-  owner: Schema.optional(Schema.Struct({ name: Schema.String })),
+const LockRecord = z.object({
+  path: z.string(),
+  owner: z.object({ name: z.string() }).optional(),
 });
-const decodeLocks = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(
-    Schema.Struct({
-      ours: Schema.Array(LockRecord),
-      theirs: Schema.Array(LockRecord),
-    }),
-  ),
-);
+const LockListing = z.object({
+  ours: z.array(LockRecord),
+  theirs: z.array(LockRecord),
+});
 const lockArguments: Readonly<Record<SetLock["action"], readonly string[]>> = {
   Lock: ["lock"],
   Unlock: ["unlock"],
   ForceUnlock: ["unlock", "--force"],
 };
 
-function readLargeFiles(lfs: GitLfs, directory: string) {
-  return Effect.gen(function* () {
-    const installed = yield* lfs.installed;
-    const attributes = yield* Effect.promise(() =>
-      readFile(join(directory, ".gitattributes"), "utf8").catch(() => ""),
-    );
-    return {
-      installed,
-      patterns: trackedPatterns(attributes),
-    } satisfies LargeFiles;
-  });
+async function readLargeFiles(
+  lfs: GitLfs,
+  directory: string,
+): Promise<LargeFiles> {
+  const installed = await lfs.installed();
+  const attributes = await readFile(
+    join(directory, ".gitattributes"),
+    "utf8",
+  ).catch(() => "");
+  return { installed, patterns: trackedPatterns(attributes) };
 }
 
 export function trackedPatterns(attributes: string) {
@@ -72,55 +68,60 @@ export function trackedPatterns(attributes: string) {
     );
 }
 
-function readLocks(git: GitCommandRunner, directory: string) {
-  return runGitLfs(git, directory, ["locks", "--verify", "--json"]).pipe(
-    Effect.flatMap(decodeLocks),
-    Effect.map(
-      ({ ours, theirs }): LfsLocks => [
-        ...ours.map((lock) => readLock(lock, true)),
-        ...theirs.map((lock) => readLock(lock, false)),
-      ],
-    ),
-    Effect.catchTag("SchemaError", () =>
-      Effect.fail(
-        gitFailed("Failed", "Git LFS returned locks Rebase can't read."),
-      ),
-    ),
-  );
+async function readLocks(
+  git: GitCommandRunner,
+  directory: string,
+): Promise<LfsLocks> {
+  const output = await runGitLfs(git, directory, [
+    "locks",
+    "--verify",
+    "--json",
+  ]);
+  const { ours, theirs } = parseLocks(output);
+  return [
+    ...ours.map((lock) => readLock(lock, true)),
+    ...theirs.map((lock) => readLock(lock, false)),
+  ];
+}
+
+function parseLocks(output: string) {
+  try {
+    return LockListing.parse(JSON.parse(output));
+  } catch {
+    throw gitFailed("Failed", "Git LFS returned locks Rebase can't read.");
+  }
 }
 
 function readLock(
-  lock: typeof LockRecord.Type,
+  lock: z.infer<typeof LockRecord>,
   ours: boolean,
 ): LfsLocks[number] {
   return { path: lock.path, owner: lock.owner?.name ?? "", ours };
 }
 
-function setTracked(command: SetTracked, git: GitCommandRunner) {
-  return runGitLfs(git, command.worktreePath, [
+async function setTracked(command: SetTracked, git: GitCommandRunner) {
+  await runGitLfs(git, command.worktreePath, [
     command.tracked ? "track" : "untrack",
     command.pattern,
-  ]).pipe(Effect.asVoid);
+  ]);
 }
 
-function setLock(command: SetLock, git: GitCommandRunner) {
-  return runGitLfs(git, command.worktreePath, [
-    ...lockArguments[command.action],
-    "--",
-    command.path,
-  ]).pipe(
-    Effect.asVoid,
-    Effect.catchIf(
-      (failure) => /Not Implemented|not supported/i.test(failure.detail),
-      () =>
-        Effect.fail(
-          repositoryRejected(
-            "Incompatible",
-            "This server doesn't support file locks.",
-          ),
-        ),
-    ),
-  );
+async function setLock(command: SetLock, git: GitCommandRunner) {
+  try {
+    await runGitLfs(git, command.worktreePath, [
+      ...lockArguments[command.action],
+      "--",
+      command.path,
+    ]);
+  } catch (error) {
+    throw isGitFailed(error) &&
+      /Not Implemented|not supported/i.test(error.detail)
+      ? repositoryRejected(
+          "Incompatible",
+          "This server doesn't support file locks.",
+        )
+      : error;
+  }
 }
 
 export function repositoryLfsFeature(

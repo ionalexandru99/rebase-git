@@ -1,7 +1,6 @@
 import { mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import type { ChangeSection } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
@@ -49,7 +48,7 @@ describe("repository stashes", () => {
     const kept = await git(worktreePath, "stash", "create", "autostash");
     await git(worktreePath, "stash", "store", "-m", "autostash", kept.trim());
 
-    const { stashes } = await run(listStashes(runner, worktreePath));
+    const { stashes } = await listStashes(runner, worktreePath);
 
     expect(stashes).toMatchObject([
       { name: "Changes on main", named: true, auto: false, branch: "main" },
@@ -68,13 +67,11 @@ describe("repository stashes", () => {
       },
       { name: "Staged work", named: true, auto: false, staged: true },
     ]);
-    const contents = await run(
-      readStashContents(runner, {
-        repositoryId,
-        worktreePath,
-        oid: stashes[2]?.oid ?? "",
-      }),
-    );
+    const contents = await readStashContents(runner, {
+      repositoryId,
+      worktreePath,
+      oid: stashes[2]?.oid ?? "",
+    });
     expect(contents.files).toEqual([
       {
         path: "notes.md",
@@ -97,15 +94,13 @@ describe("repository stashes", () => {
     const staged = await stashOid(worktreePath, "Staged");
 
     await expect(
-      run(
-        applyStash(runner, {
-          repositoryId,
-          worktreePath,
-          oid: staged,
-          restoreIndex: true,
-          drop: false,
-        }),
-      ),
+      applyStash(runner, {
+        repositoryId,
+        worktreePath,
+        oid: staged,
+        restoreIndex: true,
+        drop: false,
+      }),
     ).resolves.toEqual({ conflicts: 0 });
 
     await expect(
@@ -113,15 +108,13 @@ describe("repository stashes", () => {
     ).resolves.toBe("a.txt");
     expect((await names(worktreePath))[0]).toBe("Staged");
     await git(worktreePath, "reset", "--hard", "--quiet");
-    await run(
-      applyStash(runner, {
-        repositoryId,
-        worktreePath,
-        oid: staged,
-        restoreIndex: false,
-        drop: true,
-      }),
-    );
+    await applyStash(runner, {
+      repositoryId,
+      worktreePath,
+      oid: staged,
+      restoreIndex: false,
+      drop: true,
+    });
     await expect(names(worktreePath)).resolves.toEqual(["Newer"]);
     await expect(
       git(worktreePath, "diff", "--cached", "--name-only"),
@@ -137,15 +130,13 @@ describe("repository stashes", () => {
     const oid = await stashOid(worktreePath, "Conflicting");
 
     await expect(
-      run(
-        applyStash(runner, {
-          repositoryId,
-          worktreePath,
-          oid,
-          restoreIndex: false,
-          drop: true,
-        }),
-      ),
+      applyStash(runner, {
+        repositoryId,
+        worktreePath,
+        oid,
+        restoreIndex: false,
+        drop: true,
+      }),
     ).resolves.toEqual({ conflicts: 1 });
     await expect(names(worktreePath)).resolves.toEqual(["Conflicting"]);
   });
@@ -158,11 +149,11 @@ describe("repository stashes", () => {
     await edit(worktreePath, "b.txt", "second\n");
     await git(worktreePath, "stash", "push", "-m", "Second");
 
-    await run(dropStash(runner, { repositoryId, worktreePath, oid: first }));
+    await dropStash(runner, { repositoryId, worktreePath, oid: first });
 
     await expect(names(worktreePath)).resolves.toEqual(["Second"]);
     await expect(
-      run(dropStash(runner, { repositoryId, worktreePath, oid: first })),
+      dropStash(runner, { repositoryId, worktreePath, oid: first }),
     ).rejects.toMatchObject({ _tag: "StashMissing" });
   });
 
@@ -260,32 +251,27 @@ async function save(
     name,
   }: { readonly into?: string | null; readonly name?: string } = {},
 ) {
-  const { revision } = await run(
-    readRepositoryChanges({ repositoryId, worktreePath, amend: false }, runner),
+  const { revision } = await readRepositoryChanges(
+    { repositoryId, worktreePath, amend: false },
+    runner,
   );
-  return run(
-    saveStash(runner, createGitLfs(runner), {
-      repositoryId,
-      worktreePath,
-      revision,
-      into,
-      section,
-      paths,
-      ...(name === undefined ? {} : { name }),
-    }),
-  );
+  return saveStash(runner, createGitLfs(runner), {
+    repositoryId,
+    worktreePath,
+    revision,
+    into,
+    section,
+    paths,
+    ...(name === undefined ? {} : { name }),
+  });
 }
 
 async function names(worktreePath: string) {
-  const { stashes } = await run(listStashes(runner, worktreePath));
+  const { stashes } = await listStashes(runner, worktreePath);
   return stashes.map((stash) => stash.name);
 }
 
 async function stashOid(worktreePath: string, name: string) {
-  const { stashes } = await run(listStashes(runner, worktreePath));
+  const { stashes } = await listStashes(runner, worktreePath);
   return stashes.find((stash) => stash.name === name)?.oid ?? "";
-}
-
-function run<A, E>(effect: Effect.Effect<A, E>) {
-  return Effect.runPromise(effect);
 }

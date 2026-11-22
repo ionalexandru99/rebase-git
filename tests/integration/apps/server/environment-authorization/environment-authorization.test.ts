@@ -1,6 +1,5 @@
 import { access, readFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";
-import { Effect } from "effect";
 import {
   afterEach,
   beforeEach,
@@ -15,7 +14,6 @@ import {
 } from "#server/features/environment-authorization/environment-authorization.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
 import { authorizationMetadataTable } from "#server/persistence/environment-state.schema.ts";
-import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
 import { openTestEnvironment } from "#tests-support/server.ts";
 
 beforeEach(() => {
@@ -32,14 +30,12 @@ afterEach(() => {
 describe("Environment authorization", () => {
   it("exchanges pairing material once and keeps secrets out of SQLite", async () => {
     const { authorization, context, paths } = await openTestEnvironment();
-    const pairing = await run(authorization.createPairing());
+    const pairing = authorization.createPairing();
     expect(pairing.material).toMatch(/^\d{3}-\d{3}$/);
-    const exchanged = await run(
-      authorization.exchangePairing({
-        label: "Alex's workstation",
-        pairingMaterial: pairing.material,
-      }),
-    );
+    const exchanged = await authorization.exchangePairing({
+      label: "Alex's workstation",
+      pairingMaterial: pairing.material,
+    });
 
     expect(exchanged.authorization).toMatchObject({
       label: "Alex's workstation",
@@ -52,10 +48,9 @@ describe("Environment authorization", () => {
       "PairingAlreadyUsed",
     );
 
-    const metadata = await run(
-      context.read("Could not inspect authorization metadata", (database) =>
-        database.select().from(authorizationMetadataTable).get(),
-      ),
+    const metadata = await context.read(
+      "Could not inspect authorization metadata",
+      (database) => database.select().from(authorizationMetadataTable).get(),
     );
     expect(metadata).toEqual({
       createdAt: "2026-08-21T12:00:00.000Z",
@@ -72,7 +67,7 @@ describe("Environment authorization", () => {
 
   it("expires pairing material and grants with controlled time", async () => {
     const { authorization } = await openTestEnvironment();
-    const expiredPairing = await run(authorization.createPairing());
+    const expiredPairing = authorization.createPairing();
     advanceClock(10 * 60 * 1_000);
     await expectFailure(
       authorization.exchangePairing({
@@ -83,7 +78,7 @@ describe("Environment authorization", () => {
     );
 
     const viewer = await pairDevice(authorization, "Viewer");
-    await run(authorization.authorize(viewer.credential));
+    await authorization.authorize(viewer.credential);
     advanceClock(90 * 24 * 60 * 60 * 1_000);
     await expectFailure(
       authorization.authorize(viewer.credential),
@@ -96,27 +91,27 @@ describe("Environment authorization", () => {
     const custom = await pairDevice(authorization, "Automation");
 
     advanceClock(24 * 60 * 60 * 1_000);
-    await run(authorization.authorize(custom.credential));
-    const metadata = await run(
-      context.read("Could not read device activity", (database) =>
+    await authorization.authorize(custom.credential);
+    const metadata = await context.read(
+      "Could not read device activity",
+      (database) =>
         database
           .select({ lastSeenAt: authorizationMetadataTable.lastSeenAt })
           .from(authorizationMetadataTable)
           .where(eq(authorizationMetadataTable.id, custom.authorization.id))
           .get(),
-      ),
     );
     expect(metadata?.lastSeenAt).toBe("2026-08-22T12:00:00.000Z");
 
     advanceClock(89 * 24 * 60 * 60 * 1_000);
-    await run(authorization.authorize(custom.credential));
+    await authorization.authorize(custom.credential);
   });
 
   it("blocks revoked grants", async () => {
     const { authorization } = await openTestEnvironment();
     const viewer = await pairDevice(authorization, "Viewer");
 
-    await run(authorization.revoke(viewer.authorization.id));
+    await authorization.revoke(viewer.authorization.id);
     await expectFailure(
       authorization.authorize(viewer.credential),
       "RevokedGrant",
@@ -127,24 +122,22 @@ describe("Environment authorization", () => {
     const { authorization, context } = await openTestEnvironment();
     const browser = await pairDevice(authorization, "Browser");
     const earlierDesktop = await pairDevice(authorization, "Desktop");
-    const pairing = await run(
-      authorization.createPairing({ replacesGrantsWithSameLabel: true }),
-    );
+    const pairing = authorization.createPairing({
+      replacesGrantsWithSameLabel: true,
+    });
 
-    const desktop = await run(
-      authorization.exchangePairing({
-        label: "Desktop",
-        pairingMaterial: pairing.material,
-      }),
-    );
+    const desktop = await authorization.exchangePairing({
+      label: "Desktop",
+      pairingMaterial: pairing.material,
+    });
 
-    const grants = await run(
-      context.read("Could not read device grants", (database) =>
+    const grants = await context.read(
+      "Could not read device grants",
+      (database) =>
         database
           .select({ id: authorizationMetadataTable.id })
           .from(authorizationMetadataTable)
           .all(),
-      ),
     );
     expect(grants.map(({ id }) => id).sort()).toEqual(
       [browser.authorization.id, desktop.authorization.id].sort(),
@@ -159,16 +152,18 @@ describe("Environment authorization", () => {
     const { context } = await openTestEnvironment();
     const failing = createFailingContext(context);
     const authorization = createEnvironmentAuthorization(failing.context);
-    const pairing = await run(authorization.createPairing());
+    const pairing = authorization.createPairing();
     const exchange = {
       label: "Owner",
       pairingMaterial: pairing.material,
     };
 
     failing.failNextWrite("Could not save device authorization");
-    await expectStorageFailure(authorization.exchangePairing(exchange));
+    await expect(authorization.exchangePairing(exchange)).rejects.toThrow(
+      "Could not save device authorization",
+    );
     await expect(
-      run(authorization.exchangePairing(exchange)),
+      authorization.exchangePairing(exchange),
     ).resolves.toHaveProperty("credential");
   });
 });
@@ -181,32 +176,18 @@ async function pairDevice(
   authorization: EnvironmentAuthorization,
   label: string,
 ) {
-  const pairing = await run(authorization.createPairing());
-  return run(
-    authorization.exchangePairing({
-      label,
-      pairingMaterial: pairing.material,
-    }),
-  );
+  const pairing = authorization.createPairing();
+  return authorization.exchangePairing({
+    label,
+    pairingMaterial: pairing.material,
+  });
 }
 
-async function expectFailure(
-  effect: Effect.Effect<unknown, unknown>,
-  tag: string,
-) {
-  await expect(run(effect)).rejects.toMatchObject({
+async function expectFailure(result: Promise<unknown>, tag: string) {
+  await expect(result).rejects.toEqual({
+    _tag: "EnvironmentAuthorizationError",
     failure: { _tag: tag },
   });
-}
-
-async function expectStorageFailure(effect: Effect.Effect<unknown, unknown>) {
-  await expect(run(effect)).rejects.toMatchObject({
-    _tag: "EnvironmentStorageError",
-  });
-}
-
-function run<Value, Error>(effect: Effect.Effect<Value, Error>) {
-  return Effect.runPromise(effect);
 }
 
 async function readDurableState(databasePath: string) {
@@ -226,23 +207,12 @@ function createFailingContext(context: EnvironmentContext) {
   return {
     context: {
       ...context,
-      write: <Value>(
-        message: string,
-        operation: Parameters<EnvironmentContext["write"]>[1],
-      ) => {
+      write: (message, operation) => {
         if (message === nextFailure) {
           nextFailure = undefined;
-          return Effect.fail(
-            new EnvironmentStorageError({
-              cause: new Error("Injected storage failure"),
-              message,
-            }),
-          );
+          return Promise.reject(new Error(`${message}: Injected failure`));
         }
-        return context.write(message, operation) as Effect.Effect<
-          Value,
-          EnvironmentStorageError
-        >;
+        return context.write(message, operation);
       },
     } satisfies EnvironmentContext,
     failNextWrite: (message: string) => {

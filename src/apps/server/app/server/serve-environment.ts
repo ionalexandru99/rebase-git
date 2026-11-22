@@ -1,8 +1,10 @@
 import { join } from "node:path";
 import { and, eq, isNull } from "drizzle-orm";
-import { Effect } from "effect";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
-import { combineEnvironmentFeatures } from "#server/adapters/environment-transport/environment-routes.ts";
+import {
+  combineEnvironmentFeatures,
+  requestScopedGit,
+} from "#server/adapters/environment-transport/environment-routes.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher.ts";
 import { acquireRuntimeMarker } from "#server/app/runtime/runtime-marker.ts";
@@ -10,6 +12,10 @@ import {
   acquireEnvironmentListener,
   type EnvironmentListener,
 } from "#server/app/server/environment-listener.ts";
+import {
+  acquireScoped,
+  type ResourceScope,
+} from "#server/app/server/resource-scope.ts";
 import {
   authorAvatarsFeature,
   createAvatarImages,
@@ -55,7 +61,7 @@ import { repositoryHistoryFeature } from "#server/features/repository-history/re
 import { createGitLfs } from "#server/features/repository-lfs/git-lfs.ts";
 import { repositoryLfsFeature } from "#server/features/repository-lfs/repository-lfs.ts";
 import { repositoryOperationsFeature } from "#server/features/repository-operations/repository-operations.ts";
-import { repositoryPullFeature } from "#server/features/repository-pull/repository-pull.feature.ts";
+import { acquireRepositoryPullFeature } from "#server/features/repository-pull/repository-pull.feature.ts";
 import { repositoryPushFeature } from "#server/features/repository-push/repository-push.ts";
 import { repositoryReflogFeature } from "#server/features/repository-reflog/repository-reflog.ts";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher.ts";
@@ -95,40 +101,47 @@ export interface EnvironmentServer {
   readonly port: number;
 }
 
-type EnvironmentDependencies = Effect.Success<
-  ReturnType<typeof acquireEnvironment>
+export type EnvironmentDependencies = Omit<
+  Awaited<ReturnType<typeof acquireEnvironment>>,
+  "close"
 >;
 
 export function serveEnvironment(
   dependencies: EnvironmentDependencies,
   options: Omit<EnvironmentServerOptions, "home">,
 ) {
-  return Effect.gen(function* () {
-    const environment = yield* readCurrentEnvironment(dependencies.context);
+  return acquireScoped(async (scope) => {
+    const environment = await readCurrentEnvironment(dependencies.context);
     const useAutomaticPort = options.port === undefined || options.port === 0;
-    const listener = yield* acquireEnvironmentListener({
-      authorization: dependencies.authorization,
-      ...(options.browserAssetsRoot === undefined
-        ? {}
-        : { browserAssetsRoot: options.browserAssetsRoot }),
-      environmentId: environment.id,
-      events: dependencies.events,
-      features: yield* environmentFeatures(dependencies),
-      ...(options.host === undefined ? {} : { host: options.host }),
-      port: useAutomaticPort ? (environment.automaticPort ?? 0) : options.port,
-      reportDefect: (where, cause) =>
-        reportDefect(dependencies.activity, { procedure: where }, cause),
-    });
+    const listener = scope.use(
+      await acquireEnvironmentListener({
+        authorization: dependencies.authorization,
+        ...(options.browserAssetsRoot === undefined
+          ? {}
+          : { browserAssetsRoot: options.browserAssetsRoot }),
+        environmentId: environment.id,
+        events: dependencies.events,
+        features: environmentFeatures(dependencies, scope),
+        ...(options.host === undefined ? {} : { host: options.host }),
+        port: useAutomaticPort
+          ? (environment.automaticPort ?? 0)
+          : options.port,
+        reportDefect: (where, error) =>
+          reportDefect(dependencies.activity, { procedure: where }, error),
+      }),
+    );
 
     if (useAutomaticPort && environment.automaticPort === null) {
-      yield* claimAutomaticPort(dependencies.context, listener.port);
+      await claimAutomaticPort(dependencies.context, listener.port);
     }
 
-    yield* acquireRuntimeMarker(
-      runtimeMarker(listener),
-      dependencies.paths.runtimeMarker,
+    scope.use(
+      await acquireRuntimeMarker(
+        runtimeMarker(listener),
+        dependencies.paths.runtimeMarker,
+      ),
     );
-    const pairing = yield* dependencies.authorization.createPairing({
+    const pairing = dependencies.authorization.createPairing({
       replacesGrantsWithSameLabel:
         options.pairingReplacesGrantsWithSameLabel ?? false,
     });
@@ -143,22 +156,19 @@ export function serveEnvironment(
 }
 
 export function acquireEnvironment(home: string, runner: GitCommandRunner) {
-  return Effect.gen(function* () {
+  return acquireScoped(async (scope) => {
     const activity = createDiagnosticsActivity();
-    const lfs = createGitLfs(recordGitActivity(runner, activity));
+    const lfs = createGitLfs(
+      recordGitActivity(requestScopedGit(runner), activity),
+    );
     const git = lfs.git;
     const paths = environmentPaths(join(home, ".rebase"));
-    const context = yield* acquireEnvironmentContext(paths);
+    const context = scope.use(await acquireEnvironmentContext(paths));
     const catalog = createRepositoryCatalog(context, git);
     const events = createEnvironmentEventPublisher();
     const watcher = createLocalRepositoryWatcher();
-    return {
-      access: createRepositoryAccess(catalog, git),
-      activity,
-      authorization: createEnvironmentAuthorization(context),
-      avatarImages: createAvatarImages(),
-      catalog,
-      changes: yield* acquireRepositoryChangePublisher(
+    const changes = scope.use(
+      await acquireRepositoryChangePublisher(
         git,
         watcher,
         events,
@@ -171,13 +181,9 @@ export function acquireEnvironment(home: string, runner: GitCommandRunner) {
             repositoryId,
           }),
       ),
-      context,
-      coordination: createRepositoryCoordination(git),
-      events,
-      git,
-      gitHosts: createGitHostClients(),
-      lfs,
-      monitor: yield* acquireProcessMonitor(processMonitorPath(), (detail) =>
+    );
+    const monitor = scope.use(
+      await acquireProcessMonitor(processMonitorPath(), (detail) =>
         activity.reportError({
           kind: "Monitor",
           title: "Process monitor stopped",
@@ -185,70 +191,98 @@ export function acquireEnvironment(home: string, runner: GitCommandRunner) {
           detail,
         }),
       ),
-      paths,
-      progress: createCommandProgress(),
-      terminals: yield* acquireTerminalSessions((repositoryId) =>
+    );
+    const terminals = scope.use(
+      await acquireTerminalSessions((repositoryId) =>
         events.publishChanged([repositoryId], "Terminals"),
       ),
+    );
+    const diagnostics = scope.use(
+      await acquireDiagnosticsFeature({
+        activity,
+        changes,
+        dataFolder: paths.root,
+        git,
+        monitor,
+      }),
+    );
+    return {
+      access: createRepositoryAccess(catalog, git),
+      activity,
+      authorization: createEnvironmentAuthorization(context),
+      avatarImages: createAvatarImages(),
+      catalog,
+      changes,
+      context,
+      coordination: createRepositoryCoordination(git),
+      diagnostics: diagnostics.feature,
+      events,
+      git,
+      gitHosts: createGitHostClients(),
+      lfs,
+      monitor,
+      paths,
+      progress: createCommandProgress(),
+      terminals,
       watcher,
     };
   });
 }
 
-export function environmentFeatures(dependencies: EnvironmentDependencies) {
-  return Effect.gen(function* () {
-    const sourceControl = createSourceControl(
-      dependencies.context,
-      dependencies.git,
-      dependencies.gitHosts,
-      dependencies.lfs,
-    );
-    const features = combineEnvironmentFeatures([
-      environmentAuthorizationFeature(dependencies.authorization),
-      environmentFilesystemFeature(),
-      repositoryCatalogFeature(
-        dependencies.catalog,
-        createRepositoryCreation(dependencies),
-      ),
-      commitInspectionFeature(dependencies),
-      fileHistoryFeature(dependencies),
-      historySearchFeature(dependencies),
-      worktreeFilesFeature(dependencies),
-      fileBlameFeature(dependencies),
-      comparisonFeature(dependencies),
-      repositoryChangesFeature(dependencies),
-      repositoryConflictsFeature(dependencies),
-      repositoryLfsFeature(dependencies),
-      repositoryHistoryFeature(dependencies),
-      commandProgressFeature(dependencies.progress),
-      repositoryOperationsFeature(dependencies),
-      yield* repositoryPullFeature({
+export function environmentFeatures(
+  dependencies: EnvironmentDependencies,
+  scope: ResourceScope,
+) {
+  const sourceControl = createSourceControl(
+    dependencies.context,
+    dependencies.git,
+    dependencies.gitHosts,
+    dependencies.lfs,
+  );
+  const features = combineEnvironmentFeatures([
+    environmentAuthorizationFeature(dependencies.authorization),
+    environmentFilesystemFeature(),
+    repositoryCatalogFeature(
+      dependencies.catalog,
+      createRepositoryCreation(dependencies),
+    ),
+    commitInspectionFeature(dependencies),
+    fileHistoryFeature(dependencies),
+    historySearchFeature(dependencies),
+    worktreeFilesFeature(dependencies),
+    fileBlameFeature(dependencies),
+    comparisonFeature(dependencies),
+    repositoryChangesFeature(dependencies),
+    repositoryConflictsFeature(dependencies),
+    repositoryLfsFeature(dependencies),
+    repositoryHistoryFeature(dependencies),
+    commandProgressFeature(dependencies.progress),
+    repositoryOperationsFeature(dependencies),
+    scope.use(
+      acquireRepositoryPullFeature({
         ...dependencies,
         afterFetch: settleBranchesAfterFetch({
           ...dependencies,
           sourceControl,
         }),
       }),
-      pullRequestsFeature({ ...dependencies, sourceControl }),
-      authorAvatarsFeature({ ...dependencies, sourceControl }),
-      repositoryPushFeature(dependencies),
-      repositoryReflogFeature(dependencies),
-      yield* repositoryRefsFeature(dependencies),
-      branchSettlingFeature(dependencies),
-      repositoryStashesFeature(dependencies),
-      repositoryWorktreesFeature(dependencies),
-      gitIdentityFeature(dependencies),
-      signatureVerificationFeature(dependencies),
-      gitSigningFeature(dependencies),
-      sourceControlFeature({ events: dependencies.events, sourceControl }),
-      terminalFeature(dependencies),
-      yield* acquireDiagnosticsFeature({
-        ...dependencies,
-        dataFolder: dependencies.paths.root,
-      }),
-    ]);
-    return observeFeatures(features, dependencies.activity);
-  });
+    ).feature,
+    pullRequestsFeature({ ...dependencies, sourceControl }),
+    authorAvatarsFeature({ ...dependencies, sourceControl }),
+    repositoryPushFeature(dependencies),
+    repositoryReflogFeature(dependencies),
+    repositoryRefsFeature(dependencies),
+    branchSettlingFeature(dependencies),
+    repositoryStashesFeature(dependencies),
+    repositoryWorktreesFeature(dependencies),
+    gitIdentityFeature(dependencies),
+    signatureVerificationFeature(dependencies),
+    gitSigningFeature(dependencies),
+    sourceControlFeature({ events: dependencies.events, sourceControl }),
+    terminalFeature(dependencies),
+    dependencies.diagnostics,
+  ]);
+  return observeFeatures(features, dependencies.activity);
 }
 
 function runtimeMarker(listener: EnvironmentListener) {

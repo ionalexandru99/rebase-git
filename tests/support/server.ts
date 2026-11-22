@@ -4,13 +4,11 @@ import { join } from "node:path";
 import { createORPCClient, ORPCError } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
 import { createRouterClient } from "@orpc/server";
-import { Effect, Exit, Scope } from "effect";
 import { onTestFinished } from "vite-plus/test";
 import WebSocket from "ws";
 import { EnvironmentAuthorizationApi } from "#contracts/environment-authorization/environment-authorization.contract.ts";
 import type {
   EnvironmentRoute,
-  RouteFailure,
   RouteInput,
   RouteSuccess,
 } from "#contracts/environment-connection/environment-route.contract.ts";
@@ -29,6 +27,10 @@ import {
   type GitCommandRunner,
   gitFailed,
 } from "#server/adapters/local-git/git-commands.ts";
+import {
+  createResourceScope,
+  type ResourceScope,
+} from "#server/app/server/resource-scope.ts";
 import {
   acquireEnvironment,
   environmentFeatures,
@@ -52,17 +54,11 @@ type Routes = Record<string, EnvironmentRoute>;
 export type RoutesClient<Api extends Routes> = {
   readonly [Name in keyof Api]: (
     input: RouteInput<Api[Name]>,
-  ) => Effect.Effect<RouteSuccess<Api[Name]>, RouteFailure<Api[Name]>>;
+  ) => Promise<RouteSuccess<Api[Name]>>;
 };
 
 type Procedures = Readonly<
-  Record<
-    string,
-    (
-      input: unknown,
-      options?: { readonly signal?: AbortSignal },
-    ) => Promise<unknown>
-  >
+  Record<string, (input: unknown) => Promise<unknown>>
 >;
 
 const testContext = {
@@ -90,41 +86,40 @@ interface EnvironmentOverrides {
 export function interruptGit(command: string, applied: boolean) {
   return (runner: GitCommandRunner): GitCommandRunner => ({
     ...runner,
-    run: (next) =>
-      !`${next.arguments.join(" ")} `.startsWith(`${command} `)
-        ? runner.run(next)
-        : (applied ? runner.run(next) : Effect.void).pipe(
-            Effect.andThen(Effect.fail(gitFailed("Timeout"))),
-          ),
+    run: async (next) => {
+      if (!`${next.arguments.join(" ")} `.startsWith(`${command} `))
+        return runner.run(next);
+      if (applied) await runner.run(next);
+      throw gitFailed("Timeout");
+    },
   });
 }
 
-export function openTestEnvironment(overrides: EnvironmentOverrides = {}) {
-  return openInTestScope(
-    Effect.gen(function* () {
-      const dependencies = yield* acquireTestDependencies(overrides);
-      const router = environmentRouter({
-        environmentId: "00000000-0000-4000-8000-000000000001",
-        events: dependencies.events,
-        features: yield* environmentFeatures(dependencies),
-      });
-      const procedures = createRouterClient(router, {
-        context: testContext,
-      }) as unknown as Procedures;
-      return {
-        ...dependencies,
-        remember: (path: string) =>
-          Effect.runPromise(dependencies.catalog.remember(path)),
-        routes: <Api extends Routes>(api: Api) => {
-          const client: Partial<Record<keyof Api, unknown>> = {};
-          for (const name of Object.keys(api) as (keyof Api)[])
-            client[name] = (input: unknown) =>
-              callRoute(procedures, api[name] as EnvironmentRoute, input);
-          return client as RoutesClient<Api>;
-        },
-      };
-    }),
-  );
+export async function openTestEnvironment(
+  overrides: EnvironmentOverrides = {},
+) {
+  const scope = openTestScope();
+  const dependencies = await acquireTestDependencies(scope, overrides);
+  const router = environmentRouter({
+    environmentId: "00000000-0000-4000-8000-000000000001",
+    events: dependencies.events,
+    features: environmentFeatures(dependencies, scope),
+  });
+  const procedures = createRouterClient(router, {
+    context: testContext,
+  }) as unknown as Procedures;
+  return {
+    ...dependencies,
+    close: scope.close,
+    remember: (path: string) => dependencies.catalog.remember(path),
+    routes: <Api extends Routes>(api: Api) => {
+      const client: Partial<Record<keyof Api, unknown>> = {};
+      for (const name of Object.keys(api) as (keyof Api)[])
+        client[name] = (input: unknown) =>
+          callRoute(procedures, api[name] as EnvironmentRoute, input);
+      return client as RoutesClient<Api>;
+    },
+  };
 }
 
 export async function openIsolatedTestEnvironment(
@@ -153,55 +148,53 @@ export async function openIsolatedTestEnvironment(
   return { environment, home, env: { ...process.env, ...isolated } };
 }
 
-export function openTestServer(overrides: EnvironmentOverrides = {}) {
-  return openInTestScope(
-    Effect.gen(function* () {
-      const scope = yield* Effect.scope;
-      const dependencies = yield* acquireTestDependencies(overrides);
-      const server = yield* serveEnvironment(dependencies, {});
-      const owner = yield* Effect.promise(() =>
-        exchangePairing(server.origin, server.pairingUrl, "Owner"),
-      );
-      const connect = async (
-        credential: EnvironmentCredential,
-        invalidation = unchanged,
-      ): Promise<EnvironmentConnection> => {
-        const connection = await connectEnvironment(
-          server.origin,
-          credential,
-          invalidation,
-        );
-        Effect.runSync(
-          Scope.addFinalizer(scope, Effect.sync(connection.close)),
-        );
-        return connection;
-      };
-      const requests = (credential: EnvironmentCredential) => {
-        const connection = connect(credential);
-        return (async (route, input, options) =>
-          (await connection).requests(
-            route,
-            input,
-            options,
-          )) satisfies EnvironmentRequests as EnvironmentRequests;
-      };
-      return {
-        ...server,
-        events: dependencies.events,
-        home: dependencies.home,
-        owner,
-        connect,
-        requests,
-        pair: async (label: string) => {
-          const pairing = await requests(owner)(
-            EnvironmentAuthorizationApi.createPairing,
-            undefined,
-          );
-          return exchangePairing(server.origin, pairing.pairingUrl, label);
-        },
-      };
-    }),
+export async function openTestServer(overrides: EnvironmentOverrides = {}) {
+  const scope = openTestScope();
+  const dependencies = await acquireTestDependencies(scope, overrides);
+  const { close, ...server } = await serveEnvironment(dependencies, {});
+  scope.defer(close);
+  const owner = await exchangePairing(
+    server.origin,
+    server.pairingUrl,
+    "Owner",
   );
+  const connect = async (
+    credential: EnvironmentCredential,
+    invalidation = unchanged,
+  ): Promise<EnvironmentConnection> => {
+    const connection = await connectEnvironment(
+      server.origin,
+      credential,
+      invalidation,
+    );
+    scope.defer(connection.close);
+    return connection;
+  };
+  const requests = (credential: EnvironmentCredential) => {
+    const connection = connect(credential);
+    return (async (route, input, options) =>
+      (await connection).requests(
+        route,
+        input,
+        options,
+      )) satisfies EnvironmentRequests as EnvironmentRequests;
+  };
+  return {
+    ...server,
+    close: scope.close,
+    events: dependencies.events,
+    home: dependencies.home,
+    owner,
+    connect,
+    requests,
+    pair: async (label: string) => {
+      const pairing = await requests(owner)(
+        EnvironmentAuthorizationApi.createPairing,
+        undefined,
+      );
+      return exchangePairing(server.origin, pairing.pairingUrl, label);
+    },
+  };
 }
 
 export async function exchangePairing(
@@ -268,25 +261,20 @@ export function helloOverSocket(
   });
 }
 
-function callRoute(
+async function callRoute(
   procedures: Procedures,
   route: EnvironmentRoute,
   input: unknown,
 ) {
   const call = procedures[route._tag];
-  if (call === undefined)
-    return Effect.die(new Error(`No handler serves ${route._tag}.`));
-  return Effect.tryPromise({
-    try: (signal) => call(input, { signal }),
-    catch: (error) => error,
-  }).pipe(
-    Effect.map(overTheWire),
-    Effect.catch((error) =>
-      error instanceof ORPCError && error.code === "Rejected"
-        ? Effect.fail(overTheWire(error.data))
-        : Effect.die(error),
-    ),
-  );
+  if (call === undefined) throw new Error(`No handler serves ${route._tag}.`);
+  try {
+    return overTheWire(await call(input));
+  } catch (error) {
+    if (error instanceof ORPCError && error.code === "Rejected")
+      throw overTheWire(error.data);
+    throw error;
+  }
 }
 
 function overTheWire(value: unknown) {
@@ -294,45 +282,33 @@ function overTheWire(value: unknown) {
   return encoded === undefined ? undefined : JSON.parse(encoded);
 }
 
-function acquireTestDependencies(overrides: EnvironmentOverrides) {
-  return Effect.gen(function* () {
-    const home = yield* acquireTemporaryHome;
-    const git = createLocalGitCommandRunner();
-    const environment = yield* acquireEnvironment(
-      home,
-      overrides.git?.(git) ?? git,
-    );
-    return {
-      ...environment,
-      authorization:
-        overrides.authorization?.(environment.authorization) ??
-        environment.authorization,
-      coordination:
-        overrides.coordination?.(environment.coordination) ??
-        environment.coordination,
-      events: overrides.events?.(environment.events) ?? environment.events,
-      gitHosts: { ...environment.gitHosts, ...overrides.gitHosts },
-      avatarImages: overrides.avatarImages ?? environment.avatarImages,
-      home,
-    };
-  });
-}
-
-async function openInTestScope<A extends object, E>(
-  acquire: Effect.Effect<A, E, Scope.Scope>,
+async function acquireTestDependencies(
+  scope: ResourceScope,
+  overrides: EnvironmentOverrides,
 ) {
-  const scope = Effect.runSync(Scope.make());
-  const close = () => Effect.runPromise(Scope.close(scope, Exit.void));
-  onTestFinished(close);
-  const opened = await Effect.runPromise(
-    acquire.pipe(Effect.orDie, Effect.provideService(Scope.Scope, scope)),
+  const home = await realpath(await mkdtemp(join(tmpdir(), "rebase server ")));
+  scope.defer(() => removeTemporaryDirectory(home));
+  const git = createLocalGitCommandRunner();
+  const environment = scope.use(
+    await acquireEnvironment(home, overrides.git?.(git) ?? git),
   );
-  return { ...opened, close };
+  return {
+    ...environment,
+    authorization:
+      overrides.authorization?.(environment.authorization) ??
+      environment.authorization,
+    coordination:
+      overrides.coordination?.(environment.coordination) ??
+      environment.coordination,
+    events: overrides.events?.(environment.events) ?? environment.events,
+    gitHosts: { ...environment.gitHosts, ...overrides.gitHosts },
+    avatarImages: overrides.avatarImages ?? environment.avatarImages,
+    home,
+  };
 }
 
-const acquireTemporaryHome = Effect.acquireRelease(
-  Effect.promise(async () =>
-    realpath(await mkdtemp(join(tmpdir(), "rebase server "))),
-  ),
-  (home) => Effect.promise(() => removeTemporaryDirectory(home)),
-);
+function openTestScope() {
+  const scope = createResourceScope();
+  onTestFinished(scope.close);
+  return scope;
+}

@@ -3,7 +3,6 @@ import { access, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, parse } from "node:path";
 import { promisify } from "node:util";
-import { Effect } from "effect";
 import {
   type EnvironmentDirectory,
   type EnvironmentDirectoryEntry,
@@ -37,72 +36,61 @@ export function createEnvironmentFilesystem(homeDirectory = homedir()) {
   };
 }
 
-function listEnvironmentDirectory(
+async function listEnvironmentDirectory(
   requestedPath: string,
   includeHidden: boolean,
-): Effect.Effect<EnvironmentDirectory, EnvironmentDirectoryRejected> {
-  if (!validPath(requestedPath)) {
-    return Effect.fail(directoryRejected("MalformedPath"));
+): Promise<EnvironmentDirectory> {
+  if (!validPath(requestedPath)) throw directoryRejected("MalformedPath");
+  const path = await canonicalizeDirectory(requestedPath);
+  const directoryEntries = await readDirectory(path, includeHidden);
+  const [inspectedEntries, repository] = await Promise.all([
+    inspectEntries(path, directoryEntries.slice(0, maximumEntries)),
+    insideRepository(path),
+  ]);
+  const parent = dirname(path);
+  return {
+    breadcrumbs: createBreadcrumbs(path),
+    entries: inspectedEntries,
+    ...(parent === path ? {} : { parentPath: parent }),
+    path,
+    repository,
+    truncated: directoryEntries.length > inspectedEntries.length,
+  };
+}
+
+async function canonicalizeDirectory(path: string) {
+  let canonicalPath: string;
+  let directory: boolean;
+  try {
+    canonicalPath = await realpathNative(path);
+    directory = (await stat(canonicalPath)).isDirectory();
+  } catch (cause) {
+    throw directoryRejected(fileSystemRejectionReason(cause));
   }
-
-  return Effect.gen(function* () {
-    const path = yield* canonicalizeDirectory(requestedPath);
-    const directoryEntries = yield* readDirectory(path, includeHidden);
-    const [inspectedEntries, repository] = yield* Effect.promise(() =>
-      Promise.all([
-        inspectEntries(path, directoryEntries.slice(0, maximumEntries)),
-        insideRepository(path),
-      ]),
-    );
-    const parent = dirname(path);
-    return {
-      breadcrumbs: createBreadcrumbs(path),
-      entries: inspectedEntries,
-      ...(parent === path ? {} : { parentPath: parent }),
-      path,
-      repository,
-      truncated: directoryEntries.length > inspectedEntries.length,
-    } satisfies EnvironmentDirectory;
-  });
+  if (!directory) throw directoryRejected("NotDirectory");
+  return canonicalPath;
 }
 
-function canonicalizeDirectory(path: string) {
-  return Effect.tryPromise({
-    try: async () => {
-      const canonicalPath = await realpathNative(path);
-      return { canonicalPath, metadata: await stat(canonicalPath) };
+async function readDirectory(path: string, includeHidden: boolean) {
+  const entries = await readdir(path, { withFileTypes: true }).catch(
+    (cause: unknown) => {
+      throw directoryRejected(fileSystemRejectionReason(cause));
     },
-    catch: (cause) => directoryRejected(fileSystemRejectionReason(cause)),
-  }).pipe(
-    Effect.flatMap(({ canonicalPath, metadata }) =>
-      metadata.isDirectory()
-        ? Effect.succeed(canonicalPath)
-        : Effect.fail(directoryRejected("NotDirectory")),
-    ),
   );
-}
-
-function readDirectory(path: string, includeHidden: boolean) {
-  return Effect.tryPromise({
-    try: async () => {
-      const entries = await readdir(path, { withFileTypes: true });
-      return entries
-        .filter(
-          (entry) =>
-            (includeHidden || !entry.name.startsWith(".")) &&
-            validEntry(path, entry.name),
-        )
-        .sort(
-          (left, right) =>
-            Number(right.isDirectory()) - Number(left.isDirectory()) ||
-            left.name.localeCompare(right.name, undefined, {
-              numeric: true,
-              sensitivity: "base",
-            }),
-        );
-    },
-    catch: (cause) => directoryRejected(fileSystemRejectionReason(cause)),
-  });
+  return entries
+    .filter(
+      (entry) =>
+        (includeHidden || !entry.name.startsWith(".")) &&
+        validEntry(path, entry.name),
+    )
+    .sort(
+      (left, right) =>
+        Number(right.isDirectory()) - Number(left.isDirectory()) ||
+        left.name.localeCompare(right.name, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        }),
+    );
 }
 
 async function inspectEntries(

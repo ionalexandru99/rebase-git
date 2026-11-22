@@ -1,6 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { RepositoryConflictsApi } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import {
@@ -19,7 +18,7 @@ async function fixture(
   const repositoryId = (await environment.remember(directory)).id;
   const service = environment.routes(RepositoryConflictsApi);
   const scope = { repositoryId, worktreePath: directory };
-  const list = () => Effect.runPromise(service.list(scope));
+  const list = () => service.list(scope);
   const file = async (path: string) => {
     const found = (await list()).files.find((entry) => entry.path === path);
     if (found === undefined) throw new Error(`${path} is not in conflict.`);
@@ -31,17 +30,14 @@ async function fixture(
     scope,
     list,
     file,
-    document: (path: string) =>
-      Effect.runPromise(service.document({ ...scope, path })),
+    document: (path: string) => service.document({ ...scope, path }),
     choose: async (path: string, choice: "current" | "incoming" | "delete") =>
-      Effect.runPromise(
-        service.choose({
-          ...scope,
-          path,
-          choice,
-          revision: (await file(path)).revision,
-        }),
-      ),
+      service.choose({
+        ...scope,
+        path,
+        choice,
+        revision: (await file(path)).revision,
+      }),
     content: (path: string) => readFile(join(directory, path), "utf8"),
     unmerged: (path: string) =>
       git(directory, "ls-files", "--unmerged", "--", path),
@@ -153,16 +149,14 @@ describe("repository conflicts", () => {
     const f = await fixture();
     const loaded = await f.document("two.txt");
     const edit = (revision: string) =>
-      Effect.runPromise(
-        f.service.edit({
-          ...f.scope,
-          path: "two.txt",
-          revision,
-          line: 2,
-          count: 7,
-          text: "B merged\n",
-        }),
-      );
+      f.service.edit({
+        ...f.scope,
+        path: "two.txt",
+        revision,
+        line: 2,
+        count: 7,
+        text: "B merged\n",
+      });
 
     const saved = await edit(loaded.file.revision);
 
@@ -179,14 +173,12 @@ describe("repository conflicts", () => {
   it("stages a file with markers only when asked to", async () => {
     const f = await fixture();
     const stage = async (allowMarkers: boolean) =>
-      Effect.runPromise(
-        f.service.stage({
-          ...f.scope,
-          path: "two.txt",
-          revision: (await f.file("two.txt")).revision,
-          allowMarkers,
-        }),
-      );
+      f.service.stage({
+        ...f.scope,
+        path: "two.txt",
+        revision: (await f.file("two.txt")).revision,
+        allowMarkers,
+      });
 
     await expect(stage(false)).rejects.toMatchObject({
       reason: "Markers",

@@ -1,12 +1,8 @@
-import { Effect, Schema } from "effect";
-import type {
-  PullRequest,
-  PullRequestsUnavailable,
-} from "#contracts/pull-requests/pull-requests.contract.ts";
+import { z } from "zod";
+import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { HostRepositories } from "#contracts/source-control/source-control.contract.ts";
 import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
-  type AvatarAuthor,
   avatarUrl,
   cloneableRepository,
   decodeHostJson,
@@ -27,22 +23,16 @@ import {
 } from "#server/features/source-control/git-host.ts";
 
 export interface GitLabCli {
-  readonly version: Effect.Effect<string | undefined>;
-  readonly authStatus: (hostname?: string) => Effect.Effect<string>;
-  readonly protocol: (hostname: string) => Effect.Effect<string | undefined>;
-  readonly repositories: (
-    hostname: string,
-    page: number,
-  ) => Effect.Effect<string, PullRequestsUnavailable>;
+  readonly version: () => Promise<string | undefined>;
+  readonly authStatus: (hostname?: string) => Promise<string>;
+  readonly protocol: (hostname: string) => Promise<string | undefined>;
+  readonly repositories: (hostname: string, page: number) => Promise<string>;
   readonly graphql: (
     hostname: string,
     query: string,
     variables: Readonly<Record<string, string>>,
-  ) => Effect.Effect<string, PullRequestsUnavailable>;
-  readonly avatar: (
-    hostname: string,
-    email: string,
-  ) => Effect.Effect<string, PullRequestsUnavailable>;
+  ) => Promise<string>;
+  readonly avatar: (hostname: string, email: string) => Promise<string>;
 }
 
 interface GitLabProject {
@@ -59,30 +49,28 @@ export function createGitLabCli(): GitLabCli {
   const glab = (args: readonly string[]) =>
     runHostCommand("glab", args, { env });
   return {
-    version: glab(["--version"]).pipe(
-      Effect.map(({ succeeded, stdout }) =>
-        succeeded ? stdout.split("\n")[0]?.trim() || undefined : undefined,
-      ),
-    ),
-    authStatus: (hostname) =>
-      hostname === undefined
-        ? glab(["auth", "status", "--all"]).pipe(
-            Effect.flatMap(({ output }) =>
-              output.includes("unknown flag: --all")
-                ? glab(["auth", "status"])
-                : Effect.succeed({ output }),
-            ),
-            Effect.map(({ output }) => output),
-          )
-        : glab(["auth", "status", "--hostname", hostname]).pipe(
-            Effect.map(({ output }) => output),
-          ),
-    protocol: (hostname) =>
-      glab(["config", "get", "git_protocol", "--host", hostname]).pipe(
-        Effect.map(({ succeeded, stdout }) =>
-          succeeded ? stdout.trim() || undefined : undefined,
-        ),
-      ),
+    version: async () => {
+      const { succeeded, stdout } = await glab(["--version"]);
+      return succeeded ? stdout.split("\n")[0]?.trim() || undefined : undefined;
+    },
+    authStatus: async (hostname) => {
+      if (hostname !== undefined)
+        return (await glab(["auth", "status", "--hostname", hostname])).output;
+      const { output } = await glab(["auth", "status", "--all"]);
+      return output.includes("unknown flag: --all")
+        ? (await glab(["auth", "status"])).output
+        : output;
+    },
+    protocol: async (hostname) => {
+      const { succeeded, stdout } = await glab([
+        "config",
+        "get",
+        "git_protocol",
+        "--host",
+        hostname,
+      ]);
+      return succeeded ? stdout.trim() || undefined : undefined;
+    },
     repositories: (hostname, page) =>
       hostCommandOutput(
         "glab",
@@ -128,136 +116,116 @@ export function createGitLabCli(): GitLabCli {
 export function createGitLabHost(cli: GitLabCli): GitHost {
   return {
     kind: "gitlab",
-    tool: signedInTool(
-      cli.version,
-      cli.authStatus().pipe(Effect.map(signedInAccounts)),
+    tool: signedInTool(cli.version, async () =>
+      signedInAccounts(await cli.authStatus()),
     ),
     repositoryId: (remoteUrl) => gitlabProject(remoteUrl)?.id,
-    cloneable: cli.authStatus().pipe(
-      Effect.flatMap((output) =>
-        Effect.forEach(
-          signedInAccounts(output),
-          (account) =>
-            accountRepositories(cli, account).pipe(
-              Effect.orElseSucceed(() => []),
-            ),
-          { concurrency: "unbounded" },
-        ),
-      ),
-      Effect.map((lists) => lists.flat()),
-    ),
-    repository: (remoteUrl) => {
-      const project = gitlabProject(remoteUrl);
-      if (project === undefined) return Effect.succeed(undefined);
-      return cli.authStatus(project.host).pipe(
-        Effect.map((output) =>
-          signedInAccounts(output).some(
-            ({ host }) => host.toLowerCase() === project.host,
-          )
-            ? {
-                id: project.id,
-                pullRequests: (heads: readonly string[]) =>
-                  inBatches(heads, branchesPerRequest, (batch) =>
-                    cli
-                      .graphql(project.host, mergeRequestsQuery(batch.length), {
-                        fullPath: project.path,
-                        ...Object.fromEntries(
-                          batch.map((head, index) => [`b${index}`, head]),
-                        ),
-                      })
-                      .pipe(
-                        Effect.flatMap(decodeResponse),
-                        Effect.flatMap(({ data: { project: answers } }) =>
-                          answers === null
-                            ? Effect.fail(unavailable)
-                            : Effect.succeed(
-                                batch.map((_, index) =>
-                                  headAnswer(
-                                    answers[`b${index}`]?.nodes,
-                                    project,
-                                  ),
-                                ),
-                              ),
-                        ),
-                      ),
-                  ),
-                pullRequest: (number: number) =>
-                  cli
-                    .graphql(project.host, mergeRequestQuery(number), {
-                      fullPath: project.path,
-                    })
-                    .pipe(
-                      Effect.flatMap(decodeMergeRequestResponse),
-                      Effect.map(({ data: { project: answer } }) =>
-                        answer === null ||
-                        answer.mergeRequest === null ||
-                        !isProjectLink(answer.mergeRequest.webUrl, project.host)
-                          ? undefined
-                          : gitlabMergeRequest(answer.mergeRequest),
-                      ),
-                      Effect.orElseSucceed(() => undefined),
-                    ),
-                avatar: (author: AvatarAuthor) =>
-                  cli.avatar(project.host, author.email).pipe(
-                    Effect.flatMap(decodeAvatar),
-                    Effect.map(({ avatar_url }) => {
-                      const url = avatarUrl(
-                        avatar_url,
-                        [project.host, ...gravatarHosts],
-                        { width: "40" },
-                      );
-                      return foundAvatar(url);
-                    }),
-                  ),
-              }
-            : undefined,
+    cloneable: async () => {
+      const lists = await Promise.all(
+        signedInAccounts(await cli.authStatus()).map((account) =>
+          accountRepositories(cli, account).catch(() => []),
         ),
       );
+      return lists.flat();
+    },
+    repository: async (remoteUrl) => {
+      const project = gitlabProject(remoteUrl);
+      if (project === undefined) return undefined;
+      const signedIn = signedInAccounts(
+        await cli.authStatus(project.host),
+      ).some(({ host }) => host.toLowerCase() === project.host);
+      if (!signedIn) return undefined;
+      return {
+        id: project.id,
+        pullRequests: (heads) =>
+          inBatches(heads, branchesPerRequest, async (batch) => {
+            const answers = decodeResponse(
+              await cli.graphql(
+                project.host,
+                mergeRequestsQuery(batch.length),
+                {
+                  fullPath: project.path,
+                  ...Object.fromEntries(
+                    batch.map((head, index) => [`b${index}`, head]),
+                  ),
+                },
+              ),
+            ).data.project;
+            if (answers === null) throw unavailable;
+            return batch.map((_, index) =>
+              headAnswer(answers[`b${index}`]?.nodes, project),
+            );
+          }),
+        pullRequest: async (number) => {
+          try {
+            const answer = decodeMergeRequestResponse(
+              await cli.graphql(project.host, mergeRequestQuery(number), {
+                fullPath: project.path,
+              }),
+            ).data.project;
+            return answer === null ||
+              answer.mergeRequest === null ||
+              !isProjectLink(answer.mergeRequest.webUrl, project.host)
+              ? undefined
+              : gitlabMergeRequest(answer.mergeRequest);
+          } catch {
+            return undefined;
+          }
+        },
+        avatar: async (author) => {
+          const { avatar_url } = decodeAvatar(
+            await cli.avatar(project.host, author.email),
+          );
+          return foundAvatar(
+            avatarUrl(avatar_url, [project.host, ...gravatarHosts], {
+              width: "40",
+            }),
+          );
+        },
+      };
     },
   };
 }
 
-function accountRepositories(
+async function accountRepositories(
   cli: GitLabCli,
   { host, account }: GitHostAccount,
-): Effect.Effect<readonly HostRepositories[], PullRequestsUnavailable> {
-  return Effect.gen(function* () {
-    const ssh = (yield* cli.protocol(host)) !== "https";
-    const projects = yield* readRepositoryPages((page) =>
-      cli.repositories(host, page).pipe(Effect.flatMap(decodeProjectPage)),
-    );
-    return [
-      {
-        kind: "gitlab" as const,
-        host,
-        account,
-        repositories: projects.map((project) =>
-          cloneableRepository({
-            name: project.path_with_namespace,
-            url: ssh ? project.ssh_url_to_repo : project.http_url_to_repo,
-            private: project.visibility !== "public",
-            description: project.description,
-            updatedAt: project.last_activity_at,
-          }),
-        ),
-      },
-    ];
-  });
+): Promise<readonly HostRepositories[]> {
+  const ssh = (await cli.protocol(host)) !== "https";
+  const projects = await readRepositoryPages(async (page) =>
+    decodeProjectPage(await cli.repositories(host, page)),
+  );
+  return [
+    {
+      kind: "gitlab" as const,
+      host,
+      account,
+      repositories: projects.map((project) =>
+        cloneableRepository({
+          name: project.path_with_namespace,
+          url: ssh ? project.ssh_url_to_repo : project.http_url_to_repo,
+          private: project.visibility !== "public",
+          description: project.description,
+          updatedAt: project.last_activity_at,
+        }),
+      ),
+    },
+  ];
 }
 
 const decodeAvatar = decodeHostJson(
-  Schema.Struct({ avatar_url: Schema.NullOr(Schema.String) }),
+  z.object({ avatar_url: z.string().nullable() }),
 );
 
 const decodeProjectPage = decodeHostJson(
-  Schema.Array(
-    Schema.Struct({
-      path_with_namespace: Schema.String,
-      visibility: Schema.String,
-      description: Schema.NullOr(Schema.String),
-      last_activity_at: Schema.NullOr(Schema.String),
-      ssh_url_to_repo: Schema.String,
-      http_url_to_repo: Schema.String,
+  z.array(
+    z.object({
+      path_with_namespace: z.string(),
+      visibility: z.string(),
+      description: z.string().nullable(),
+      last_activity_at: z.string().nullable(),
+      ssh_url_to_repo: z.string(),
+      http_url_to_repo: z.string(),
     }),
   ),
 );
@@ -309,39 +277,34 @@ const mergeRequestFragment = `fragment mergeRequest on MergeRequest {
   headPipeline { status }
 }`;
 
-const MergeRequestNode = Schema.Struct({
-  iid: Schema.String,
-  webUrl: Schema.String,
-  title: Schema.String,
-  state: Schema.Literals(["opened", "closed", "locked", "merged"]),
-  draft: Schema.Boolean,
-  diffHeadSha: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  sourceProject: Schema.NullOr(Schema.Struct({ fullPath: Schema.String })),
-  headPipeline: Schema.NullOr(Schema.Struct({ status: Schema.String })),
+const MergeRequestNode = z.object({
+  iid: z.string(),
+  webUrl: z.string(),
+  title: z.string(),
+  state: z.enum(["opened", "closed", "locked", "merged"]),
+  draft: z.boolean(),
+  diffHeadSha: z.string().nullable().optional(),
+  sourceProject: z.object({ fullPath: z.string() }).nullable(),
+  headPipeline: z.object({ status: z.string() }).nullable(),
 });
-type MergeRequestNode = typeof MergeRequestNode.Type;
+type MergeRequestNode = z.infer<typeof MergeRequestNode>;
 
-const MergeRequests = Schema.Struct({
-  nodes: Schema.Array(MergeRequestNode),
-});
+const MergeRequests = z.object({ nodes: z.array(MergeRequestNode) });
 
-const decodeResponse = (output: string) =>
-  Schema.decodeUnknownEffect(
-    Schema.fromJsonString(
-      Schema.Struct({
-        data: Schema.Struct({
-          project: Schema.NullOr(Schema.Record(Schema.String, MergeRequests)),
-        }),
-      }),
-    ),
-  )(output).pipe(Effect.mapError(() => unavailable));
+const decodeResponse = decodeHostJson(
+  z.object({
+    data: z.object({
+      project: z.record(z.string(), MergeRequests).nullable(),
+    }),
+  }),
+);
 
 const decodeMergeRequestResponse = decodeHostJson(
-  Schema.Struct({
-    data: Schema.Struct({
-      project: Schema.NullOr(
-        Schema.Struct({ mergeRequest: Schema.NullOr(MergeRequestNode) }),
-      ),
+  z.object({
+    data: z.object({
+      project: z
+        .object({ mergeRequest: MergeRequestNode.nullable() })
+        .nullable(),
     }),
   }),
 );

@@ -10,9 +10,9 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Effect, Fiber } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import { createRepositoryCreation } from "#server/features/repository-catalog/create-repository.ts";
 import { createRepository, git } from "#tests-support/git.ts";
 import { waitForObservation } from "#tests-support/observation.ts";
 import { openTestEnvironment } from "#tests-support/server.ts";
@@ -25,13 +25,11 @@ describe("creating repositories", () => {
     const { routes } = await environment();
     const repositoryId = randomUUID();
 
-    const cloned = await Effect.runPromise(
-      routes.clone({
-        repositoryId,
-        url: pathToFileURL(remote).href,
-        path: join(root, "storefront"),
-      }),
-    );
+    const cloned = await routes.clone({
+      repositoryId,
+      url: pathToFileURL(remote).href,
+      path: join(root, "storefront"),
+    });
 
     expect(cloned).toMatchObject({
       id: repositoryId,
@@ -39,9 +37,9 @@ describe("creating repositories", () => {
       path: join(root, "storefront"),
     });
     expect(await git(cloned.path, "log", "--format=%s")).toBe("initial");
-    expect(
-      (await Effect.runPromise(routes.list())).repositories.map(({ id }) => id),
-    ).toEqual([repositoryId]);
+    expect((await routes.list()).repositories.map(({ id }) => id)).toEqual([
+      repositoryId,
+    ]);
   });
 
   it("refuses a folder that already holds files and leaves it alone", async () => {
@@ -52,17 +50,13 @@ describe("creating repositories", () => {
     await writeFile(join(destination, "notes.txt"), "keep");
     const { routes } = await environment();
 
-    const failure = await Effect.runPromise(
-      Effect.flip(
-        routes.clone({
-          repositoryId: randomUUID(),
-          url: pathToFileURL(remote).href,
-          path: destination,
-        }),
-      ),
-    );
-
-    expect(failure).toEqual({
+    await expect(
+      routes.clone({
+        repositoryId: randomUUID(),
+        url: pathToFileURL(remote).href,
+        path: destination,
+      }),
+    ).rejects.toEqual({
       _tag: "RepositoryNotCreated",
       reason: "DestinationNotEmpty",
     });
@@ -72,23 +66,24 @@ describe("creating repositories", () => {
   it("removes the half-cloned folder when the clone is cancelled", async () => {
     const root = await temporaryDirectory();
     const destination = join(root, "stalled");
-    const { routes } = await environment({
+    const { creation } = await environment({
       GIT_SSH_COMMAND: "cat >/dev/null #",
     });
+    const cancel = new AbortController();
 
-    const clone = Effect.runFork(
-      routes.clone({
+    const clone = creation.clone(
+      {
         repositoryId: randomUUID(),
         url: "ssh://git.example.test/stalled.git",
         path: destination,
-      }),
+      },
+      cancel.signal,
     );
     await waitForObservation(() => access(destination));
-    await Effect.runPromise(Fiber.interrupt(clone));
+    cancel.abort();
 
-    await waitForObservation(async () =>
-      expect(await exists(destination)).toBe(false),
-    );
+    await expect(clone).rejects.toBe(cancel.signal.reason);
+    expect(await exists(destination)).toBe(false);
   });
 
   it("initializes a folder that already holds files on the chosen branch", async () => {
@@ -98,9 +93,7 @@ describe("creating repositories", () => {
     await writeFile(join(folder, "README.md"), "# notes");
     const { routes } = await environment();
 
-    const created = await Effect.runPromise(
-      routes.initialize({ path: folder, branch: "trunk" }),
-    );
+    const created = await routes.initialize({ path: folder, branch: "trunk" });
 
     expect(created).toMatchObject({ name: "notes app", path: folder });
     expect(await git(folder, "symbolic-ref", "--short", "HEAD")).toBe("trunk");
@@ -113,17 +106,17 @@ describe("creating repositories", () => {
     await createRepository(outer);
     const { routes } = await environment();
 
-    const created = await Effect.runPromise(
-      routes.initialize({ path: join(root, "fresh"), branch: "main" }),
-    );
-    const nested = await Effect.runPromise(
-      Effect.flip(
-        routes.initialize({ path: join(outer, "nested"), branch: "main" }),
-      ),
-    );
+    const created = await routes.initialize({
+      path: join(root, "fresh"),
+      branch: "main",
+    });
+    const nested = routes.initialize({
+      path: join(outer, "nested"),
+      branch: "main",
+    });
 
     expect(created.path).toBe(join(root, "fresh"));
-    expect(nested).toEqual({
+    await expect(nested).rejects.toEqual({
       _tag: "RepositoryNotCreated",
       reason: "InsideRepository",
     });
@@ -134,15 +127,14 @@ describe("creating repositories", () => {
     const root = await temporaryDirectory();
     const { routes } = await environment();
 
-    const before = await Effect.runPromise(routes.defaults());
-    await Effect.runPromise(routes.setCloneFolder({ path: root }));
-    const missing = await Effect.runPromise(
-      Effect.flip(routes.setCloneFolder({ path: join(root, "missing") })),
-    );
+    const before = await routes.defaults();
+    await routes.setCloneFolder({ path: root });
 
     expect(before.cloneFolder).toBe(homedir());
-    expect((await Effect.runPromise(routes.defaults())).cloneFolder).toBe(root);
-    expect(missing).toEqual({
+    expect((await routes.defaults()).cloneFolder).toBe(root);
+    await expect(
+      routes.setCloneFolder({ path: join(root, "missing") }),
+    ).rejects.toEqual({
       _tag: "RepositoryPathRejected",
       reason: "NotFound",
     });
@@ -160,7 +152,10 @@ async function environment(gitEnvironment: Record<string, string> = {}) {
       stream: runner.stream,
     }),
   });
-  return { routes: opened.routes(RepositoryCatalogApi) };
+  return {
+    routes: opened.routes(RepositoryCatalogApi),
+    creation: createRepositoryCreation(opened),
+  };
 }
 
 async function bareRemote(root: string) {

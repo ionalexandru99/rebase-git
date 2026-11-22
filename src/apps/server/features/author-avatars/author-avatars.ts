@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { eq, lt } from "drizzle-orm";
-import { Effect, Semaphore } from "effect";
 import {
   AuthorAvatarsApi,
   type AuthorAvatarUnavailable,
@@ -11,11 +10,16 @@ import {
   type RepositoryDependencies,
   route,
 } from "#server/adapters/environment-transport/environment-routes.ts";
-import { runRepositoryGit } from "#server/adapters/local-git/git-commands.ts";
+import {
+  isGitFailed,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands.ts";
 import {
   type AvatarSource,
   foundAvatar,
   type HostAvatar,
+  isPullRequestsUnavailable,
+  withRequestSignal,
 } from "#server/features/source-control/git-host.ts";
 import type { SourceControl } from "#server/features/source-control/source-control.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
@@ -32,9 +36,7 @@ const unavailable: AuthorAvatarUnavailable = {
 const unanswered: HostAvatar = { answered: false };
 
 export interface AvatarImages {
-  readonly download: (
-    source: AvatarSource,
-  ) => Effect.Effect<string | undefined, AuthorAvatarUnavailable>;
+  readonly download: (source: AvatarSource) => Promise<string | undefined>;
 }
 
 export function authorAvatarsFeature({
@@ -48,15 +50,18 @@ export function authorAvatarsFeature({
   readonly context: EnvironmentContext;
   readonly sourceControl: SourceControl;
 }) {
-  const lookups = Semaphore.makeUnsafe(lookupsAtOnce);
+  const withLookup = createLimiter(lookupsAtOnce);
 
-  const hostAnswer = (directory: string, email: string) =>
-    Effect.gen(function* () {
-      const noreply = githubNoreplySource(email);
-      if (noreply !== undefined) return foundAvatar(noreply.url);
-      const found = yield* sourceControl.hostedRepository(directory);
-      if (found === undefined) return unanswered;
-      const commit = (yield* runRepositoryGit(git, directory, [
+  const hostAnswer = async (
+    directory: string,
+    email: string,
+  ): Promise<HostAvatar> => {
+    const noreply = githubNoreplySource(email);
+    if (noreply !== undefined) return foundAvatar(noreply.url);
+    const found = await sourceControl.hostedRepository(directory);
+    if (found === undefined) return unanswered;
+    const commit = (
+      await runRepositoryGit(git, directory, [
         "log",
         `--remotes=${found.remote}`,
         "-1",
@@ -64,80 +69,96 @@ export function authorAvatarsFeature({
         "--fixed-strings",
         "--regexp-ignore-case",
         `--author=<${email}>`,
-      ])).trim();
-      return commit === ""
-        ? unanswered
-        : yield* found.repository.avatar({ commit, email });
-    });
+      ])
+    ).trim();
+    return commit === ""
+      ? unanswered
+      : found.repository.avatar({ commit, email });
+  };
 
-  const lookup = (directory: string, email: string) =>
-    Effect.gen(function* () {
-      const host = yield* hostAnswer(directory, email);
-      const hosted =
-        host.answered && host.source !== undefined
-          ? yield* avatarImages.download(host.source)
-          : undefined;
-      const image =
-        hosted ?? (yield* avatarImages.download(gravatarSource(email))) ?? null;
-      return { image, answered: host.answered };
-    });
+  const lookup = async (directory: string, email: string) => {
+    const host = await hostAnswer(directory, email);
+    const hosted =
+      host.answered && host.source !== undefined
+        ? await avatarImages.download(host.source)
+        : undefined;
+    const image =
+      hosted ?? (await avatarImages.download(gravatarSource(email))) ?? null;
+    return { image, answered: host.answered };
+  };
 
   return {
     routes: [
-      route(AuthorAvatarsApi.read, ({ repositoryId, email }) =>
-        Effect.gen(function* () {
-          const repository = yield* access.repository(repositoryId);
+      route(AuthorAvatarsApi.read, async ({ repositoryId, email }) => {
+        try {
+          const repository = await access.repository(repositoryId);
           const key = email.trim().toLowerCase();
-          const cached = yield* readCached(context, key);
+          const cached = await readCached(context, key);
           if (cached !== undefined) return cached;
-          const { image, answered } = yield* lookups.withPermits(1)(
+          const { image, answered } = await withLookup(() =>
             lookup(repository.path, key),
           );
-          if (answered) yield* save(context, key, image);
+          if (answered) await save(context, key, image);
           return image;
-        }).pipe(
-          Effect.catchTags({
-            GitFailed: (failure) =>
-              Effect.fail(repositoryRejected("GitFailed", failure.detail)),
-            PullRequestsUnavailable: () => Effect.fail(unavailable),
-          }),
-        ),
-      ),
+        } catch (error) {
+          if (isGitFailed(error))
+            throw repositoryRejected("GitFailed", error.detail);
+          if (isPullRequestsUnavailable(error)) throw unavailable;
+          throw error;
+        }
+      }),
     ],
   } satisfies EnvironmentFeature;
 }
 
 export function createAvatarImages(): AvatarImages {
   return {
-    download: ({ url, authorization }) =>
-      Effect.tryPromise({
-        try: async (signal) => {
-          const response = await fetch(url, {
-            headers: {
-              accept: "image/*",
-              ...(authorization === undefined ? {} : { authorization }),
-            },
-            redirect: "manual",
-            signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
-          });
-          if (response.status === 429 || response.status >= 500)
-            throw unavailable;
-          const type = response.headers.get("content-type")?.split(";")[0];
-          if (
-            !response.ok ||
-            type === undefined ||
-            !/^image\/[\w.+-]+$/.test(type)
-          ) {
-            await response.body?.cancel();
-            return undefined;
-          }
-          const bytes = await readImage(response);
-          return bytes === undefined || bytes.length === 0
-            ? undefined
-            : `data:${type};base64,${bytes.toString("base64")}`;
-        },
-        catch: () => unavailable,
-      }),
+    download: async ({ url, authorization }) => {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            accept: "image/*",
+            ...(authorization === undefined ? {} : { authorization }),
+          },
+          redirect: "manual",
+          signal: withRequestSignal(AbortSignal.timeout(10_000)),
+        });
+        if (response.status === 429 || response.status >= 500)
+          throw unavailable;
+        const type = response.headers.get("content-type")?.split(";")[0];
+        if (
+          !response.ok ||
+          type === undefined ||
+          !/^image\/[\w.+-]+$/.test(type)
+        ) {
+          await response.body?.cancel();
+          return undefined;
+        }
+        const bytes = await readImage(response);
+        return bytes === undefined || bytes.length === 0
+          ? undefined
+          : `data:${type};base64,${bytes.toString("base64")}`;
+      } catch {
+        throw unavailable;
+      }
+    },
+  };
+}
+
+function createLimiter(permits: number) {
+  let running = 0;
+  const waiting: (() => void)[] = [];
+  return async <Value>(run: () => Promise<Value>) => {
+    if (running >= permits)
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    else running += 1;
+    try {
+      return await run();
+    } finally {
+      const next = waiting.shift();
+      if (next === undefined) running -= 1;
+      else next();
+    }
   };
 }
 
@@ -170,26 +191,26 @@ function gravatarSource(email: string): AvatarSource {
   return { url: `https://gravatar.com/avatar/${hash}?s=40&d=404` };
 }
 
-function readCached(context: EnvironmentContext, email: string) {
-  return context
-    .read("Could not read the author avatar", (database) =>
-      database
-        .select()
-        .from(authorAvatarTable)
-        .where(eq(authorAvatarTable.email, email))
-        .get(),
-    )
-    .pipe(
-      Effect.map((row) =>
-        row === undefined || row.expiresAt <= Date.now()
-          ? undefined
-          : row.image,
-      ),
-      Effect.orElseSucceed(() => undefined),
+async function readCached(context: EnvironmentContext, email: string) {
+  try {
+    const row = await context.read(
+      "Could not read the author avatar",
+      (database) =>
+        database
+          .select()
+          .from(authorAvatarTable)
+          .where(eq(authorAvatarTable.email, email))
+          .get(),
     );
+    return row === undefined || row.expiresAt <= Date.now()
+      ? undefined
+      : row.image;
+  } catch {
+    return undefined;
+  }
 }
 
-function save(
+async function save(
   context: EnvironmentContext,
   email: string,
   image: string | null,
@@ -200,7 +221,7 @@ function save(
     image,
     expiresAt: now + (image === null ? missingLifetime : foundLifetime),
   };
-  return context
+  await context
     .write("Could not save the author avatar", async (database) => {
       await database
         .delete(authorAvatarTable)
@@ -210,5 +231,5 @@ function save(
         .values(row)
         .onConflictDoUpdate({ target: authorAvatarTable.email, set: row });
     })
-    .pipe(Effect.ignore);
+    .catch(() => undefined);
 }

@@ -1,7 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import type { ReadChangeDiff } from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
   type GitCommandOptions,
@@ -23,145 +22,127 @@ import {
   resolveLargeFile,
 } from "#server/repository/comparison/read-object-file.ts";
 
-export function readChangeDiff(
+export async function readChangeDiff(
   git: GitCommandRunner,
   command: ReadChangeDiff,
   { base, previousPath }: { base: string; previousPath: string | null },
   index: GitCommandOptions = {},
 ) {
-  return Effect.gen(function* () {
-    yield* safeChangePath(command.worktreePath, command.path);
-    const [before, after] = yield* Effect.all(
-      [
-        objectFile(
-          git,
-          command.worktreePath,
-          previousPath ?? command.path,
-          command.section === "staged" ? { ...index, tree: base } : index,
-        ),
-        command.section === "staged"
-          ? objectFile(git, command.worktreePath, command.path, index)
-          : readWorktreeFile(git, command.worktreePath, command.path, index),
-      ],
-      { concurrency: 2 },
-    );
-    return buildChangeDiff(command.path, base, before, after, {
-      previousPath: previousPath ?? command.path,
-      whole: command.whole,
-    });
+  await safeChangePath(command.worktreePath, command.path);
+  const [before, after] = await Promise.all([
+    objectFile(
+      git,
+      command.worktreePath,
+      previousPath ?? command.path,
+      command.section === "staged" ? { ...index, tree: base } : index,
+    ),
+    command.section === "staged"
+      ? objectFile(git, command.worktreePath, command.path, index)
+      : readWorktreeFile(git, command.worktreePath, command.path, index),
+  ]);
+  return buildChangeDiff(command.path, base, before, after, {
+    previousPath: previousPath ?? command.path,
+    whole: command.whole,
   });
 }
 
-export function readWorktreeFile(
+export async function readWorktreeFile(
   git: GitCommandRunner,
   directory: string,
   path: string,
   index: GitCommandOptions = {},
 ) {
-  return Effect.gen(function* () {
-    const working = yield* worktreeFile(directory, path);
-    if (
-      !working.mode.startsWith("100") ||
-      working.content === null ||
-      binary(working.content)
-    )
-      return working;
-    return yield* resolveLargeFile(git, directory, {
-      ...working,
-      content: yield* cleanFileContent(
-        git,
-        index,
-        directory,
-        path,
-        working.content,
-      ),
-    });
+  const working = await worktreeFile(directory, path);
+  if (
+    !working.mode.startsWith("100") ||
+    working.content === null ||
+    binary(working.content)
+  )
+    return working;
+  return resolveLargeFile(git, directory, {
+    ...working,
+    content: await cleanFileContent(
+      git,
+      index,
+      directory,
+      path,
+      working.content,
+    ),
   });
 }
 
-function cleanFileContent(
+async function cleanFileContent(
   git: GitCommandRunner,
   index: GitCommandOptions,
   directory: string,
   path: string,
   content: Buffer,
 ) {
-  return Effect.gen(function* () {
-    if (
-      !content.includes(13) &&
-      !(yield* needsCleanFilter(git, index, directory, path))
-    )
-      return content;
-    return yield* Effect.scoped(
-      Effect.gen(function* () {
-        const objectDirectory = yield* scratchDirectory;
-        const oid = (yield* runRepositoryGit(
-          git,
-          directory,
-          ["hash-object", "-w", `--path=${path}`, "--stdin"],
-          { ...index, input: content.toString("utf8"), objectDirectory },
-        )).trim();
-        return Buffer.from(
-          yield* runRepositoryGit(git, directory, ["cat-file", "blob", oid], {
-            ...index,
-            objectDirectory,
-            outputEncoding: "base64",
-            maxOutputBytes: diffByteLimit,
-          }),
-          "base64",
-        );
+  if (
+    !content.includes(13) &&
+    !(await needsCleanFilter(git, index, directory, path))
+  )
+    return content;
+  const objectDirectory = await changeIo(() =>
+    mkdtemp(join(tmpdir(), "rebase-scratch-")),
+  );
+  try {
+    const oid = (
+      await runRepositoryGit(
+        git,
+        directory,
+        ["hash-object", "-w", `--path=${path}`, "--stdin"],
+        { ...index, input: content.toString("utf8"), objectDirectory },
+      )
+    ).trim();
+    return Buffer.from(
+      await runRepositoryGit(git, directory, ["cat-file", "blob", oid], {
+        ...index,
+        objectDirectory,
+        outputEncoding: "base64",
+        maxOutputBytes: diffByteLimit,
       }),
+      "base64",
     );
-  });
+  } finally {
+    await rm(objectDirectory, { recursive: true, force: true }).catch(
+      () => undefined,
+    );
+  }
 }
 
 const inactiveSafeCrlfValues = new Set(["false", "0", "no", "off", "warn"]);
 
-function needsCleanFilter(
+async function needsCleanFilter(
   git: GitCommandRunner,
   index: GitCommandOptions,
   directory: string,
   path: string,
 ) {
-  return Effect.all(
-    [
-      runRepositoryGit(
-        git,
-        directory,
-        ["check-attr", "-z", "--all", "--", path],
-        index,
-      ),
-      runRepositoryGit(
-        git,
-        directory,
-        ["config", "--default", "false", "--get", "core.safecrlf"],
-        index,
-      ),
-    ],
-    { concurrency: 2 },
-  ).pipe(
-    Effect.map(([attributes, safeCrlf]) => {
-      if (!inactiveSafeCrlfValues.has(safeCrlf.trim().toLowerCase()))
-        return true;
-      const fields = attributes.split("\0");
-      for (let i = 1; i < fields.length; i += 3) {
-        const attribute = fields[i];
-        if (
-          attribute === "filter" ||
-          attribute === "ident" ||
-          attribute === "working-tree-encoding"
-        )
-          return true;
-      }
-      return false;
-    }),
-  );
-}
-
-export const scratchDirectory = Effect.acquireRelease(
-  changeIo(() => mkdtemp(join(tmpdir(), "rebase-scratch-"))),
-  (path) =>
-    changeIo(() => rm(path, { recursive: true, force: true })).pipe(
-      Effect.ignore,
+  const [attributes, safeCrlf] = await Promise.all([
+    runRepositoryGit(
+      git,
+      directory,
+      ["check-attr", "-z", "--all", "--", path],
+      index,
     ),
-);
+    runRepositoryGit(
+      git,
+      directory,
+      ["config", "--default", "false", "--get", "core.safecrlf"],
+      index,
+    ),
+  ]);
+  if (!inactiveSafeCrlfValues.has(safeCrlf.trim().toLowerCase())) return true;
+  const fields = attributes.split("\0");
+  for (let i = 1; i < fields.length; i += 3) {
+    const attribute = fields[i];
+    if (
+      attribute === "filter" ||
+      attribute === "ident" ||
+      attribute === "working-tree-encoding"
+    )
+      return true;
+  }
+  return false;
+}

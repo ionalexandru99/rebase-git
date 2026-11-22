@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import type { RepositoryHistoryFailure } from "#contracts/repository-history/repository-history.contract.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
@@ -21,28 +20,37 @@ export function historyWireFailure(
     : { _tag: "GitFailed", reason: failure.reason };
 }
 
-export function findHistoryRepository(
+export async function findHistoryRepository(
   access: RepositoryAccess,
   repositoryId: string,
 ) {
-  return access
-    .repository(repositoryId)
-    .pipe(
-      Effect.mapError(
-        (error): RepositoryHistoryFailure =>
-          error._tag === "RepositoryRejected"
-            ? { _tag: "RepositoryMissing", repositoryId }
-            : { _tag: "GitFailed", reason: "Failed" },
-      ),
-    );
+  try {
+    return await access.repository(repositoryId);
+  } catch (error) {
+    throw isRepositoryRejected(error)
+      ? ({
+          _tag: "RepositoryMissing",
+          repositoryId,
+        } satisfies RepositoryHistoryFailure)
+      : error;
+  }
 }
 
 export function parseHistoryOutput<T>(parse: () => T) {
-  return Effect.try({
-    try: parse,
-    catch: (cause) =>
-      historyFailed(
-        cause instanceof Error ? cause.message : "Invalid Git history output",
-      ),
-  });
+  try {
+    return parse();
+  } catch (cause) {
+    throw historyFailed(
+      cause instanceof Error ? cause.message : "Invalid Git history output",
+    );
+  }
+}
+
+function isRepositoryRejected(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    error._tag === "RepositoryRejected"
+  );
 }

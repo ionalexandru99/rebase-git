@@ -1,5 +1,4 @@
 import { writeFile } from "node:fs/promises";
-import { Effect } from "effect";
 import {
   type ChooseConflict,
   type EditConflict,
@@ -32,94 +31,78 @@ import type {
 
 const specialModes = new Set(["120000", "160000"]);
 
-function editConflict(git: GitCommandRunner, input: EditConflict) {
-  return Effect.gen(function* () {
-    const snapshot = yield* requireConflict(
-      git,
-      input.worktreePath,
-      input.path,
-      input.revision,
+async function editConflict(git: GitCommandRunner, input: EditConflict) {
+  const snapshot = await requireConflict(
+    git,
+    input.worktreePath,
+    input.path,
+    input.revision,
+  );
+  if (specialModes.has(snapshot.worktree.mode))
+    throw conflictFailed(
+      "Unsupported",
+      "Links and submodules can only be resolved as a whole file.",
     );
-    if (specialModes.has(snapshot.worktree.mode))
-      return yield* Effect.fail(
-        conflictFailed(
-          "Unsupported",
-          "Links and submodules can only be resolved as a whole file.",
-        ),
-      );
-    const content =
-      snapshot.worktree.identity === "missing"
-        ? Buffer.alloc(0)
-        : snapshot.text?.content;
-    if (content === undefined)
-      return yield* Effect.fail(
-        conflictFailed(
-          "Unsupported",
-          "The working file is not text. Resolve it as a whole file.",
-        ),
-      );
-    const edited = replaceLines(content, input.line, input.count, input.text);
-    if (edited === null)
-      return yield* Effect.fail(
-        conflictFailed(
-          "Stale",
-          "The file changed since it was loaded. Review the refreshed conflict.",
-        ),
-      );
-    const target = yield* safeChangePath(input.worktreePath, input.path);
-    yield* changeIo(() => writeFile(target, edited));
-    return yield* readConflictDocument(git, input);
-  });
+  const content =
+    snapshot.worktree.identity === "missing"
+      ? Buffer.alloc(0)
+      : snapshot.text?.content;
+  if (content === undefined)
+    throw conflictFailed(
+      "Unsupported",
+      "The working file is not text. Resolve it as a whole file.",
+    );
+  const edited = replaceLines(content, input.line, input.count, input.text);
+  if (edited === null)
+    throw conflictFailed(
+      "Stale",
+      "The file changed since it was loaded. Review the refreshed conflict.",
+    );
+  const target = await safeChangePath(input.worktreePath, input.path);
+  await changeIo(() => writeFile(target, edited));
+  return readConflictDocument(git, input);
 }
 
-function chooseWholeFile(
+async function chooseWholeFile(
   git: GitCommandRunner,
   coordination: RepositoryCoordination,
   input: ChooseConflict,
 ) {
-  return Effect.gen(function* () {
-    const snapshot = yield* requireConflict(
-      git,
-      input.worktreePath,
-      input.path,
-      input.revision,
+  const snapshot = await requireConflict(
+    git,
+    input.worktreePath,
+    input.path,
+    input.revision,
+  );
+  if (!snapshot.file.choices.includes(input.choice))
+    throw conflictFailed(
+      "Unsupported",
+      "This choice is not available for this conflict.",
     );
-    if (!snapshot.file.choices.includes(input.choice))
-      return yield* Effect.fail(
-        conflictFailed(
-          "Unsupported",
-          "This choice is not available for this conflict.",
-        ),
-      );
-    for (const args of choiceCommands(input.choice, input.path))
-      yield* runRepositoryGit(git, input.worktreePath, args);
-    return yield* readConflictList(git, coordination, input.worktreePath);
-  });
+  for (const args of choiceCommands(input.choice, input.path))
+    await runRepositoryGit(git, input.worktreePath, args);
+  return readConflictList(git, coordination, input.worktreePath);
 }
 
-function stageConflict(
+async function stageConflict(
   git: GitCommandRunner,
   coordination: RepositoryCoordination,
   input: StageConflict,
 ) {
-  return Effect.gen(function* () {
-    const snapshot = yield* requireConflict(
-      git,
-      input.worktreePath,
-      input.path,
-      input.revision,
+  const snapshot = await requireConflict(
+    git,
+    input.worktreePath,
+    input.path,
+    input.revision,
+  );
+  const open = snapshot.file.openRegions;
+  if (open > 0 && !input.allowMarkers)
+    throw conflictFailed(
+      "Markers",
+      `${open} conflict ${open === 1 ? "block remains" : "blocks remain"} in this file.`,
     );
-    const open = snapshot.file.openRegions;
-    if (open > 0 && !input.allowMarkers)
-      return yield* Effect.fail(
-        conflictFailed(
-          "Markers",
-          `${open} conflict ${open === 1 ? "block remains" : "blocks remain"} in this file.`,
-        ),
-      );
-    yield* runRepositoryGit(git, input.worktreePath, ["add", "--", input.path]);
-    return yield* readConflictList(git, coordination, input.worktreePath);
-  });
+  await runRepositoryGit(git, input.worktreePath, ["add", "--", input.path]);
+  return readConflictList(git, coordination, input.worktreePath);
 }
 
 function choiceCommands(choice: WholeFileChoice, path: string) {

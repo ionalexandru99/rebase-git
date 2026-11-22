@@ -1,7 +1,6 @@
 import { access, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import {
@@ -36,20 +35,16 @@ describe("repository worktrees", () => {
     const fresh = join(root, "main.worktrees", "feature-new");
     const topic = join(root, "main.worktrees", "topic");
 
-    const created = await run(
-      createWorktree(runner, {
-        ...scope,
-        path: fresh,
-        start: { _tag: "NewBranch", name: "feature/new", startPoint: head },
-      }),
-    );
-    await run(
-      createWorktree(runner, {
-        ...scope,
-        path: topic,
-        start: { _tag: "Branch", name: "topic" },
-      }),
-    );
+    const created = await createWorktree(runner, {
+      ...scope,
+      path: fresh,
+      start: { _tag: "NewBranch", name: "feature/new", startPoint: head },
+    });
+    await createWorktree(runner, {
+      ...scope,
+      path: topic,
+      start: { _tag: "Branch", name: "topic" },
+    });
 
     expect(created.worktreePath).toBe(fresh);
     expect(await git(fresh, "branch", "--show-current")).toBe("feature/new");
@@ -87,7 +82,7 @@ describe("repository worktrees", () => {
     await git(topic, "add", "plan.md");
     const target = { repositoryId, worktreePath: main, target: topic };
 
-    expect(await run(readWorktreeStatus(runner, main))).toEqual({
+    expect(await readWorktreeStatus(runner, main)).toEqual({
       worktrees: [
         { path: main, unstaged: 0, staged: 0 },
         { path: topic, unstaged: 1, staged: 1 },
@@ -100,7 +95,7 @@ describe("repository worktrees", () => {
       fail(removeWorktree(runner, { ...target, target: main, changes: 0 })),
     ).resolves.toEqual({ _tag: "WorktreeRejected", reason: "Main" });
 
-    await run(removeWorktree(runner, { ...target, changes: 2 }));
+    await removeWorktree(runner, { ...target, changes: 2 });
 
     await expect(access(topic)).rejects.toThrow();
     expect(await git(main, "branch", "--list", "topic")).toBe("topic");
@@ -121,31 +116,29 @@ describe("repository worktrees", () => {
 
     await removeTemporaryDirectory(usb);
 
-    expect(await run(readWorktreeStatus(runner, main))).toEqual({
+    expect(await readWorktreeStatus(runner, main)).toEqual({
       worktrees: [{ path: main, unstaged: 0, staged: 0 }],
     });
     await expect(
       fail(removeWorktree(runner, { ...target, changes: 0 })),
     ).resolves.toEqual({ _tag: "WorktreeRejected", reason: "Locked" });
-    await run(unlockWorktree(runner, target));
-    expect((await run(readWorktrees(runner, main)))[1]).toMatchObject({
+    await unlockWorktree(runner, target);
+    expect((await readWorktrees(runner, main))[1]).toMatchObject({
       missing: true,
     });
-    await run(removeWorktree(runner, { ...target, changes: 0 }));
+    await removeWorktree(runner, { ...target, changes: 0 });
 
-    expect(await run(readWorktrees(runner, main))).toHaveLength(1);
-    expect(await run(readWorktreeFolder(runner, main))).toMatchObject({
+    expect(await readWorktrees(runner, main)).toHaveLength(1);
+    expect(await readWorktreeFolder(runner, main)).toMatchObject({
       folder: join(root, "main.worktrees"),
       configured: false,
     });
-    await run(
-      setWorktreeFolder(runner, {
-        repositoryId,
-        worktreePath: main,
-        folder: join(root, "trees"),
-      }),
-    );
-    expect(await run(readWorktreeFolder(runner, main))).toMatchObject({
+    await setWorktreeFolder(runner, {
+      repositoryId,
+      worktreePath: main,
+      folder: join(root, "trees"),
+    });
+    expect(await readWorktreeFolder(runner, main)).toMatchObject({
       folder: join(root, "trees"),
       configured: true,
     });
@@ -160,10 +153,6 @@ async function fixture(options?: { readonly branches?: readonly string[] }) {
   return { root, main };
 }
 
-function run<A, E>(effect: Effect.Effect<A, E>) {
-  return Effect.runPromise(effect);
-}
-
-function fail<A, E>(effect: Effect.Effect<A, E>) {
-  return Effect.runPromise(Effect.flip(effect));
+function fail(promise: Promise<unknown>) {
+  return promise.catch((failure: unknown) => failure);
 }

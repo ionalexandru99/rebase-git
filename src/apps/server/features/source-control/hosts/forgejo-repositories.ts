@@ -1,5 +1,4 @@
-import { Effect, Schema } from "effect";
-import type { PullRequestsUnavailable } from "#contracts/pull-requests/pull-requests.contract.ts";
+import { z } from "zod";
 import type { HostRepositories } from "#contracts/source-control/source-control.contract.ts";
 import {
   cloneableRepository,
@@ -13,19 +12,19 @@ import type {
 
 const pageSize = 50;
 
-export function forgejoCloneable(
+export async function forgejoCloneable(
   cli: TeaCli,
   logins: readonly TeaLogin[],
-): Effect.Effect<readonly HostRepositories[]> {
-  return Effect.forEach(
-    uniqueAccounts(logins),
-    (login) =>
-      cloneableRepositories(cli, login).pipe(
-        Effect.map((list) => [list]),
-        Effect.orElseSucceed(() => []),
+): Promise<readonly HostRepositories[]> {
+  const lists = await Promise.all(
+    uniqueAccounts(logins).map((login) =>
+      cloneableRepositories(cli, login).then(
+        (list) => [list],
+        () => [],
       ),
-    { concurrency: "unbounded" },
-  ).pipe(Effect.map((lists) => lists.flat()));
+    ),
+  );
+  return lists.flat();
 }
 
 function uniqueAccounts(logins: readonly TeaLogin[]) {
@@ -39,51 +38,46 @@ function uniqueAccounts(logins: readonly TeaLogin[]) {
   );
 }
 
-function cloneableRepositories(
+async function cloneableRepositories(
   cli: TeaCli,
   login: TeaLogin,
-): Effect.Effect<HostRepositories, PullRequestsUnavailable> {
-  return Effect.gen(function* () {
-    const [details, user] = yield* Effect.all(
-      [
-        cli.login(login.name),
-        cli.api(login.name, "/user").pipe(Effect.flatMap(decodeUser)),
-      ],
-      { concurrency: "unbounded" },
-    );
-    const ssh = /^\s*SSH Key:/m.test(details);
-    const repositories = yield* readRepositoryPages(
-      (page) => readRepositoryPage(cli, login.name, user.id, page),
-      pageSize,
-    );
-    return {
-      kind: "forgejo" as const,
-      host: login.server,
-      account: login.account,
-      repositories: repositories.map((repository) =>
-        cloneableRepository({
-          name: repository.full_name,
-          url:
-            ssh && repository.ssh_url !== ""
-              ? repository.ssh_url
-              : repository.clone_url,
-          private: repository.private,
-          description: repository.description,
-          updatedAt: repository.updated_at,
-        }),
-      ),
-    };
-  });
+): Promise<HostRepositories> {
+  const [details, user] = await Promise.all([
+    cli.login(login.name),
+    cli.api(login.name, "/user").then(decodeUser),
+  ]);
+  const ssh = /^\s*SSH Key:/m.test(details);
+  const repositories = await readRepositoryPages(
+    (page) => readRepositoryPage(cli, login.name, user.id, page),
+    pageSize,
+  );
+  return {
+    kind: "forgejo" as const,
+    host: login.server,
+    account: login.account,
+    repositories: repositories.map((repository) =>
+      cloneableRepository({
+        name: repository.full_name,
+        url:
+          ssh && repository.ssh_url !== ""
+            ? repository.ssh_url
+            : repository.clone_url,
+        private: repository.private,
+        description: repository.description,
+        updatedAt: repository.updated_at,
+      }),
+    ),
+  };
 }
 
-function readRepositoryPage(
+async function readRepositoryPage(
   cli: TeaCli,
   login: string,
   user: number,
   page: number,
 ) {
-  return cli
-    .api(
+  const { data } = decodeRepositoryPage(
+    await cli.api(
       login,
       `/repos/search?${new URLSearchParams({
         uid: String(user),
@@ -92,25 +86,23 @@ function readRepositoryPage(
         limit: String(pageSize),
         page: String(page),
       })}`,
-    )
-    .pipe(
-      Effect.flatMap(decodeRepositoryPage),
-      Effect.map(({ data }) => data),
-    );
+    ),
+  );
+  return data;
 }
 
-const decodeUser = decodeHostJson(Schema.Struct({ id: Schema.Int }));
+const decodeUser = decodeHostJson(z.object({ id: z.number().int() }));
 
 const decodeRepositoryPage = decodeHostJson(
-  Schema.Struct({
-    data: Schema.Array(
-      Schema.Struct({
-        full_name: Schema.String,
-        private: Schema.Boolean,
-        description: Schema.String,
-        updated_at: Schema.String,
-        clone_url: Schema.String,
-        ssh_url: Schema.String,
+  z.object({
+    data: z.array(
+      z.object({
+        full_name: z.string(),
+        private: z.boolean(),
+        description: z.string(),
+        updated_at: z.string(),
+        clone_url: z.string(),
+        ssh_url: z.string(),
       }),
     ),
   }),

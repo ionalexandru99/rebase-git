@@ -1,7 +1,6 @@
 import { mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import { FileBlameApi } from "#contracts/file-blame/file-blame.contract.ts";
 import { createRepository, git } from "#tests-support/git.ts";
@@ -92,9 +91,7 @@ async function blameClient(path: string) {
   const routes = environment.routes(FileBlameApi);
   return {
     read: (file: string, revision: string | null) =>
-      Effect.runPromise(
-        routes.read({ repositoryId, worktreePath: path, path: file, revision }),
-      ),
+      routes.read({ repositoryId, worktreePath: path, path: file, revision }),
   };
 }
 

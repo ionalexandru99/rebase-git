@@ -1,16 +1,14 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { isIPv4 } from "node:net";
-import { Effect } from "effect";
 import type { EnvironmentAccessFailure } from "#contracts/environment-authorization/environment-authorization.contract.ts";
 import { environmentSubprotocol } from "#contracts/environment-connection/environment-rpc.contract.ts";
-import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.ts";
+import { environmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.ts";
 
 const loopbackAddresses = ["127.0.0.1", "[::1]"];
 
 export function validateRequestHost(request: IncomingMessage) {
-  return requestHost(request) === undefined
-    ? failAuthorization({ _tag: "InvalidHost" })
-    : Effect.void;
+  if (requestHost(request) === undefined)
+    throw environmentAuthorizationError({ _tag: "InvalidHost" });
 }
 
 export function validateRequestOrigin(
@@ -18,10 +16,9 @@ export function validateRequestOrigin(
   required: boolean,
 ) {
   const origin = request.headers.origin;
-  if (origin === undefined && !required) return Effect.void;
-  return origin === expectedRequestOrigin(request)
-    ? Effect.void
-    : failAuthorization({ _tag: "InvalidOrigin" });
+  if (origin === undefined && !required) return;
+  if (origin !== expectedRequestOrigin(request))
+    throw environmentAuthorizationError({ _tag: "InvalidOrigin" });
 }
 
 export function expectedRequestOrigin(request: IncomingMessage) {
@@ -105,8 +102,4 @@ function listeningHosts(request: IncomingMessage) {
   return loopbackAddresses.includes(address)
     ? [`${address}:${localPort}`, `localhost:${localPort}`]
     : [`${address}:${localPort}`];
-}
-
-function failAuthorization(failure: EnvironmentAuthorizationError["failure"]) {
-  return Effect.fail(new EnvironmentAuthorizationError({ failure }));
 }

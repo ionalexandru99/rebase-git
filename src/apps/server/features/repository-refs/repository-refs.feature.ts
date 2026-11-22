@@ -1,8 +1,4 @@
-import { Effect } from "effect";
-import {
-  type RepositoryRejected,
-  repositoryRejected,
-} from "#contracts/git/git-failures.contract.ts";
+import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   type CreateRepositoryBranch,
   RepositoryBranchesApi,
@@ -19,6 +15,7 @@ import {
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
+  isGitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures.ts";
@@ -62,98 +59,94 @@ export function repositoryRefsFeature(
     readonly events: EnvironmentEventPublisher;
     readonly changes: RepositoryChangePublisher;
   },
-) {
-  return Effect.gen(function* () {
-    const { access, git, changes } = dependencies;
-    const { command, query } = repositoryRoutes(dependencies);
-    const readRefs = (repositoryId: string) =>
-      Effect.gen(function* () {
-        const repository = yield* access.repository(repositoryId);
-        yield* changes.watch(repository);
-        return yield* readRepositoryRefs(git, repository);
-      }).pipe(
-        Effect.mapError((error) =>
-          error._tag === "RepositoryRejected"
-            ? error
-            : repositoryRejected(
-                "GitFailed",
-                error._tag === "GitFailed"
-                  ? error.detail
-                  : "The repository catalog is unavailable.",
-              ),
-        ),
-      );
-    const branches = RepositoryBranchesApi;
-    return {
-      routes: [
-        route(RepositoryRefsApi.read, (input) => readRefs(input.repositoryId)),
-        command(
-          RepositoryRefsApi.checkout,
-          {
-            name: "checkout",
-            locks: { refs: "wait", worktree: "wait" },
-            duringOperation: "block",
-          },
-          (input, git) =>
-            checkoutRepositoryRef(git, access, dependencies.lfs, input),
-        ),
-        command(branches.create, branchPolicy, (input, git) =>
-          createBranch(git, access, input),
-        ),
-        command(branches.rename, branchPolicy, (input, git) =>
-          renameBranch(git, access, input),
-        ),
-        command(branches.delete, branchPolicy, (input, git) =>
-          deleteBranches(git, access, input),
-        ),
-        query(branches.unmerged, (input, git) =>
-          readUnmergedBranches(git, input),
-        ),
-        command(RepositoryTagsApi.create, tagPolicy, (input, git) =>
-          createTag(git, input),
-        ),
-        command(RepositoryTagsApi.delete, tagPolicy, (input, git) =>
-          deleteTag(git, input),
-        ),
-        query(RepositoryTagsApi.annotation, (input, git) =>
-          readTagAnnotation(git, input),
-        ),
-      ],
-    } satisfies EnvironmentFeature;
-  });
+): EnvironmentFeature {
+  const { access, git, changes } = dependencies;
+  const { command, query } = repositoryRoutes(dependencies);
+  const readRefs = async (repositoryId: string) => {
+    const repository = await access.repository(repositoryId);
+    await changes.watch(repository);
+    try {
+      return await readRepositoryRefs(git, repository);
+    } catch (error) {
+      throw isGitFailed(error)
+        ? repositoryRejected("GitFailed", error.detail)
+        : error;
+    }
+  };
+  const branches = RepositoryBranchesApi;
+  return {
+    routes: [
+      route(RepositoryRefsApi.read, (input) => readRefs(input.repositoryId)),
+      command(
+        RepositoryRefsApi.checkout,
+        {
+          name: "checkout",
+          locks: { refs: "wait", worktree: "wait" },
+          duringOperation: "block",
+        },
+        (input, git) =>
+          checkoutRepositoryRef(git, access, dependencies.lfs, input),
+      ),
+      command(branches.create, branchPolicy, (input, git) =>
+        createBranch(git, access, input),
+      ),
+      command(branches.rename, branchPolicy, (input, git) =>
+        renameBranch(git, access, input),
+      ),
+      command(branches.delete, branchPolicy, (input, git) =>
+        deleteBranches(git, access, input),
+      ),
+      query(branches.unmerged, (input, git) =>
+        readUnmergedBranches(git, input),
+      ),
+      command(RepositoryTagsApi.create, tagPolicy, (input, git) =>
+        createTag(git, input),
+      ),
+      command(RepositoryTagsApi.delete, tagPolicy, (input, git) =>
+        deleteTag(git, input),
+      ),
+      query(RepositoryTagsApi.annotation, (input, git) =>
+        readTagAnnotation(git, input),
+      ),
+    ],
+  };
 }
 
-function createBranch(
+async function createBranch(
   git: GitCommandRunner,
   access: RepositoryAccess,
   command: CreateRepositoryBranch,
 ) {
   const { name, startPoint, track, worktreePath } = command;
-  return Effect.gen(function* () {
-    yield* requireValidBranchName(git, worktreePath, name);
-    if (track !== undefined)
-      yield* requireRemoteBranch(git, worktreePath, track);
-    yield* runRepositoryGit(
+  await requireValidBranchName(git, worktreePath, name);
+  if (track !== undefined) await requireRemoteBranch(git, worktreePath, track);
+  try {
+    await runRepositoryGit(
       git,
       worktreePath,
       ["branch", "--no-track", name, startPoint],
       refCommand,
-    ).pipe(
-      Effect.mapError(
-        (error): RepositoryBranchesOperationFailure | RepositoryRejected =>
-          /not a valid object name/i.test(error.detail)
-            ? { _tag: "RefMissing", name: startPoint }
-            : branchWriteFailed(error, name),
-      ),
     );
-    if (track !== undefined)
-      yield* runRepositoryGit(
+  } catch (error) {
+    if (!isGitFailed(error)) throw error;
+    throw /not a valid object name/i.test(error.detail)
+      ? ({
+          _tag: "RefMissing",
+          name: startPoint,
+        } satisfies RepositoryBranchesOperationFailure)
+      : branchWriteFailed(error, name);
+  }
+  if (track !== undefined)
+    try {
+      await runRepositoryGit(
         git,
         worktreePath,
         setUpstreamArguments(name, track),
         refCommand,
-      ).pipe(Effect.mapError((error) => branchWriteFailed(error, name)));
-    const worktrees = yield* access.worktrees(worktreePath);
-    return yield* readLocalBranch(git, worktreePath, worktrees, name);
-  });
+      );
+    } catch (error) {
+      throw isGitFailed(error) ? branchWriteFailed(error, name) : error;
+    }
+  const worktrees = await access.worktrees(worktreePath);
+  return readLocalBranch(git, worktreePath, worktrees, name);
 }

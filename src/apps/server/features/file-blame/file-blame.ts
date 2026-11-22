@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import {
   type BlameCommit,
   type BlameRange,
@@ -13,6 +12,7 @@ import {
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
+  isGitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import { previewByteLimit } from "#server/repository/comparison/read-blobs.ts";
@@ -40,33 +40,39 @@ export function fileBlameFeature(
   };
 }
 
-function readFileBlame(
+async function readFileBlame(
   git: GitCommandRunner,
   { worktreePath, path, revision }: ReadFileBlame,
 ) {
-  return runRepositoryGit(
-    git,
-    worktreePath,
-    [
-      "blame",
-      "--porcelain",
-      "-w",
-      "-M",
-      ...(revision === null ? [] : [revision]),
-      "--",
-      path,
-    ],
-    {
-      globalArguments: ["--no-replace-objects", "-c", "core.quotePath=false"],
-      timeoutMilliseconds: 120_000,
-    },
-  ).pipe(
-    Effect.map(parseFileBlame),
-    Effect.catchIf(
-      (error) => error.reason === "OutputTooLarge",
-      () => Effect.succeed(unblamable("large")),
-    ),
-  );
+  try {
+    return parseFileBlame(
+      await runRepositoryGit(
+        git,
+        worktreePath,
+        [
+          "blame",
+          "--porcelain",
+          "-w",
+          "-M",
+          ...(revision === null ? [] : [revision]),
+          "--",
+          path,
+        ],
+        {
+          globalArguments: [
+            "--no-replace-objects",
+            "-c",
+            "core.quotePath=false",
+          ],
+          timeoutMilliseconds: 120_000,
+        },
+      ),
+    );
+  } catch (error) {
+    if (isGitFailed(error) && error.reason === "OutputTooLarge")
+      return unblamable("large");
+    throw error;
+  }
 }
 
 function parseFileBlame(output: string): FileBlame {

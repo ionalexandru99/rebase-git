@@ -5,44 +5,43 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir, release } from "node:os";
 
 import { fileURLToPath } from "node:url";
-import { Deferred, Effect } from "effect";
 import { environmentProtocol } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import { resolveHostAddress } from "#server/app/server/host-address.ts";
 import {
   type EnvironmentServerOptions,
   startEnvironmentServer,
 } from "#server/app/server/start-environment-server.ts";
+import { errorMessage } from "#server/error-inspection.ts";
 
 declare const REBASE_PRODUCT_VERSION: string;
 
 const curlCouldNotConnect = 7;
-const windowsReachDeadline = "10 seconds";
+const windowsReachDeadlineMilliseconds = 10_000;
 
 const usage =
   "Usage: rebase [serve] [--host <ip-address|lan|tailscale>] [--port <1-65535>]";
 
-export function runCli(arguments_ = process.argv.slice(2)) {
+export async function runCli(arguments_ = process.argv.slice(2)) {
   if (arguments_.includes("--help") || arguments_.includes("-h")) {
-    return writeOutput(usage).pipe(Effect.as(0));
+    process.stdout.write(`${usage}\n`);
+    return 0;
   }
   if (arguments_.includes("--version") || arguments_.includes("-v")) {
-    return writeOutput(versionOutput()).pipe(Effect.as(0));
+    process.stdout.write(`${versionOutput()}\n`);
+    return 0;
   }
 
-  const program = Effect.try({
-    try: () => parseServeArguments(arguments_),
-    catch: normalizeError,
-  }).pipe(Effect.flatMap(serve));
-
-  return Effect.matchEffect(program, {
-    onFailure: (error) =>
-      writeFailure(`rebase serve failed: ${error.message}`).pipe(Effect.as(1)),
-    onSuccess: () => Effect.succeed(0),
-  });
+  try {
+    await serve(parseServeArguments(arguments_));
+    return 0;
+  } catch (error) {
+    process.stderr.write(`rebase serve failed: ${errorMessage(error)}\n`);
+    return 1;
+  }
 }
 
 export async function main() {
-  process.exitCode = await Effect.runPromise(runCli());
+  process.exitCode = await runCli();
 }
 
 function parseServeArguments(arguments_: string[]): EnvironmentServerOptions {
@@ -80,67 +79,38 @@ function parsePort(value: string) {
   return port;
 }
 
-function serve(options: EnvironmentServerOptions) {
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const shutdown = yield* acquireShutdownSignal();
-      const server = yield* Effect.raceFirst(
-        startEnvironmentServer(options),
-        Deferred.await(shutdown),
-      );
-      if (server === undefined) return;
-
+async function serve(options: EnvironmentServerOptions) {
+  const shutdown = new AbortController();
+  const stop = () => shutdown.abort();
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  try {
+    const server = await startEnvironmentServer(options);
+    try {
+      if (shutdown.signal.aborted) return;
       const origin =
         options.host === undefined
           ? `http://localhost:${server.port}`
           : server.origin;
       const pairingUrl = server.pairingUrl.replace(server.origin, origin);
-      yield* Effect.sync(() => {
-        process.stdout.write(`Listening URL: ${origin}\n`);
-        process.stdout.write(`Pairing URL: ${pairingUrl}\n`);
-      });
-      yield* Effect.forkScoped(openDefaultBrowser(pairingUrl));
-      yield* Deferred.await(shutdown);
-    }),
-  );
+      process.stdout.write(`Listening URL: ${origin}\n`);
+      process.stdout.write(`Pairing URL: ${pairingUrl}\n`);
+      void openDefaultBrowser(pairingUrl, shutdown.signal);
+      await aborted(shutdown.signal);
+    } finally {
+      await server.close();
+    }
+  } finally {
+    process.off("SIGINT", stop);
+    process.off("SIGTERM", stop);
+  }
 }
 
-function acquireShutdownSignal() {
-  return Effect.gen(function* () {
-    const shutdown = yield* Deferred.make<void>();
-    yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        const stop = () => {
-          Deferred.doneUnsafe(shutdown, Effect.void);
-        };
-        process.once("SIGINT", stop);
-        process.once("SIGTERM", stop);
-        return stop;
-      }),
-      (stop) =>
-        Effect.sync(() => {
-          process.off("SIGINT", stop);
-          process.off("SIGTERM", stop);
-        }),
-    );
-    return shutdown;
+function aborted(signal: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    if (signal.aborted) resolve();
+    else signal.addEventListener("abort", () => resolve(), { once: true });
   });
-}
-
-function writeOutput(line: string) {
-  return Effect.sync(() => {
-    process.stdout.write(`${line}\n`);
-  });
-}
-
-function writeFailure(line: string) {
-  return Effect.sync(() => {
-    process.stderr.write(`${line}\n`);
-  });
-}
-
-function normalizeError(error: unknown) {
-  return error instanceof Error ? error : new Error(String(error));
 }
 
 function resolveBrowserAssetsRoot() {
@@ -180,58 +150,53 @@ if (
   await main();
 }
 
-function openDefaultBrowser(url: string) {
-  if (process.env.BROWSER === "none") return Effect.void;
+async function openDefaultBrowser(url: string, shutdown: AbortSignal) {
+  if (process.env.BROWSER === "none") return;
   if (process.platform === "darwin") return launchBrowser("open", [url]);
   if (process.platform === "win32") {
     return launchBrowser("cmd.exe", windowsStartArguments(url));
   }
   if (isWindowsSubsystemForLinux()) {
-    return untilWindowsReaches(url).pipe(
-      Effect.andThen(launchBrowser("cmd.exe", windowsStartArguments(url))),
-    );
+    await untilWindowsReaches(url, shutdown);
+    if (shutdown.aborted) return;
+    return launchBrowser("cmd.exe", windowsStartArguments(url));
   }
   return launchBrowser("xdg-open", [url]);
 }
 
 function launchBrowser(command: string, arguments_: readonly string[]) {
-  return Effect.sync(() => {
-    try {
-      const child = spawn(command, arguments_, {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      child.once("error", () => undefined);
-      child.unref();
-    } catch {}
-  });
+  try {
+    const child = spawn(command, arguments_, {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.once("error", () => undefined);
+    child.unref();
+  } catch {}
 }
 
 function windowsStartArguments(url: string) {
   return ["/d", "/s", "/c", "start", "", url];
 }
 
-function untilWindowsReaches(url: string) {
-  return Effect.callback<void, "Unreachable">((resume) => {
-    const probe = execFile(
+async function untilWindowsReaches(url: string, shutdown: AbortSignal) {
+  const signal = AbortSignal.any([
+    shutdown,
+    AbortSignal.timeout(windowsReachDeadlineMilliseconds),
+  ]);
+  while (!signal.aborted && !(await windowsReaches(url, signal))) {}
+}
+
+function windowsReaches(url: string, signal: AbortSignal) {
+  return new Promise<boolean>((resolve) => {
+    execFile(
       "curl.exe",
       ["--silent", "--output", "NUL", new URL(url).origin],
-      { windowsHide: true },
-      (error) => {
-        resume(
-          error?.code === curlCouldNotConnect
-            ? Effect.fail("Unreachable")
-            : Effect.void,
-        );
-      },
+      { signal, windowsHide: true },
+      (error) => resolve(error?.code !== curlCouldNotConnect),
     );
-    return Effect.sync(() => probe.kill());
-  }).pipe(
-    Effect.eventually,
-    Effect.timeout(windowsReachDeadline),
-    Effect.ignore,
-  );
+  });
 }
 
 function isWindowsSubsystemForLinux() {

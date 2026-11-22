@@ -1,6 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import {
   type OperationAction,
@@ -237,24 +236,22 @@ async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
   const scope = { repositoryId, worktreePath: directory };
   const operations = environment.routes(RepositoryOperationsApi);
   const expectedHead = await git(directory, "rev-parse", "HEAD");
-  const read = () => Effect.runPromise(operations.read(scope));
+  const read = () => operations.read(scope);
   const started = (
     command: Omit<StartCherryPick, "_tag"> & {
       readonly expectedHead?: string;
     },
   ) =>
-    Effect.runPromise(
-      operations.start({
-        ...scope,
-        expectedHead: command.expectedHead ?? expectedHead,
-        operation: {
-          _tag: "CherryPick",
-          commits: command.commits,
-          mainline: command.mainline,
-          result: command.result,
-        },
-      }),
-    );
+    operations.start({
+      ...scope,
+      expectedHead: command.expectedHead ?? expectedHead,
+      operation: {
+        _tag: "CherryPick",
+        commits: command.commits,
+        mainline: command.mainline,
+        result: command.result,
+      },
+    });
   return {
     directory,
     oids,
@@ -266,13 +263,11 @@ async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
         },
       ) => started(command).then(({ operation }) => operation),
       execute: async (action: OperationAction) =>
-        Effect.runPromise(
-          operations.execute({
-            ...scope,
-            revision: (await read()).revision,
-            action,
-          }),
-        ),
+        operations.execute({
+          ...scope,
+          revision: (await read()).revision,
+          action,
+        }),
     },
   };
 }

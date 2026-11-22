@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { Effect } from "effect";
 import { expect, it } from "vite-plus/test";
 import {
   DiagnosticsApi,
@@ -71,12 +70,10 @@ it("sends the first sample before Git reports its version", async () => {
   const server = await openTestServer({
     git: (runner) => ({
       ...runner,
-      run: (command) =>
-        command.arguments.includes("--version")
-          ? Effect.promise(() => gitAnswers.promise).pipe(
-              Effect.andThen(runner.run(command)),
-            )
-          : runner.run(command),
+      run: async (command) => {
+        if (command.arguments.includes("--version")) await gitAnswers.promise;
+        return runner.run(command);
+      },
     }),
   });
   const subscribe = (await server.connect(server.owner)).subscribe;

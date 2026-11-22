@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { eq, isNotNull } from "drizzle-orm";
-import { Effect } from "effect";
 import {
   CloneableRepository,
   type GitHostKind,
@@ -97,10 +96,9 @@ export function createSourceControl(
     createGitLabHost(clients.gitlab),
     createForgejoHost(clients.forgejo),
   ];
-  const disabledKinds = context.read(
-    "Could not read Git host settings",
-    async (database) =>
-      new Set(
+  const disabledKinds = async () =>
+    new Set(
+      await context.read("Could not read Git host settings", async (database) =>
         (
           await database
             .select({ kind: gitHostTable.kind })
@@ -108,83 +106,83 @@ export function createSourceControl(
             .where(eq(gitHostTable.enabled, false))
         ).map(({ kind }) => kind),
       ),
-  );
+    );
 
-  const enabledHosts = disabledKinds.pipe(
-    Effect.map((disabled) => hosts.filter(({ kind }) => !disabled.has(kind))),
-  );
+  const enabledHosts = async () => {
+    const disabled = await disabledKinds();
+    return hosts.filter(({ kind }) => !disabled.has(kind));
+  };
 
   return {
     bitbucket,
     enabledHosts,
-    hostedRepository: (directory: string) =>
-      Effect.gen(function* () {
-        const remotes = yield* runRepositoryGit(
-          git,
-          directory,
-          ["config", "--get-regexp", "^remote\\..*\\.url$"],
-          { exitCodes: [0, 1], maxOutputBytes: 65_536 },
-        );
-        const urls = remoteUrls(remotes);
-        const remote = primaryRemote(urls);
-        const remoteUrl = remote === undefined ? undefined : urls.get(remote);
-        const found =
-          remote === undefined || remoteUrl === undefined
-            ? undefined
-            : yield* repositoryFor(yield* enabledHosts, remoteUrl);
-        return found && { ...found, remote, urls };
-      }),
-    cloneable: Effect.gen(function* () {
-      const [enabled, remotes] = yield* Effect.all(
-        [enabledHosts, catalogRemotes(context)],
-        { concurrency: "unbounded" },
+    hostedRepository: async (directory: string) => {
+      const remotes = await runRepositoryGit(
+        git,
+        directory,
+        ["config", "--get-regexp", "^remote\\..*\\.url$"],
+        { exitCodes: [0, 1], maxOutputBytes: 65_536 },
       );
-      const lists = yield* Effect.forEach(
-        enabled,
-        (host) =>
-          (host.cloneable ?? Effect.succeed([])).pipe(
-            Effect.map((lists) => {
-              const cloned = new Set(
-                remotes.map((url) => host.repositoryId(url) ?? url),
-              );
-              return lists.map((list) => ({
-                ...list,
-                repositories: list.repositories.filter(
-                  (repository) =>
-                    isCloneableRepository(repository) &&
-                    !cloned.has(
-                      host.repositoryId(repository.url) ?? repository.url,
-                    ),
+      const urls = remoteUrls(remotes);
+      const remote = primaryRemote(urls);
+      const remoteUrl = remote === undefined ? undefined : urls.get(remote);
+      const found =
+        remote === undefined || remoteUrl === undefined
+          ? undefined
+          : await repositoryFor(await enabledHosts(), remoteUrl);
+      return found && { ...found, remote, urls };
+    },
+    cloneable: async () => {
+      const [enabled, remotes] = await Promise.all([
+        enabledHosts(),
+        catalogRemotes(context),
+      ]);
+      const lists = await Promise.all(
+        enabled.map(async (host) => {
+          const cloned = new Set(
+            remotes.map((url) => host.repositoryId(url) ?? url),
+          );
+          return ((await host.cloneable?.()) ?? []).map((list) => ({
+            ...list,
+            repositories: list.repositories.filter(
+              (repository) =>
+                isCloneableRepository(repository) &&
+                !cloned.has(
+                  host.repositoryId(repository.url) ?? repository.url,
                 ),
-              }));
-            }),
-          ),
-        { concurrency: "unbounded" },
+            ),
+          }));
+        }),
       );
       return lists.flat();
-    }),
-    discover: Effect.gen(function* () {
-      const disabled = yield* disabledKinds;
-      return yield* Effect.all(
-        {
-          git: gitStatus(git),
-          lfs: lfs.rescan,
-          hosts: Effect.forEach(
-            GitHostKinds.options,
-            (kind) => hostStatus(hosts, kind, !disabled.has(kind)),
-            { concurrency: "unbounded" },
+    },
+    discover: async () => {
+      const disabled = await disabledKinds();
+      const [gitState, lfsState, hostStates] = await Promise.all([
+        gitStatus(git),
+        lfs.rescan(),
+        Promise.all(
+          GitHostKinds.options.map((kind) =>
+            hostStatus(hosts, kind, !disabled.has(kind)),
           ),
+        ),
+      ]);
+      return { git: gitState, lfs: lfsState, hosts: hostStates };
+    },
+    setHostEnabled: async (kind: GitHostKind, enabled: boolean) => {
+      await context.write(
+        "Could not save Git host settings",
+        async (database) => {
+          await database
+            .insert(gitHostTable)
+            .values({ kind, enabled })
+            .onConflictDoUpdate({
+              target: gitHostTable.kind,
+              set: { enabled },
+            });
         },
-        { concurrency: "unbounded" },
       );
-    }),
-    setHostEnabled: (kind: GitHostKind, enabled: boolean) =>
-      context.write("Could not save Git host settings", async (database) => {
-        await database
-          .insert(gitHostTable)
-          .values({ kind, enabled })
-          .onConflictDoUpdate({ target: gitHostTable.kind, set: { enabled } });
-      }),
+    },
   };
 }
 
@@ -195,49 +193,47 @@ export function sourceControlFeature({
   readonly events: EnvironmentEventPublisher;
   readonly sourceControl: SourceControl;
 }) {
-  const changed = Effect.tap(() => Effect.sync(() => events.publishChanged()));
+  const changed = async (write: Promise<void>) => {
+    await write;
+    events.publishChanged();
+  };
   return {
     routes: [
-      route(SourceControlApi.discover, () => sourceControl.discover),
-      route(SourceControlApi.cloneable, () => sourceControl.cloneable),
+      route(SourceControlApi.discover, () => sourceControl.discover()),
+      route(SourceControlApi.cloneable, () => sourceControl.cloneable()),
       route(SourceControlApi.setHostEnabled, ({ kind, enabled }) =>
-        sourceControl.setHostEnabled(kind, enabled).pipe(changed),
+        changed(sourceControl.setHostEnabled(kind, enabled)),
       ),
       route(SourceControlApi.saveBitbucketToken, (token) =>
-        sourceControl.bitbucket.save(token).pipe(changed),
+        changed(sourceControl.bitbucket.save(token)),
       ),
       route(SourceControlApi.removeBitbucketToken, () =>
-        sourceControl.bitbucket.remove.pipe(changed),
+        changed(sourceControl.bitbucket.remove()),
       ),
     ],
   } satisfies EnvironmentFeature;
 }
 
-function catalogRemotes(context: EnvironmentContext) {
-  return context
-    .read("Could not read repository catalog", (database) =>
+async function catalogRemotes(context: EnvironmentContext) {
+  const rows = await context.read(
+    "Could not read repository catalog",
+    (database) =>
       database
         .selectDistinct({
           directory: repositoryCatalogTable.gitCommonDirectory,
         })
         .from(repositoryCatalogTable)
         .where(isNotNull(repositoryCatalogTable.gitCommonDirectory)),
-    )
-    .pipe(
-      Effect.flatMap((rows) =>
-        Effect.promise(() =>
-          Promise.all(
-            rows.map(({ directory }) =>
-              readFile(join(directory ?? "", "config"), "utf8").then(
-                configRemoteUrls,
-                () => [],
-              ),
-            ),
-          ),
-        ),
+  );
+  const urls = await Promise.all(
+    rows.map(({ directory }) =>
+      readFile(join(directory ?? "", "config"), "utf8").then(
+        configRemoteUrls,
+        () => [],
       ),
-      Effect.map((urls) => urls.flat()),
-    );
+    ),
+  );
+  return urls.flat();
 }
 
 function configRemoteUrls(config: string) {
@@ -246,25 +242,27 @@ function configRemoteUrls(config: string) {
   );
 }
 
-function gitStatus(git: GitCommandRunner): Effect.Effect<GitStatus> {
-  return git.run({ directory: homedir(), arguments: ["--version"] }).pipe(
-    Effect.map(({ exitCode, stdout }) => {
-      const version = stdout.split("\n")[0]?.trim();
-      return exitCode === 0 && version
-        ? ({ _tag: "Available", version } as const)
-        : ({ _tag: "Missing" } as const);
-    }),
-    Effect.orElseSucceed(() => ({ _tag: "Missing" }) as const),
-  );
+async function gitStatus(git: GitCommandRunner): Promise<GitStatus> {
+  try {
+    const { exitCode, stdout } = await git.run({
+      directory: homedir(),
+      arguments: ["--version"],
+    });
+    const version = stdout.split("\n")[0]?.trim();
+    return exitCode === 0 && version
+      ? { _tag: "Available", version }
+      : { _tag: "Missing" };
+  } catch {
+    return { _tag: "Missing" };
+  }
 }
 
-function hostStatus(
+async function hostStatus(
   hosts: readonly GitHost[],
   kind: GitHostKind,
   enabled: boolean,
-): Effect.Effect<GitHostStatus> {
+): Promise<GitHostStatus> {
   const host = hosts.find((candidate) => candidate.kind === kind);
-  if (host === undefined)
-    return Effect.succeed({ _tag: "ComingSoon", kind } as const);
-  return host.tool.pipe(Effect.map((tool) => ({ ...tool, kind, enabled })));
+  if (host === undefined) return { _tag: "ComingSoon", kind };
+  return { ...(await host.tool()), kind, enabled };
 }

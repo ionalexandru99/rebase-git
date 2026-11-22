@@ -1,7 +1,6 @@
 import { access, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect, Exit, Scope } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   type DesktopApplication,
@@ -109,14 +108,8 @@ class TestDesktopHost implements DesktopApplicationHost {
 async function startEnvironmentInProcess(
   home: string,
 ): Promise<ManagedEnvironmentServer> {
-  const scope = Scope.makeUnsafe();
-  const server = await Effect.runPromise(
-    Scope.provide(startEnvironmentServer({ home }), scope),
-  );
-  return {
-    ...server,
-    stop: () => Effect.runPromise(Scope.close(scope, Exit.void)),
-  };
+  const { close, ...server } = await startEnvironmentServer({ home });
+  return { ...server, stop: close };
 }
 
 async function createTemporaryDirectory() {

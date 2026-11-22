@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { afterEach, beforeEach, expect, it } from "vite-plus/test";
 import { cacheByGitEntry } from "#server/adapters/local-git/git-commands.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
@@ -21,12 +20,10 @@ async function repository(name: string) {
 }
 
 function countingCache() {
-  return cacheByGitEntry((directory) =>
-    Effect.sync(() => {
-      reads.push(directory);
-      return reads.length;
-    }),
-  );
+  return cacheByGitEntry(async (directory) => {
+    reads.push(directory);
+    return reads.length;
+  });
 }
 
 it("reads each repository once", async () => {
@@ -34,9 +31,11 @@ it("reads each repository once", async () => {
   const second = await repository("second");
   const cache = countingCache();
 
-  const values = await Effect.runPromise(
-    Effect.all([cache.read(first), cache.read(first), cache.read(second)]),
-  );
+  const values = [
+    await cache.read(first),
+    await cache.read(first),
+    await cache.read(second),
+  ];
 
   expect(values).toEqual([1, 1, 2]);
   expect(reads).toEqual([first, second]);
@@ -45,12 +44,12 @@ it("reads each repository once", async () => {
 it("reads again when the repository is replaced", async () => {
   const path = await repository("replaced");
   const cache = countingCache();
-  await Effect.runPromise(cache.read(path));
+  await cache.read(path);
 
   await mkdir(join(path, "replacement"));
   await rm(join(path, ".git"), { recursive: true });
   await rename(join(path, "replacement"), join(path, ".git"));
-  await Effect.runPromise(cache.read(path));
+  await cache.read(path);
 
   expect(reads).toEqual([path, path]);
 });
@@ -58,11 +57,11 @@ it("reads again when the repository is replaced", async () => {
 it("keeps the value when Git publishes a new index", async () => {
   const path = await repository("indexed");
   const cache = countingCache();
-  await Effect.runPromise(cache.read(path));
+  await cache.read(path);
 
   await writeFile(join(path, ".git", "index.lock"), "");
   await rename(join(path, ".git", "index.lock"), join(path, ".git", "index"));
-  await Effect.runPromise(cache.read(path));
+  await cache.read(path);
 
   expect(reads).toEqual([path]);
 });
@@ -70,10 +69,10 @@ it("keeps the value when Git publishes a new index", async () => {
 it("reads again after the repository is forgotten", async () => {
   const path = await repository("forgotten");
   const cache = countingCache();
-  await Effect.runPromise(cache.read(path));
+  await cache.read(path);
 
   cache.forget(path);
-  await Effect.runPromise(cache.read(path));
+  await cache.read(path);
 
   expect(reads).toEqual([path, path]);
 });

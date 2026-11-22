@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { Effect } from "effect";
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
 import type { GitHostClients } from "#server/features/source-control/source-control.ts";
@@ -25,21 +24,17 @@ export async function pullRequestsFixture(
     events: environment.events,
     routes: environment.routes,
     sourceControl: environment.routes(SourceControlApi),
-    listed: () => Effect.runPromise(service.list({ repositoryId })),
-    list: async () =>
-      (await Effect.runPromise(service.list({ repositoryId })))?.branches ?? [],
-    find: (number: number) =>
-      Effect.runPromise(service.find({ repositoryId, number })),
+    listed: () => service.list({ repositoryId }),
+    list: async () => (await service.list({ repositoryId }))?.branches ?? [],
+    find: (number: number) => service.find({ repositoryId, number }),
     link: (branch: string, number: number, linked = true) =>
-      Effect.runPromise(
-        service.link({
-          repositoryId,
-          worktreePath: repositoryPath,
-          branch,
-          number,
-          linked,
-        }),
-      ),
+      service.link({
+        repositoryId,
+        worktreePath: repositoryPath,
+        branch,
+        number,
+        linked,
+      }),
     track: async (branch: string, remote: string, head: string) => {
       await git(repositoryPath, "config", `branch.${branch}.remote`, remote);
       await git(

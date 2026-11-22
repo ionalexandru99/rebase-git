@@ -1,7 +1,9 @@
-import { Effect, Schema } from "effect";
-import type { PullRequestsUnavailable } from "#contracts/pull-requests/pull-requests.contract.ts";
+import { z } from "zod";
 import type { CloneableRepository } from "#contracts/source-control/source-control.contract.ts";
-import { cloneableRepository } from "#server/features/source-control/git-host.ts";
+import {
+  cloneableRepository,
+  mapConcurrently,
+} from "#server/features/source-control/git-host.ts";
 import {
   type BitbucketClient,
   bitbucketApi,
@@ -19,59 +21,52 @@ export function workspacesUrl(pagelen: number) {
   })}`;
 }
 
-export function listCloneable(
+export async function listCloneable(
   client: BitbucketClient,
   authorization: string,
-): Effect.Effect<readonly CloneableRepository[], PullRequestsUnavailable> {
+): Promise<readonly CloneableRepository[]> {
   const read = (url: string) =>
-    readJson(client, authorization, url, decodeRepositories).pipe(
-      Effect.orElseSucceed((): RepositoryPage => ({ values: [] })),
+    readJson(client, authorization, url, RepositoryPage).catch(
+      (): RepositoryPage => ({ values: [] }),
     );
-  return readJson(
+  const { values } = await readJson(
     client,
     authorization,
     workspacesUrl(repositoriesPerPage),
-    decodeWorkspaces,
-  ).pipe(
-    Effect.flatMap(({ values }) =>
-      readPages(
-        read,
-        values.map(({ workspace }) => workspaceRepositoriesUrl(workspace.slug)),
-        repositoryPages,
-      ),
-    ),
-    Effect.map((nodes) =>
-      nodes
-        .flatMap(cloneableRepositories)
-        .toSorted((left, right) =>
-          (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""),
-        )
-        .slice(0, repositoriesPerPage * repositoryPages),
-    ),
+    Workspaces,
   );
+  const nodes = await readPages(
+    read,
+    values.map(({ workspace }) => workspaceRepositoriesUrl(workspace.slug)),
+    repositoryPages,
+  );
+  return nodes
+    .flatMap(cloneableRepositories)
+    .toSorted((left, right) =>
+      (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""),
+    )
+    .slice(0, repositoriesPerPage * repositoryPages);
 }
 
-function readPages(
-  read: (url: string) => Effect.Effect<RepositoryPage>,
+async function readPages(
+  read: (url: string) => Promise<RepositoryPage>,
   urls: readonly string[],
   budget: number,
-): Effect.Effect<readonly RepositoryNode[]> {
-  return Effect.forEach(urls, read, { concurrency: workspacesAtOnce }).pipe(
-    Effect.flatMap((pages) => {
-      const left = budget - urls.length;
-      const values = pages.flatMap(({ values }) => values);
-      const next = pages
-        .flatMap(({ next }) =>
-          next?.startsWith(`${bitbucketApi}/`) ? [next] : [],
-        )
-        .slice(0, Math.max(left, 0));
-      return next.length === 0
-        ? Effect.succeed(values)
-        : readPages(read, next, left).pipe(
-            Effect.map((rest) => [...values, ...rest]),
-          );
-    }),
-  );
+): Promise<readonly RepositoryNode[]> {
+  const nodes: RepositoryNode[] = [];
+  let pending = urls;
+  let left = budget;
+  while (pending.length > 0) {
+    const pages = await mapConcurrently(pending, workspacesAtOnce, read);
+    left -= pending.length;
+    nodes.push(...pages.flatMap(({ values }) => values));
+    pending = pages
+      .flatMap(({ next }) =>
+        next?.startsWith(`${bitbucketApi}/`) ? [next] : [],
+      )
+      .slice(0, Math.max(left, 0));
+  }
+  return nodes;
 }
 
 function workspaceRepositoriesUrl(workspace: string) {
@@ -107,35 +102,23 @@ function cloneableRepositories(
       ];
 }
 
-const decodeWorkspaces = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(
-    Schema.Struct({
-      values: Schema.Array(
-        Schema.Struct({ workspace: Schema.Struct({ slug: Schema.String }) }),
-      ),
-    }),
-  ),
-);
+const Workspaces = z.object({
+  values: z.array(z.object({ workspace: z.object({ slug: z.string() }) })),
+});
 
-const RepositoryNode = Schema.Struct({
-  full_name: Schema.String,
-  is_private: Schema.Boolean,
-  description: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  updated_on: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  links: Schema.Struct({
-    clone: Schema.optionalKey(
-      Schema.Array(Schema.Struct({ name: Schema.String, href: Schema.String })),
-    ),
+const RepositoryNode = z.object({
+  full_name: z.string(),
+  is_private: z.boolean(),
+  description: z.string().nullable().optional(),
+  updated_on: z.string().nullable().optional(),
+  links: z.object({
+    clone: z.array(z.object({ name: z.string(), href: z.string() })).optional(),
   }),
 });
-type RepositoryNode = typeof RepositoryNode.Type;
+type RepositoryNode = z.infer<typeof RepositoryNode>;
 
-const RepositoryPage = Schema.Struct({
-  values: Schema.Array(RepositoryNode),
-  next: Schema.optionalKey(Schema.String),
+const RepositoryPage = z.object({
+  values: z.array(RepositoryNode),
+  next: z.string().optional(),
 });
-type RepositoryPage = typeof RepositoryPage.Type;
-
-const decodeRepositories = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(RepositoryPage),
-);
+type RepositoryPage = z.infer<typeof RepositoryPage>;

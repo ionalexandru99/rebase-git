@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { Data, Effect } from "effect";
 import {
   EnvironmentAuthorizationApi,
   type EnvironmentAuthorizationFailure,
@@ -22,42 +21,49 @@ import {
 } from "#server/features/environment-authorization/environment-authorization-secret.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
 import { authorizationMetadataTable } from "#server/persistence/environment-state.schema.ts";
-import type { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
 
 const pairingLifetimeMilliseconds = 10 * 60 * 1_000;
 const authorizationInactivityMilliseconds = 90 * 24 * 60 * 60 * 1_000;
 const retainedMaterialMilliseconds = 24 * 60 * 60 * 1_000;
 
-export class EnvironmentAuthorizationError extends Data.TaggedError(
-  "EnvironmentAuthorizationError",
-)<{
+export interface EnvironmentAuthorizationError {
+  readonly _tag: "EnvironmentAuthorizationError";
   readonly failure: EnvironmentAuthorizationFailure;
-}> {}
+}
 
-type AuthorizationResult<Value> = Effect.Effect<
-  Value,
-  EnvironmentAuthorizationError | EnvironmentStorageError
->;
+export function environmentAuthorizationError(
+  failure: EnvironmentAuthorizationFailure,
+): EnvironmentAuthorizationError {
+  return { _tag: "EnvironmentAuthorizationError", failure };
+}
+
+export function isEnvironmentAuthorizationError(
+  error: unknown,
+): error is EnvironmentAuthorizationError {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    error._tag === "EnvironmentAuthorizationError"
+  );
+}
 
 export interface EnvironmentAuthorization {
   readonly authorize: (
     credential: string | undefined,
-  ) => AuthorizationResult<EnvironmentDeviceAuthorization>;
+  ) => Promise<EnvironmentDeviceAuthorization>;
   readonly createPairing: (pairing?: {
     readonly replacesGrantsWithSameLabel?: boolean;
-  }) => Effect.Effect<{
+  }) => {
     readonly expiresAt: string;
     readonly material: string;
-  }>;
+  };
   readonly exchangePairing: (
     exchange: ExchangeEnvironmentPairing,
-  ) => AuthorizationResult<EnvironmentPairingExchanged>;
+  ) => Promise<EnvironmentPairingExchanged>;
   readonly revoke: (
     authorizationId: string,
-  ) => Effect.Effect<
-    EnvironmentAuthorizationRevoked,
-    InvalidGrant | EnvironmentStorageError
-  >;
+  ) => Promise<EnvironmentAuthorizationRevoked>;
   readonly watchRevocation: (
     authorizationId: string,
     revoked: () => void,
@@ -70,12 +76,13 @@ export function environmentAuthorizationFeature(
   const api = EnvironmentAuthorizationApi;
   return {
     routes: [
-      route(api.createPairing, (_, context) =>
-        Effect.map(authorization.createPairing(), (created) => ({
+      route(api.createPairing, async (_, context) => {
+        const created = authorization.createPairing();
+        return {
           expiresAt: created.expiresAt,
           pairingUrl: `${context.origin}/pair#${created.material}`,
-        })),
-      ),
+        };
+      }),
       route(api.revokeAuthorization, (revocation) =>
         authorization.revoke(revocation.authorizationId),
       ),
@@ -93,20 +100,15 @@ export function createEnvironmentAuthorization(
   return {
     authorize: (credential) => authorizeCredential(context, credential),
     createPairing: (pairing) =>
-      Effect.sync(() =>
-        createPairing(pairings, pairing?.replacesGrantsWithSameLabel ?? false),
-      ),
+      createPairing(pairings, pairing?.replacesGrantsWithSameLabel ?? false),
     exchangePairing: (exchange) => exchangePairing(context, pairings, exchange),
-    revoke: (authorizationId) =>
-      revokeAuthorization(context, authorizationId).pipe(
-        Effect.tap(() =>
-          Effect.sync(() => {
-            revokedAuthorizations.add(authorizationId);
-            for (const revoked of revocationWatchers.get(authorizationId) ?? [])
-              revoked();
-          }),
-        ),
-      ),
+    revoke: async (authorizationId) => {
+      const revoked = await revokeAuthorization(context, authorizationId);
+      revokedAuthorizations.add(authorizationId);
+      for (const watcher of revocationWatchers.get(authorizationId) ?? [])
+        watcher();
+      return revoked;
+    },
     watchRevocation: (authorizationId, revoked) => {
       if (revokedAuthorizations.has(authorizationId)) {
         revoked();
@@ -147,63 +149,49 @@ function createAvailablePairingCode(pairings: Map<string, PairingEntry>) {
   return code;
 }
 
-function exchangePairing(
+async function exchangePairing(
   context: EnvironmentContext,
   pairings: Map<string, PairingEntry>,
   exchange: ExchangeEnvironmentPairing,
 ) {
-  return Effect.gen(function* () {
-    const now = new Date();
-    const pairing = yield* consumePairing(
-      pairings,
-      exchange.pairingMaterial,
-      now,
-    );
-    const authorization = {
-      id: randomUUID(),
-      label: exchange.label,
-    } satisfies EnvironmentDeviceAuthorization;
+  const now = new Date();
+  const pairing = consumePairing(pairings, exchange.pairingMaterial, now);
+  const authorization = {
+    id: randomUUID(),
+    label: exchange.label,
+  } satisfies EnvironmentDeviceAuthorization;
 
-    yield* context
-      .write("Could not save device authorization", (database) =>
-        database.transaction(
-          (transaction) => {
-            if (pairing.replacesGrantsWithSameLabel) {
-              transaction
-                .delete(authorizationMetadataTable)
-                .where(
-                  eq(authorizationMetadataTable.label, authorization.label),
-                )
-                .run();
-            }
+  try {
+    await context.write("Could not save device authorization", (database) =>
+      database.transaction(
+        (transaction) => {
+          if (pairing.replacesGrantsWithSameLabel) {
             transaction
-              .insert(authorizationMetadataTable)
-              .values({
-                createdAt: now.toISOString(),
-                id: authorization.id,
-                label: authorization.label,
-              })
+              .delete(authorizationMetadataTable)
+              .where(eq(authorizationMetadataTable.label, authorization.label))
               .run();
-          },
-          { behavior: "immediate" },
-        ),
-      )
-      .pipe(
-        Effect.tapError(() =>
-          Effect.sync(() => {
-            pairing.used = false;
-          }),
-        ),
-      );
-
-    return {
-      authorization,
-      credential: createDeviceCredential(
-        context.serverSecret,
-        authorization.id,
+          }
+          transaction
+            .insert(authorizationMetadataTable)
+            .values({
+              createdAt: now.toISOString(),
+              id: authorization.id,
+              label: authorization.label,
+            })
+            .run();
+        },
+        { behavior: "immediate" },
       ),
-    };
-  });
+    );
+  } catch (error) {
+    pairing.used = false;
+    throw error;
+  }
+
+  return {
+    authorization,
+    credential: createDeviceCredential(context.serverSecret, authorization.id),
+  };
 }
 
 function consumePairing(
@@ -213,20 +201,20 @@ function consumePairing(
 ) {
   const pairing = pairings.get(digestSecretMaterial(material));
   if (pairing === undefined) {
-    return failAuthorization({ _tag: "InvalidPairing" });
+    throw environmentAuthorizationError({ _tag: "InvalidPairing" });
   }
   if (pairing.used) {
-    return failAuthorization({ _tag: "PairingAlreadyUsed" });
+    throw environmentAuthorizationError({ _tag: "PairingAlreadyUsed" });
   }
   if (now.getTime() >= pairing.expiresAt) {
-    return failAuthorization({ _tag: "ExpiredPairing" });
+    throw environmentAuthorizationError({ _tag: "ExpiredPairing" });
   }
 
   pairing.used = true;
-  return Effect.succeed(pairing);
+  return pairing;
 }
 
-function authorizeCredential(
+async function authorizeCredential(
   context: EnvironmentContext,
   credential: string | undefined,
 ) {
@@ -235,18 +223,19 @@ function authorizeCredential(
     credential,
   );
   if (authorizationId === undefined) {
-    return failAuthorization({ _tag: "InvalidGrant" });
+    throw environmentAuthorizationError({ _tag: "InvalidGrant" });
   }
   return authorizeStoredGrant(context, authorizationId);
 }
 
-function authorizeStoredGrant(
+async function authorizeStoredGrant(
   context: EnvironmentContext,
   authorizationId: string,
 ) {
   const now = new Date();
-  return context
-    .write("Could not authenticate device authorization", (database) => {
+  const result = await context.write(
+    "Could not authenticate device authorization",
+    (database) => {
       const metadata = database
         .select()
         .from(authorizationMetadataTable)
@@ -273,36 +262,30 @@ function authorizeStoredGrant(
         .run();
 
       return authorizationSuccess({ id: metadata.id, label: metadata.label });
-    })
-    .pipe(
-      Effect.flatMap((result) =>
-        result.success
-          ? Effect.succeed(result.authorization)
-          : failAuthorization(result.failure),
-      ),
-    );
+    },
+  );
+  if (!result.success) throw environmentAuthorizationError(result.failure);
+  return result.authorization;
 }
 
-function revokeAuthorization(
+async function revokeAuthorization(
   context: EnvironmentContext,
   authorizationId: string,
 ) {
-  return Effect.gen(function* () {
-    const revokedAt = new Date().toISOString();
-    const revoked = yield* context.write(
-      "Could not revoke device authorization",
-      (database) =>
-        database
-          .update(authorizationMetadataTable)
-          .set({ revokedAt })
-          .where(eq(authorizationMetadataTable.id, authorizationId))
-          .run().changes > 0,
-    );
-    if (!revoked) {
-      return yield* Effect.fail<InvalidGrant>({ _tag: "InvalidGrant" });
-    }
-    return { authorizationId, revokedAt };
-  });
+  const revokedAt = new Date().toISOString();
+  const revoked = await context.write(
+    "Could not revoke device authorization",
+    (database) =>
+      database
+        .update(authorizationMetadataTable)
+        .set({ revokedAt })
+        .where(eq(authorizationMetadataTable.id, authorizationId))
+        .run().changes > 0,
+  );
+  if (!revoked) {
+    throw { _tag: "InvalidGrant" } satisfies InvalidGrant;
+  }
+  return { authorizationId, revokedAt };
 }
 
 function removeOldMaterial(entries: Map<string, PairingEntry>, now: number) {
@@ -319,10 +302,6 @@ function authorizationFailure(failure: EnvironmentAuthorizationFailure) {
 
 function authorizationSuccess(authorization: EnvironmentDeviceAuthorization) {
   return { authorization, success: true as const };
-}
-
-function failAuthorization(failure: EnvironmentAuthorizationFailure) {
-  return Effect.fail(new EnvironmentAuthorizationError({ failure }));
 }
 
 interface PairingEntry {

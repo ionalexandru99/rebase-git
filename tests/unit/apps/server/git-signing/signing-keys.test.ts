@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { expect, it } from "vite-plus/test";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { listSigningKeys } from "#server/features/git-signing/signing-keys.ts";
@@ -24,22 +23,21 @@ const gpgKeys = [
 
 it("lists agent keys and GPG keys that can sign, skipping expired keys, subkeys and encryption-only keys", async () => {
   const git: GitCommandRunner = {
-    run: ({ arguments: args }) =>
-      Effect.succeed({
-        exitCode: 0,
-        stderr: "",
-        stdout: args.includes("--type=path")
-          ? "/nonexistent/rebase/.ssh"
-          : args.some((arg) => arg.includes("ssh-add"))
-            ? agentKeys
-            : gpgKeys,
-      }),
+    run: async ({ arguments: args }) => ({
+      exitCode: 0,
+      stderr: "",
+      stdout: args.includes("--type=path")
+        ? "/nonexistent/rebase/.ssh"
+        : args.some((arg) => arg.includes("ssh-add"))
+          ? agentKeys
+          : gpgKeys,
+    }),
     stream: () => {
       throw new Error("Key listing never streams.");
     },
   };
 
-  const keys = await Effect.runPromise(listSigningKeys(git, "/home/ada"));
+  const keys = await listSigningKeys(git, "/home/ada");
 
   expect(keys).toEqual([
     {

@@ -1,8 +1,6 @@
 import { chmod, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
-import { errorMessage } from "#server/error-inspection.ts";
-import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
+import { storageOperation } from "#server/persistence/sqlite/storage-operation.ts";
 
 export interface EnvironmentPaths {
   readonly cacheDirectory: string;
@@ -46,19 +44,12 @@ export function prepareEnvironmentDirectories(paths: EnvironmentPaths) {
     paths.cacheDirectory,
   ];
 
-  return Effect.tryPromise({
-    try: async () => {
-      for (const directory of directories) {
-        await mkdir(directory, { mode: 0o700, recursive: true });
-        if (process.platform !== "win32") {
-          await chmod(directory, 0o700);
-        }
+  return storageOperation("Could not prepare Environment storage", async () => {
+    for (const directory of directories) {
+      await mkdir(directory, { mode: 0o700, recursive: true });
+      if (process.platform !== "win32") {
+        await chmod(directory, 0o700);
       }
-    },
-    catch: (cause) =>
-      new EnvironmentStorageError({
-        cause,
-        message: `Could not prepare Environment storage: ${errorMessage(cause)}`,
-      }),
+    }
   });
 }

@@ -1,4 +1,3 @@
-import { Array as Arrays, Effect } from "effect";
 import {
   type BranchSettings,
   BranchSettlingApi,
@@ -21,7 +20,7 @@ import type {
 } from "#server/repository/repository-coordination.ts";
 
 const autoSettleKey = "rebase.autoSettle";
-export const settledPerLock = 20;
+const settledPerLock = 20;
 const deleteSettledAfterKey = "rebase.deleteSettledAfter";
 
 export const settlePolicy: RepositoryWritePolicy = {
@@ -43,24 +42,22 @@ export function branchSettlingFeature(
 ) {
   const { command, query } = repositoryRoutes(dependencies);
   const { coordination, events } = dependencies;
-  const publishRefs = (repositoryId: string) =>
-    Effect.sync(() => events.publishChanged([repositoryId], "Refs"));
   return {
     routes: [
       command(
         BranchSettlingApi.settle,
         unlockedSettlePolicy,
-        ({ names, repositoryId, settled, worktreePath }, git) =>
-          writeSettlements(
+        async ({ names, repositoryId, settled, worktreePath }, git) => {
+          await writeSettlements(
             git,
             coordination,
             worktreePath,
             names,
             settled ? settledToday() : "false",
-          ).pipe(
-            Effect.tap(() => publishRefs(repositoryId)),
-            Effect.as({}),
-          ),
+          );
+          events.publishChanged([repositoryId], "Refs");
+          return {};
+        },
       ),
       query(BranchSettlingApi.settings, ({ worktreePath }, git) =>
         readBranchSettings(git, worktreePath),
@@ -68,23 +65,23 @@ export function branchSettlingFeature(
       command(
         BranchSettlingApi.saveSettings,
         settlePolicy,
-        ({ autoSettle, deleteSettledAfter, repositoryId, worktreePath }, git) =>
-          Effect.forEach(
-            [
-              [autoSettleKey, String(autoSettle)],
-              [deleteSettledAfterKey, String(deleteSettledAfter)],
-            ],
-            (setting) =>
-              runRepositoryGit(git, worktreePath, [
-                "config",
-                "--local",
-                ...setting,
-              ]),
-            { discard: true },
-          ).pipe(
-            Effect.andThen(readBranchSettings(git, worktreePath)),
-            Effect.tap(() => publishRefs(repositoryId)),
-          ),
+        async (
+          { autoSettle, deleteSettledAfter, repositoryId, worktreePath },
+          git,
+        ) => {
+          for (const setting of [
+            [autoSettleKey, String(autoSettle)],
+            [deleteSettledAfterKey, String(deleteSettledAfter)],
+          ])
+            await runRepositoryGit(git, worktreePath, [
+              "config",
+              "--local",
+              ...setting,
+            ]);
+          const settings = await readBranchSettings(git, worktreePath);
+          events.publishChanged([repositoryId], "Refs");
+          return settings;
+        },
       ),
     ],
   } satisfies EnvironmentFeature;
@@ -117,49 +114,49 @@ export function branchSettings(config: string): BranchSettings {
   };
 }
 
-function readBranchSettings(git: GitCommandRunner, directory: string) {
-  return readSettlingConfig(
-    git,
-    directory,
-    "^rebase\\.(autosettle|deletesettledafter)$",
-  ).pipe(Effect.map(branchSettings));
+async function readBranchSettings(git: GitCommandRunner, directory: string) {
+  return branchSettings(
+    await readSettlingConfig(
+      git,
+      directory,
+      "^rebase\\.(autosettle|deletesettledafter)$",
+    ),
+  );
 }
 
-export function writeSettlements(
+export async function writeSettlements(
   git: GitCommandRunner,
   coordination: RepositoryCoordination,
   directory: string,
   names: readonly string[],
   value: string,
 ) {
-  return Effect.forEach(
-    Arrays.chunksOf(names, settledPerLock),
-    (group) =>
-      coordination.run(
-        directory,
-        settlePolicy,
-        Effect.gen(function* () {
-          const existing = new Set(
-            (yield* runRepositoryGit(git, directory, [
-              "for-each-ref",
-              "--format=%(refname:lstrip=2)",
-              ...group.map(branchRef),
-            ])).split("\n"),
-          );
-          yield* Effect.forEach(
-            group.filter((name) => existing.has(name)),
-            (name) =>
-              runRepositoryGit(git, directory, [
-                "config",
-                "--local",
-                `branch.${name}.rebaseSettled`,
-                value,
-              ]),
-            { discard: true },
-          );
-        }),
-      ),
-    { discard: true },
+  for (const group of settledGroups(names))
+    await coordination.run(directory, settlePolicy, async () => {
+      const existing = new Set(
+        (
+          await runRepositoryGit(git, directory, [
+            "for-each-ref",
+            "--format=%(refname:lstrip=2)",
+            ...group.map(branchRef),
+          ])
+        ).split("\n"),
+      );
+      for (const name of group.filter((name) => existing.has(name)))
+        await runRepositoryGit(git, directory, [
+          "config",
+          "--local",
+          `branch.${name}.rebaseSettled`,
+          value,
+        ]);
+    });
+}
+
+export function settledGroups<Item>(items: readonly Item[]) {
+  return Array.from(
+    { length: Math.ceil(items.length / settledPerLock) },
+    (_, index) =>
+      items.slice(index * settledPerLock, (index + 1) * settledPerLock),
   );
 }
 

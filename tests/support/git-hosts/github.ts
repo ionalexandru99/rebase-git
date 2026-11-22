@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import type { GitHubCli } from "#server/features/source-control/hosts/github-host.ts";
 
 interface GitHubPullRequestNode {
@@ -33,11 +32,11 @@ export function fakeGitHub(
 ) {
   const requests: Readonly<Record<string, string>>[] = [];
   const github: GitHubCli = {
-    version: Effect.succeed(version ?? undefined),
-    account: Effect.succeed(account ?? undefined),
-    protocol: Effect.succeed(protocol),
+    version: async () => version ?? undefined,
+    account: async () => account ?? undefined,
+    protocol: async () => protocol,
     repositories: (page) =>
-      Effect.succeed(
+      Promise.resolve(
         JSON.stringify(
           repositories
             .slice((page - 1) * 100, page * 100)
@@ -54,9 +53,9 @@ export function fakeGitHub(
     graphql: (query, variables) => {
       requests.push(variables);
       if (byHead === null)
-        return Effect.fail({ _tag: "PullRequestsUnavailable" });
+        return Promise.reject({ _tag: "PullRequestsUnavailable" });
       if (query.includes("avatarUrl"))
-        return Effect.succeed(
+        return Promise.resolve(
           JSON.stringify({
             data: {
               repository: {
@@ -96,8 +95,8 @@ export function fakeGitHub(
           .flat()
           .find(({ number }) => String(number) === wanted);
         return node === undefined
-          ? Effect.fail({ _tag: "PullRequestsUnavailable" })
-          : Effect.succeed(
+          ? Promise.reject({ _tag: "PullRequestsUnavailable" })
+          : Promise.resolve(
               JSON.stringify({
                 data: { repository: { pullRequest: asNode(node) } },
               }),
@@ -111,7 +110,7 @@ export function fakeGitHub(
             { nodes: (byHead[head] ?? []).map(asNode) },
           ]),
       );
-      return Effect.succeed(JSON.stringify({ data: { repository } }));
+      return Promise.resolve(JSON.stringify({ data: { repository } }));
     },
   };
   return { github, requests };

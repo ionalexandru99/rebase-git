@@ -1,75 +1,74 @@
-import { Cause, Context, Effect, Exit, Option, Stream } from "effect";
-import type {
-  EnvironmentFeature,
-  RouteHandler,
+import {
+  currentRequest,
+  type EnvironmentFeature,
+  type RouteHandler,
 } from "#server/adapters/environment-transport/environment-routes.ts";
-import type {
-  GitCommandRunner,
-  GitFailed,
+import {
+  type GitCommandRunner,
+  isGitFailed,
 } from "#server/adapters/local-git/git-commands.ts";
 import type {
   DiagnosticsActivity,
   GitRunOutcome,
 } from "#server/features/diagnostics/diagnostics-activity.ts";
 
+type StreamHandler = Extract<RouteHandler, { route: { stream: true } }>;
+type RequestHandler = Exclude<RouteHandler, StreamHandler>;
+
 interface Request {
   readonly procedure?: string;
   readonly repositoryId?: string;
 }
-
-const CurrentRequest = Context.Reference<Request>("rebase/CurrentRequest", {
-  defaultValue: () => ({}),
-});
 
 export function recordGitActivity(
   git: GitCommandRunner,
   activity: DiagnosticsActivity,
 ): GitCommandRunner {
   return {
-    run: (command) =>
-      Effect.gen(function* () {
-        const { repositoryId } = yield* CurrentRequest;
-        const run = activity.gitStarted({ ...command, repositoryId });
-        return yield* git.run({ ...command, onSpawn: run.spawned }).pipe(
-          Effect.onExit((exit) =>
-            Effect.sync(() =>
-              run.finished(
-                Exit.isSuccess(exit)
-                  ? {
-                      _tag: "Exited",
-                      exitCode: exit.value.exitCode,
-                      stderr: exit.value.stderr,
-                    }
-                  : failedOutcome(exit.cause),
-              ),
-            ),
-          ),
-        );
-      }),
-    stream: (command) =>
-      Stream.unwrap(
-        Effect.gen(function* () {
-          const { repositoryId } = yield* CurrentRequest;
-          const run = activity.gitStarted({
-            ...command,
-            repositoryId,
-            expectedExitCodes: [0],
-          });
-          return git
-            .stream({ ...command, onSpawn: run.spawned })
-            .pipe(
-              Stream.onExit((exit) =>
-                Effect.sync(() =>
-                  run.finished(
-                    Exit.isSuccess(exit)
-                      ? { _tag: "Exited", exitCode: 0, stderr: "" }
-                      : failedOutcome(exit.cause),
-                  ),
-                ),
-              ),
-            );
-        }),
-      ),
+    run: async (command) => {
+      const request = currentRequest();
+      const signal = command.signal ?? request?.signal;
+      const run = activity.gitStarted({
+        ...command,
+        repositoryId: request?.repositoryId,
+      });
+      try {
+        const output = await git.run({ ...command, onSpawn: run.spawned });
+        run.finished({
+          _tag: "Exited",
+          exitCode: output.exitCode,
+          stderr: output.stderr,
+        });
+        return output;
+      } catch (error) {
+        run.finished(failedOutcome(error, signal));
+        throw error;
+      }
+    },
+    stream: (command) => ({
+      async *[Symbol.asyncIterator]() {
+        const request = currentRequest();
+        const signal = command.signal ?? request?.signal;
+        const run = activity.gitStarted({
+          ...command,
+          repositoryId: request?.repositoryId,
+          expectedExitCodes: [0],
+        });
+        let outcome: GitRunOutcome = {
+          _tag: "Exited",
+          exitCode: 0,
+          stderr: "",
+        };
+        try {
+          yield* git.stream({ ...command, onSpawn: run.spawned });
+        } catch (error) {
+          outcome = failedOutcome(error, signal);
+          throw error;
+        } finally {
+          run.finished(outcome);
+        }
+      },
+    }),
   };
 }
 
@@ -79,64 +78,58 @@ export function observeFeatures(
 ): EnvironmentFeature {
   return {
     routes: features.routes.map((handler): RouteHandler => {
-      if (handler.route.stream)
+      if (handler.route.stream) {
+        const handle = (handler as StreamHandler).handle;
         return {
           route: handler.route,
-          handle: (input, context) => {
-            const request = requestOf(handler.route._tag, input);
-            return (
-              handler.handle(input, context) as Stream.Stream<unknown, unknown>
-            ).pipe(
-              Stream.tapCause((cause) =>
-                Effect.sync(() => reportDefect(activity, request, cause)),
-              ),
-              Stream.provideService(CurrentRequest, request),
-            );
-          },
+          handle: (input, context) => ({
+            async *[Symbol.asyncIterator]() {
+              try {
+                yield* handle(input, context);
+              } catch (error) {
+                if (!context.signal.aborted)
+                  reportDefect(
+                    activity,
+                    requestOf(handler.route._tag, input),
+                    error,
+                  );
+                throw error;
+              }
+            },
+          }),
         };
+      }
+      const handle = (handler as RequestHandler).handle;
       return {
         route: handler.route,
-        handle: (input, context) =>
-          Effect.suspend(() => {
-            const request = requestOf(handler.route._tag, input);
-            const startedAt = performance.now();
-            return (
-              handler.handle(input, context) as Effect.Effect<unknown, unknown>
-            ).pipe(
-              reportingDefects(activity, request),
-              Effect.ensuring(
-                Effect.sync(() =>
-                  activity.requestFinished(
-                    handler.route._tag,
-                    request.repositoryId,
-                    performance.now() - startedAt,
-                  ),
-                ),
-              ),
-              Effect.provideService(CurrentRequest, request),
+        handle: async (input, context) => {
+          const request = requestOf(handler.route._tag, input);
+          const startedAt = performance.now();
+          try {
+            return await handle(input, context);
+          } catch (error) {
+            if (!context.signal.aborted) reportDefect(activity, request, error);
+            throw error;
+          } finally {
+            activity.requestFinished(
+              handler.route._tag,
+              request.repositoryId,
+              performance.now() - startedAt,
             );
-          }),
+          }
+        },
       };
     }),
   };
 }
 
-function reportingDefects(activity: DiagnosticsActivity, request: Request) {
-  return <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(
-      Effect.tapCause((cause) =>
-        Effect.sync(() => reportDefect(activity, request, cause)),
-      ),
-    );
-}
-
 export function reportDefect(
   activity: DiagnosticsActivity,
   request: Request,
-  cause: Cause.Cause<unknown>,
+  error: unknown,
 ) {
-  if (!Cause.hasDies(cause)) return;
-  const detail = Cause.pretty(cause);
+  if (!(error instanceof Error) || error.name === "AbortError") return;
+  const detail = error.stack ?? `${error.name}: ${error.message}`;
   activity.reportError({
     kind: "Server",
     title: detail.split("\n")[0]?.trim() || "Unexpected server error",
@@ -161,20 +154,19 @@ function requestOf(procedure: string, input: unknown): Request {
     : { procedure, repositoryId };
 }
 
-function failedOutcome(cause: Cause.Cause<GitFailed>): GitRunOutcome {
-  if (Cause.hasInterruptsOnly(cause)) return { _tag: "Interrupted" };
-  const failure = Cause.findErrorOption(cause);
-  if (Option.isNone(failure))
-    return { _tag: "Failed", reason: "Defect", detail: Cause.pretty(cause) };
-  return failure.value.exitCode === undefined
-    ? {
-        _tag: "Failed",
-        reason: failure.value.reason,
-        detail: failure.value.detail,
-      }
-    : {
-        _tag: "Exited",
-        exitCode: failure.value.exitCode,
-        stderr: failure.value.detail,
-      };
+function failedOutcome(
+  error: unknown,
+  signal: AbortSignal | undefined,
+): GitRunOutcome {
+  if (signal?.aborted) return { _tag: "Interrupted" };
+  if (!isGitFailed(error))
+    return {
+      _tag: "Failed",
+      reason: "Defect",
+      detail:
+        error instanceof Error ? (error.stack ?? error.message) : String(error),
+    };
+  return error.exitCode === undefined
+    ? { _tag: "Failed", reason: error.reason, detail: error.detail }
+    : { _tag: "Exited", exitCode: error.exitCode, stderr: error.detail };
 }

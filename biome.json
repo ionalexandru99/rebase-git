@@ -131,10 +131,6 @@
                   {
                     "group": ["#server/**", "#desktop/**"],
                     "message": "The browser application cannot depend on server or desktop code."
-                  },
-                  {
-                    "group": ["effect", "effect/**"],
-                    "message": "Browser features and application composition use TanStack Query and plain TypeScript. Keep Effect in the environment connection."
                   }
                 ]
               }
@@ -159,10 +155,6 @@
                   {
                     "group": ["#web/app/**"],
                     "message": "Features expose capabilities to application composition and must not depend on it."
-                  },
-                  {
-                    "group": ["effect", "effect/**"],
-                    "message": "Browser features and application composition use TanStack Query and plain TypeScript. Keep Effect in the environment connection."
                   }
                 ]
               }
@@ -187,10 +179,6 @@
                   {
                     "group": ["#web/app/**", "#web/features/**"],
                     "message": "Platform adapters and UI primitives cannot depend on product features or application composition."
-                  },
-                  {
-                    "group": ["effect", "effect/**"],
-                    "message": "Browser features and application composition use TanStack Query and plain TypeScript. Keep Effect in the environment connection."
                   }
                 ]
               }

@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import type { TeaCli } from "#server/features/source-control/hosts/forgejo-host.ts";
 
 interface ForgejoPullRequestNode {
@@ -43,8 +42,8 @@ export function fakeForgejo(
   const loginNamed = (name: string) =>
     logins[Number(name.slice("login-".length))];
   const forgejo: TeaCli = {
-    version: Effect.succeed(version ?? undefined),
-    logins: Effect.succeed(
+    version: async () => version ?? undefined,
+    logins: async () =>
       JSON.stringify(
         logins.map(({ sshKey: _, ...login }, index) => ({
           name: `login-${index}`,
@@ -52,10 +51,9 @@ export function fakeForgejo(
           ...login,
         })),
       ),
-    ),
     login: (name) => {
       const login = loginNamed(name);
-      return Effect.succeed(
+      return Promise.resolve(
         login === undefined
           ? `Login '${name}' do not exist\n\n`
           : `\n  # ${name}\n\n  @${login.user} ${login.url}/${login.user}\n\n${
@@ -69,14 +67,14 @@ export function fakeForgejo(
       requests.push(`${login} ${endpoint}`);
       const server = loginNamed(login)?.url ?? "";
       if (endpoint === "/user" || endpoint.startsWith("/repos/search?"))
-        return Effect.succeed(
+        return Promise.resolve(
           repositories === undefined
             ? serverError
             : endpoint === "/user"
               ? JSON.stringify({ id: 7, login: loginNamed(login)?.user })
               : repositoryPage(server, repositories, endpoint),
         );
-      if (byHead === null) return Effect.succeed(serverError);
+      if (byHead === null) return Promise.resolve(serverError);
       const [, owner, name, rest = ""] =
         /^\/repos\/([^/]+)\/([^/]+)\/(.*)$/.exec(endpoint) ?? [];
       const status = /^commits\/(\d+)\/status$/.exec(rest)?.[1];
@@ -84,7 +82,7 @@ export function fakeForgejo(
         const state = nodes.find(
           ({ number }) => String(number) === status,
         )?.status;
-        return Effect.succeed(
+        return Promise.resolve(
           JSON.stringify({
             state: state ?? "pending",
             total_count: state === undefined ? 0 : 1,
@@ -109,13 +107,13 @@ export function fakeForgejo(
       if (wanted !== undefined) {
         const node = nodes.find(({ number }) => String(number) === wanted);
         return node === undefined
-          ? Effect.fail({ _tag: "PullRequestsUnavailable" })
-          : Effect.succeed(JSON.stringify(asNode(node)));
+          ? Promise.reject({ _tag: "PullRequestsUnavailable" })
+          : Promise.resolve(JSON.stringify(asNode(node)));
       }
       const query = new URLSearchParams(rest.split("?")[1]);
       const limit = Number(query.get("limit") ?? nodes.length);
       const start = (Number(query.get("page") ?? 1) - 1) * limit;
-      return Effect.succeed(
+      return Promise.resolve(
         JSON.stringify(nodes.slice(start, start + limit).map(asNode)),
       );
     },

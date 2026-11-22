@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import type {
   CommitFile,
   CommitInspection,
@@ -18,7 +17,7 @@ import {
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
-  type GitFailed,
+  gitFailed,
   isGitObjectId,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
@@ -40,7 +39,6 @@ import {
   diffByteLimit,
   type GitBlob,
   readBlobs,
-  unreadableBlob,
 } from "#server/repository/comparison/read-blobs.ts";
 import {
   type RepositoryFileContent,
@@ -51,15 +49,16 @@ const originalObjects = { globalArguments: ["--no-replace-objects"] };
 const missingMode = "000000";
 const submoduleMode = "160000";
 
-function inspectCommit(git: GitCommandRunner, command: InspectCommit) {
-  return Effect.gen(function* () {
-    const metadata = yield* readMetadata(git, command);
-    const files = yield* readCommitFiles(git, command, metadata.parentOid);
-    return {
-      ...metadata,
-      ...fitFiles(files, Buffer.byteLength(JSON.stringify(metadata))),
-    } satisfies CommitInspection;
-  });
+async function inspectCommit(
+  git: GitCommandRunner,
+  command: InspectCommit,
+): Promise<CommitInspection> {
+  const metadata = await readMetadata(git, command);
+  const files = await readCommitFiles(git, command, metadata.parentOid);
+  return {
+    ...metadata,
+    ...fitFiles(files, Buffer.byteLength(JSON.stringify(metadata))),
+  };
 }
 
 export function fitFiles(files: readonly CommitFile[], reservedBytes: number) {
@@ -71,62 +70,54 @@ export function fitFiles(files: readonly CommitFile[], reservedBytes: number) {
   return { files: visible, truncated: visible.length !== files.length };
 }
 
-function inspectCommitDiff(git: GitCommandRunner, command: InspectCommitDiff) {
-  return readMetadata(git, command).pipe(
-    Effect.flatMap((metadata) =>
-      readChangeDiff(git, command, metadata.parentOid),
-    ),
-  );
+async function inspectCommitDiff(
+  git: GitCommandRunner,
+  command: InspectCommitDiff,
+) {
+  const metadata = await readMetadata(git, command);
+  return readChangeDiff(git, command, metadata.parentOid);
 }
 
-export function readChangeDiff(
+export async function readChangeDiff(
   git: GitCommandRunner,
   command: InspectCommitDiff,
   parentOid: string | null,
 ) {
-  return Effect.gen(function* () {
-    const change = yield* readCommitChange(git, command, parentOid);
-    if (change === undefined)
-      return yield* Effect.fail(
-        changesFailed(
-          "Stale",
-          "This file is not changed in the selected comparison.",
-        ),
-      );
-    const blobs = yield* readBlobs(
+  const change = await readCommitChange(git, command, parentOid);
+  if (change === undefined)
+    throw changesFailed(
+      "Stale",
+      "This file is not changed in the selected comparison.",
+    );
+  const blobs = await readBlobs(
+    git,
+    command.worktreePath,
+    [change.before, change.after].filter(hasBlob).map((side) => side.oid),
+    diffByteLimit,
+    originalObjects,
+  );
+  const side = (current: CommitSide, commit: string | null) =>
+    resolveLargeFile(
       git,
       command.worktreePath,
-      [change.before, change.after].filter(hasBlob).map((side) => side.oid),
-      diffByteLimit,
-      originalObjects,
+      commitFile(current, blobs),
+      commit ?? undefined,
     );
-    const side = (current: CommitSide, commit: string | null) =>
-      commitFile(current, blobs).pipe(
-        Effect.flatMap((file) =>
-          resolveLargeFile(
-            git,
-            command.worktreePath,
-            file,
-            commit ?? undefined,
-          ),
-        ),
-      );
-    const [before, after] = yield* Effect.all(
-      [side(change.before, parentOid), side(change.after, command.oid)],
-      { concurrency: 2 },
-    );
-    return buildChangeDiff(
-      command.path,
-      `${command.oid}:${parentOid ?? "root"}`,
-      before,
-      after,
-      {
-        previousPath: change.previousPath,
-        patch: change.patch,
-        whole: command.whole,
-      },
-    );
-  });
+  const [before, after] = await Promise.all([
+    side(change.before, parentOid),
+    side(change.after, command.oid),
+  ]);
+  return buildChangeDiff(
+    command.path,
+    `${command.oid}:${parentOid ?? "root"}`,
+    before,
+    after,
+    {
+      previousPath: change.previousPath,
+      patch: change.patch,
+      whole: command.whole,
+    },
+  );
 }
 
 function hasBlob(side: CommitSide) {
@@ -136,52 +127,51 @@ function hasBlob(side: CommitSide) {
 function commitFile(
   side: CommitSide,
   blobs: ReadonlyMap<string, GitBlob>,
-): Effect.Effect<RepositoryFileContent, GitFailed> {
+): RepositoryFileContent {
   if (side.mode === missingMode)
-    return Effect.succeed({
-      content: null,
-      bytes: 0,
-      mode: "0",
-      identity: "missing",
-    });
+    return { content: null, bytes: 0, mode: "0", identity: "missing" };
   if (side.mode === submoduleMode)
-    return Effect.succeed({
-      content: null,
-      bytes: 0,
-      mode: side.mode,
-      identity: side.oid,
-    });
+    return { content: null, bytes: 0, mode: side.mode, identity: side.oid };
   const blob = blobs.get(side.oid);
-  return blob === undefined
-    ? unreadableBlob
-    : Effect.succeed({ ...blob, mode: side.mode, identity: side.oid });
+  if (blob === undefined)
+    throw gitFailed("Failed", "Could not read the file object.");
+  return { ...blob, mode: side.mode, identity: side.oid };
 }
 
-function readMetadata(git: GitCommandRunner, command: InspectCommit) {
-  return Effect.gen(function* () {
-    if (
-      ![
-        command.oid,
-        ...(command.parentOid === undefined ? [] : [command.parentOid]),
-      ].every((oid) => isGitObjectId(oid))
-    )
-      return yield* Effect.fail(
-        changesFailed("Unsupported", "Select a full commit identity."),
-      );
-    const output = yield* runRepositoryGit(
-      git,
-      command.worktreePath,
-      [
-        "show",
-        "--no-patch",
-        "--no-show-signature",
-        "--format=%H%x00%P%x00%an%x00%ae%x00%aI%x00%cn%x00%ce%x00%cI%x00%B%x00",
-        `${command.oid}^{commit}`,
-        "--",
-      ],
-      { ...originalObjects, maxOutputBytes: 800_000 },
-    );
-    const [
+async function readMetadata(git: GitCommandRunner, command: InspectCommit) {
+  if (
+    ![
+      command.oid,
+      ...(command.parentOid === undefined ? [] : [command.parentOid]),
+    ].every((oid) => isGitObjectId(oid))
+  )
+    throw changesFailed("Unsupported", "Select a full commit identity.");
+  const output = await runRepositoryGit(
+    git,
+    command.worktreePath,
+    [
+      "show",
+      "--no-patch",
+      "--no-show-signature",
+      "--format=%H%x00%P%x00%an%x00%ae%x00%aI%x00%cn%x00%ce%x00%cI%x00%B%x00",
+      `${command.oid}^{commit}`,
+      "--",
+    ],
+    { ...originalObjects, maxOutputBytes: 800_000 },
+  );
+  const [
+    oid,
+    parentText,
+    authorName,
+    authorEmail,
+    authorDate,
+    committerName,
+    committerEmail,
+    committerDate,
+    message,
+  ] = output.split("\0");
+  if (
+    [
       oid,
       parentText,
       authorName,
@@ -191,99 +181,77 @@ function readMetadata(git: GitCommandRunner, command: InspectCommit) {
       committerEmail,
       committerDate,
       message,
-    ] = output.split("\0");
-    if (
-      [
-        oid,
-        parentText,
-        authorName,
-        authorEmail,
-        authorDate,
-        committerName,
-        committerEmail,
-        committerDate,
-        message,
-      ].some((field) => field === undefined) ||
-      oid !== command.oid
-    )
-      return yield* Effect.fail(
-        repositoryRejected("GitFailed", "Could not read commit metadata."),
-      );
-    const parents = (parentText ?? "").split(" ").filter(Boolean);
-    if (command.parentOid !== undefined && !parents.includes(command.parentOid))
-      return yield* Effect.fail(
-        changesFailed("Unsupported", "Choose a parent of the selected commit."),
-      );
-    return {
-      oid: command.oid,
-      parents,
-      parentOid: command.parentOid ?? parents[0] ?? null,
-      message: message ?? "",
-      author: {
-        name: authorName ?? "",
-        email: authorEmail ?? "",
-        date: authorDate ?? "",
-      },
-      committer: {
-        name: committerName ?? "",
-        email: committerEmail ?? "",
-        date: committerDate ?? "",
-      },
-    };
-  });
+    ].some((field) => field === undefined) ||
+    oid !== command.oid
+  )
+    throw repositoryRejected("GitFailed", "Could not read commit metadata.");
+  const parents = (parentText ?? "").split(" ").filter(Boolean);
+  if (command.parentOid !== undefined && !parents.includes(command.parentOid))
+    throw changesFailed(
+      "Unsupported",
+      "Choose a parent of the selected commit.",
+    );
+  return {
+    oid: command.oid,
+    parents,
+    parentOid: command.parentOid ?? parents[0] ?? null,
+    message: message ?? "",
+    author: {
+      name: authorName ?? "",
+      email: authorEmail ?? "",
+      date: authorDate ?? "",
+    },
+    committer: {
+      name: committerName ?? "",
+      email: committerEmail ?? "",
+      date: committerDate ?? "",
+    },
+  };
 }
 
-export function readCommitFiles(
+export async function readCommitFiles(
   git: GitCommandRunner,
   command: InspectCommit,
   parentOid: string | null,
 ) {
-  return Effect.gen(function* () {
-    const compared = [
-      "--root",
-      "--no-commit-id",
-      "-r",
-      "-z",
-      "--no-ext-diff",
-      "--no-textconv",
-      "-M",
-      ...(parentOid === null ? [] : [parentOid]),
-      command.oid,
-      "--",
-    ];
-    const output = yield* runRepositoryGit(
-      git,
-      command.worktreePath,
-      ["diff-tree", "--name-status", ...compared],
-      { ...originalObjects, maxOutputBytes: 16_000_000 },
-    );
-    const files = commitFiles(output);
-    const [counted, large] = yield* Effect.all(
-      [
-        files.length > countedFilesLimit
-          ? Effect.succeed(new Map<string, ChangedLines>())
-          : runRepositoryGit(
-              git,
-              command.worktreePath,
-              ["diff-tree", "--numstat", ...compared],
-              originalObjects,
-            ).pipe(Effect.map(lineCounts)),
-        largeFilePaths(
+  const compared = [
+    "--root",
+    "--no-commit-id",
+    "-r",
+    "-z",
+    "--no-ext-diff",
+    "--no-textconv",
+    "-M",
+    ...(parentOid === null ? [] : [parentOid]),
+    command.oid,
+    "--",
+  ];
+  const output = await runRepositoryGit(
+    git,
+    command.worktreePath,
+    ["diff-tree", "--name-status", ...compared],
+    { ...originalObjects, maxOutputBytes: 16_000_000 },
+  );
+  const files = commitFiles(output);
+  const [counted, large] = await Promise.all([
+    files.length > countedFilesLimit
+      ? new Map<string, ChangedLines>()
+      : runRepositoryGit(
           git,
           command.worktreePath,
-          files.map((file) => file.path),
-        ),
-      ],
-      { concurrency: 2 },
-    );
-    return files.map(
-      (file): CommitFile =>
-        markLargeFile(
-          { ...file, lines: counted.get(file.path) ?? null },
-          large,
-        ),
-    );
-  });
+          ["diff-tree", "--numstat", ...compared],
+          originalObjects,
+        ).then(lineCounts),
+    largeFilePaths(
+      git,
+      command.worktreePath,
+      files.map((file) => file.path),
+    ),
+  ]);
+  return files.map(
+    (file): CommitFile =>
+      markLargeFile({ ...file, lines: counted.get(file.path) ?? null }, large),
+  );
 }
 
 const countedFilesLimit = 1000;

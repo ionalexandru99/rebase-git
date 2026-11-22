@@ -1,6 +1,6 @@
-import { Effect } from "effect";
-import type { PullRequestsUnavailable } from "#contracts/pull-requests/pull-requests.contract.ts";
+import type { z } from "zod";
 import {
+  decodeHostJson,
   type HostResponse,
   hostGet,
   unavailable,
@@ -10,25 +10,26 @@ export interface BitbucketClient {
   readonly get: (
     url: string,
     authorization: string,
-  ) => Effect.Effect<HostResponse, PullRequestsUnavailable>;
+    timeoutMilliseconds?: number,
+  ) => Promise<HostResponse>;
 }
 
 export const bitbucketApi = "https://api.bitbucket.org/2.0";
 
 export function createBitbucketClient(): BitbucketClient {
-  return { get: (url, authorization) => hostGet(url, { authorization }) };
+  return {
+    get: (url, authorization, timeoutMilliseconds) =>
+      hostGet(url, { authorization }, timeoutMilliseconds),
+  };
 }
 
-export function readJson<A>(
+export async function readJson<Schema extends z.ZodType>(
   client: BitbucketClient,
   authorization: string,
   url: string,
-  decode: (body: string) => Effect.Effect<A, unknown>,
-): Effect.Effect<A, PullRequestsUnavailable> {
-  return client.get(url, authorization).pipe(
-    Effect.flatMap(({ status, body }) =>
-      status === 200 ? decode(body) : Effect.fail(unavailable),
-    ),
-    Effect.mapError(() => unavailable),
-  );
+  schema: Schema,
+): Promise<z.output<Schema>> {
+  const { status, body } = await client.get(url, authorization);
+  if (status !== 200) throw unavailable;
+  return decodeHostJson(schema)(body);
 }

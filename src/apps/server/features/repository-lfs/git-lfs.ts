@@ -1,7 +1,6 @@
 import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Effect, Stream } from "effect";
 import type { ChangedLines } from "#contracts/repository-changes/repository-changes.contract.ts";
 import type { GitStatus } from "#contracts/source-control/source-control.contract.ts";
 import {
@@ -33,43 +32,42 @@ const progressOnStdout = {
 
 export function createGitLfs(git: GitCommandRunner) {
   let known: GitStatus | undefined;
-  const rescan = git
-    .run({ directory: homedir(), arguments: ["lfs", "version"] })
-    .pipe(
-      Effect.map(({ exitCode, stdout }): GitStatus => {
-        const version = stdout.trim().split(" ")[0];
-        return exitCode === 0 && version?.startsWith("git-lfs/")
+  const rescan = async (): Promise<GitStatus> => {
+    try {
+      const { exitCode, stdout } = await git.run({
+        directory: homedir(),
+        arguments: ["lfs", "version"],
+      });
+      const version = stdout.trim().split(" ")[0];
+      known =
+        exitCode === 0 && version?.startsWith("git-lfs/")
           ? { _tag: "Available", version }
           : { _tag: "Missing" };
-      }),
-      Effect.tap((status) =>
-        Effect.sync(() => {
-          known = status;
-        }),
-      ),
-      Effect.orElseSucceed((): GitStatus => ({ _tag: "Missing" })),
-    );
-  const status = Effect.suspend(() =>
-    known === undefined ? rescan : Effect.succeed(known),
-  );
-  const command = <Command extends Pick<GitCommand, "globalArguments">>(
+      return known;
+    } catch {
+      return { _tag: "Missing" };
+    }
+  };
+  const status = () =>
+    known === undefined ? rescan() : Promise.resolve(known);
+  const command = async <Command extends Pick<GitCommand, "globalArguments">>(
     next: Command,
   ) =>
-    Effect.map(status, (current) =>
-      current._tag === "Available"
-        ? next
-        : {
-            ...next,
-            globalArguments: [...filtersOff, ...(next.globalArguments ?? [])],
-          },
-    );
+    (await status())._tag === "Available"
+      ? next
+      : {
+          ...next,
+          globalArguments: [...filtersOff, ...(next.globalArguments ?? [])],
+        };
   return {
     status,
     rescan,
-    installed: Effect.map(status, (current) => current._tag === "Available"),
+    installed: async () => (await status())._tag === "Available",
     git: {
-      run: (next) => Effect.flatMap(command(next), git.run),
-      stream: (next) => Stream.unwrap(Effect.map(command(next), git.stream)),
+      run: async (next) => git.run(await command(next)),
+      stream: async function* (next) {
+        yield* git.stream(await command(next));
+      },
     } satisfies GitCommandRunner,
   };
 }
@@ -86,26 +84,23 @@ export function runGitLfs(
   });
 }
 
-export function largeFilePaths(
+export async function largeFilePaths(
   git: GitCommandRunner,
   directory: string,
   paths: readonly string[],
 ) {
-  if (paths.length === 0) return Effect.succeed(new Set<string>());
-  return runRepositoryGit(
+  const found = new Set<string>();
+  if (paths.length === 0) return found;
+  const output = await runRepositoryGit(
     git,
     directory,
     ["check-attr", "-z", "--stdin", "filter"],
     { input: paths.map((path) => `${path}\0`).join("") },
-  ).pipe(
-    Effect.map((output) => {
-      const fields = output.split("\0");
-      const found = new Set<string>();
-      for (let index = 0; index + 2 < fields.length; index += 3)
-        if (fields[index + 2] === "lfs") found.add(fields[index] ?? "");
-      return found;
-    }),
   );
+  const fields = output.split("\0");
+  for (let index = 0; index + 2 < fields.length; index += 3)
+    if (fields[index + 2] === "lfs") found.add(fields[index] ?? "");
+  return found;
 }
 
 export function markLargeFile<
@@ -116,91 +111,82 @@ export function markLargeFile<
     : { ...file, lfs: false };
 }
 
-export function downloadLargeFiles(
+export async function downloadLargeFiles(
   git: GitCommandRunner,
   directory: string,
   paths?: readonly string[],
   commits: readonly string[] = [],
 ) {
-  return Effect.gen(function* () {
-    if (paths !== undefined && commits.length > 0) {
-      const source = yield* defaultRemote(git, directory);
-      if (source === undefined) return;
-      return yield* runGitLfs(
-        git,
-        directory,
-        ["fetch", `--include=${includePattern(paths)}`, source, ...commits],
-        progressOnStdout,
-      );
-    }
-    const tracked = yield* runRepositoryGit(
+  if (paths !== undefined && commits.length > 0) {
+    const source = await defaultRemote(git, directory);
+    if (source === undefined) return;
+    await runGitLfs(
       git,
       directory,
-      ["ls-files", "-z", "--", ":(attr:filter=lfs)"],
-      { literalPathspecs: false },
-    );
-    if (tracked === "") return;
-    yield* runGitLfs(
-      git,
-      directory,
-      [
-        "pull",
-        ...(paths === undefined ? [] : [`--include=${includePattern(paths)}`]),
-      ],
+      ["fetch", `--include=${includePattern(paths)}`, source, ...commits],
       progressOnStdout,
     );
-  });
+    return;
+  }
+  const tracked = await runRepositoryGit(
+    git,
+    directory,
+    ["ls-files", "-z", "--", ":(attr:filter=lfs)"],
+    { literalPathspecs: false },
+  );
+  if (tracked === "") return;
+  await runGitLfs(
+    git,
+    directory,
+    [
+      "pull",
+      ...(paths === undefined ? [] : [`--include=${includePattern(paths)}`]),
+    ],
+    progressOnStdout,
+  );
 }
 
-export function fetchLargeFiles(
+export async function fetchLargeFiles(
   lfs: GitLfs,
   git: GitCommandRunner,
   directory: string,
   target: string,
   remote?: string,
 ) {
-  return Effect.gen(function* () {
-    if (!(yield* lfs.installed)) return;
-    if (!(yield* usesLargeFiles(git, directory, target))) return;
-    const source = remote ?? (yield* defaultRemote(git, directory));
-    if (source === undefined) return;
-    yield* runGitLfs(git, directory, ["fetch", source, target], {
-      ...progressOnStdout,
-    });
+  if (!(await lfs.installed())) return;
+  if (!(await usesLargeFiles(git, directory, target))) return;
+  const source = remote ?? (await defaultRemote(git, directory));
+  if (source === undefined) return;
+  await runGitLfs(git, directory, ["fetch", source, target], {
+    ...progressOnStdout,
   });
 }
 
-function usesLargeFiles(
+async function usesLargeFiles(
   git: GitCommandRunner,
   directory: string,
   target: string,
 ) {
-  return Effect.gen(function* () {
-    const common = yield* readGitCommonDirectory(git, directory);
-    const store = yield* Effect.promise(() =>
-      stat(join(common, "lfs")).then(
-        () => true,
-        () => false,
-      ),
-    );
-    if (store) return true;
-    const attributes = yield* runRepositoryGitOutput(
-      git,
-      directory,
-      ["cat-file", "blob", `${target}:.gitattributes`],
-      { exitCodes: [0, 128] },
-    );
-    return attributes.stdout.includes("filter=lfs");
-  });
+  const common = await readGitCommonDirectory(git, directory);
+  const store = await stat(join(common, "lfs")).then(
+    () => true,
+    () => false,
+  );
+  if (store) return true;
+  const attributes = await runRepositoryGitOutput(
+    git,
+    directory,
+    ["cat-file", "blob", `${target}:.gitattributes`],
+    { exitCodes: [0, 128] },
+  );
+  return attributes.stdout.includes("filter=lfs");
 }
 
-function defaultRemote(git: GitCommandRunner, directory: string) {
-  return runRepositoryGit(git, directory, ["remote"]).pipe(
-    Effect.map((output) => {
-      const remotes = output.split("\n").filter(Boolean);
-      return remotes.includes("origin") ? "origin" : remotes[0];
-    }),
-  );
+async function defaultRemote(git: GitCommandRunner, directory: string) {
+  const remotes = (await runRepositoryGit(git, directory, ["remote"]))
+    .split("\n")
+    .filter(Boolean);
+  return remotes.includes("origin") ? "origin" : remotes[0];
 }
 
 function includePattern(paths: readonly string[]) {

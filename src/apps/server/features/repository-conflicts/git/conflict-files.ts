@@ -1,5 +1,4 @@
 import { open } from "node:fs/promises";
-import { Effect } from "effect";
 import type {
   ConflictFailure,
   ConflictFile,
@@ -13,6 +12,7 @@ import {
 } from "#server/adapters/local-git/git-commands.ts";
 import { changeIo } from "#server/features/repository-changes/git/change-failures.ts";
 import {
+  mapConcurrently,
   safeChangePath,
   worktreeFile,
 } from "#server/features/repository-changes/git/change-files.ts";
@@ -75,69 +75,55 @@ export function conflictFailed(
   return { _tag: "ConflictFailed", reason, detail: detail.slice(0, 2048) };
 }
 
-export function readUnmergedEntries(
+export async function readUnmergedEntries(
   git: GitCommandRunner,
   directory: string,
   paths: readonly string[] = [],
 ) {
-  return runRepositoryGit(git, directory, [
-    "ls-files",
-    "--unmerged",
-    "-z",
-    ...(paths.length === 0 ? [] : ["--", ...paths]),
-  ]).pipe(Effect.map(parseStageEntries));
+  return parseStageEntries(
+    await runRepositoryGit(git, directory, [
+      "ls-files",
+      "--unmerged",
+      "-z",
+      ...(paths.length === 0 ? [] : ["--", ...paths]),
+    ]),
+  );
 }
 
-export function readConflictSnapshots(
+export async function readConflictSnapshots(
   git: GitCommandRunner,
   directory: string,
   entries: ReadonlyMap<string, readonly StageEntry[]>,
 ) {
-  return Effect.gen(function* () {
-    if (entries.size === 0) return [];
-    const sources = yield* readSnapshotSources(git, directory, entries);
-    return yield* Effect.forEach(
-      entries,
-      ([path, stages]) =>
-        readConflictSnapshot(directory, path, stages, sources),
-      { concurrency: 16 },
-    );
-  });
+  if (entries.size === 0) return [];
+  const sources = await readSnapshotSources(git, directory, entries);
+  return mapConcurrently([...entries], ([path, stages]) =>
+    readConflictSnapshot(directory, path, stages, sources),
+  );
 }
 
-export function requireConflict(
+export async function requireConflict(
   git: GitCommandRunner,
   directory: string,
   path: string,
   revision?: string,
 ) {
-  return Effect.gen(function* () {
-    const entries = yield* readUnmergedEntries(git, directory, [path]);
-    const stages = entries.get(path);
-    if (stages === undefined)
-      return yield* Effect.fail(
-        conflictFailed("Missing", "This file is no longer in conflict."),
-      );
-    const sources = yield* readSnapshotSources(
-      git,
-      directory,
-      new Map([[path, stages]]),
+  const entries = await readUnmergedEntries(git, directory, [path]);
+  const stages = entries.get(path);
+  if (stages === undefined)
+    throw conflictFailed("Missing", "This file is no longer in conflict.");
+  const sources = await readSnapshotSources(
+    git,
+    directory,
+    new Map([[path, stages]]),
+  );
+  const snapshot = await readConflictSnapshot(directory, path, stages, sources);
+  if (revision !== undefined && snapshot.file.revision !== revision)
+    throw conflictFailed(
+      "Stale",
+      "The file changed since it was loaded. Review the refreshed conflict.",
     );
-    const snapshot = yield* readConflictSnapshot(
-      directory,
-      path,
-      stages,
-      sources,
-    );
-    if (revision !== undefined && snapshot.file.revision !== revision)
-      return yield* Effect.fail(
-        conflictFailed(
-          "Stale",
-          "The file changed since it was loaded. Review the refreshed conflict.",
-        ),
-      );
-    return snapshot;
-  });
+  return snapshot;
 }
 
 function parseStageEntries(output: string) {
@@ -153,84 +139,81 @@ function parseStageEntries(output: string) {
   return entries;
 }
 
-function readSnapshotSources(
+async function readSnapshotSources(
   git: GitCommandRunner,
   directory: string,
   entries: ReadonlyMap<string, readonly StageEntry[]>,
-) {
-  return Effect.all(
-    {
-      markerSizes: readMarkerSizes(git, directory, [...entries.keys()]),
-      blobs: readBlobs(
-        git,
-        directory,
-        [...entries.values()].flatMap((stages) =>
-          stages
-            .filter((stage) => stage.mode !== gitlink)
-            .map(({ oid }) => oid),
-        ),
-        previewByteLimit,
+): Promise<SnapshotSources> {
+  const [markerSizes, blobs] = await Promise.all([
+    readMarkerSizes(git, directory, [...entries.keys()]),
+    readBlobs(
+      git,
+      directory,
+      [...entries.values()].flatMap((stages) =>
+        stages.filter((stage) => stage.mode !== gitlink).map(({ oid }) => oid),
       ),
-    },
-    { concurrency: "unbounded" },
-  );
+      previewByteLimit,
+    ),
+  ]);
+  return { markerSizes, blobs };
 }
 
-function readMarkerSizes(
+async function readMarkerSizes(
   git: GitCommandRunner,
   directory: string,
   paths: readonly string[],
 ) {
-  return runRepositoryGit(
+  const output = await runRepositoryGit(
     git,
     directory,
     ["check-attr", "-z", "--stdin", "conflict-marker-size"],
     { input: paths.map((path) => `${path}\0`).join("") },
-  ).pipe(
-    Effect.map((output) => {
-      const fields = output.split("\0");
-      const sizes = new Map<string, number>();
-      for (let index = 0; index + 2 < fields.length; index += 3) {
-        const size = Number(fields[index + 2]);
-        if (Number.isSafeInteger(size) && size > 0)
-          sizes.set(fields[index] ?? "", size);
-      }
-      return sizes;
-    }),
   );
+  const fields = output.split("\0");
+  const sizes = new Map<string, number>();
+  for (let index = 0; index + 2 < fields.length; index += 3) {
+    const size = Number(fields[index + 2]);
+    if (Number.isSafeInteger(size) && size > 0)
+      sizes.set(fields[index] ?? "", size);
+  }
+  return sizes;
 }
 
-function readConflictSnapshot(
+async function readConflictSnapshot(
   directory: string,
   path: string,
   stages: readonly StageEntry[],
   sources: SnapshotSources,
 ) {
-  return readConflictWorktree(directory, path).pipe(
-    Effect.map((worktree) => conflictSnapshot(path, stages, worktree, sources)),
+  return conflictSnapshot(
+    path,
+    stages,
+    await readConflictWorktree(directory, path),
+    sources,
   );
 }
 
-function readConflictWorktree(directory: string, path: string) {
-  return Effect.gen(function* () {
-    const worktree = yield* worktreeFile(directory, path);
-    if (worktree.content !== null || worktree.mode === gitlink) return worktree;
-    if (worktree.identity === "missing") return worktree;
-    const target = yield* safeChangePath(directory, path);
-    const content = yield* changeIo(async () => {
-      const file = await open(target, "r");
-      try {
-        const head = Buffer.alloc(binarySniffBytes);
-        const { bytesRead } = await file.read(head, 0, binarySniffBytes, 0);
-        return head.subarray(0, bytesRead).includes(0)
-          ? null
-          : await file.readFile();
-      } finally {
-        await file.close();
-      }
-    });
-    return { ...worktree, content };
+async function readConflictWorktree(
+  directory: string,
+  path: string,
+): Promise<RepositoryFileContent> {
+  const worktree = await worktreeFile(directory, path);
+  if (worktree.content !== null || worktree.mode === gitlink) return worktree;
+  if (worktree.identity === "missing") return worktree;
+  const target = await safeChangePath(directory, path);
+  const content = await changeIo(async () => {
+    const file = await open(target, "r");
+    try {
+      const head = Buffer.alloc(binarySniffBytes);
+      const { bytesRead } = await file.read(head, 0, binarySniffBytes, 0);
+      return head.subarray(0, bytesRead).includes(0)
+        ? null
+        : await file.readFile();
+    } finally {
+      await file.close();
+    }
   });
+  return { ...worktree, content };
 }
 
 function conflictSnapshot(

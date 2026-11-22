@@ -1,7 +1,6 @@
 import { chmod, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { afterAll, beforeAll, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { createRepository, git } from "#tests-support/git.ts";
@@ -36,16 +35,15 @@ afterAll(async () => {
 it("reports Git's progress and keeps it out of the failure message", async () => {
   const reported: string[] = [];
 
-  const withProgress = await Effect.runPromise(
-    runner.run({
-      directory: local,
-      arguments: ["push", "--progress", "origin", "main"],
-      progress: (output) => reported.push(output),
-    }),
-  );
-  const plain = await Effect.runPromise(
-    runner.run({ directory: local, arguments: ["push", "origin", "main"] }),
-  );
+  const withProgress = await runner.run({
+    directory: local,
+    arguments: ["push", "--progress", "origin", "main"],
+    progress: (output) => reported.push(output),
+  });
+  const plain = await runner.run({
+    directory: local,
+    arguments: ["push", "origin", "main"],
+  });
 
   expect(reported.join("")).toContain("Writing objects: 100%");
   expect(plain.stderr).toContain("name must match JIRA-123");

@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import {
   type GitCommandRunner,
   gitFailed,
@@ -23,19 +22,25 @@ const scopes: Readonly<Record<ConfigScope, readonly string[]>> = {
   "--local": ["local", "worktree"],
 };
 
-export function readScopedConfig<Key extends string>(
+export async function readScopedConfig<Key extends string>(
   git: GitCommandRunner,
   directory: string,
   keys: readonly Key[],
-) {
-  return Effect.forEach(keys, (key) =>
-    runRepositoryGit(
-      git,
-      directory,
-      ["config", "-z", "--show-scope", "--show-origin", "--get-all", key],
-      { exitCodes: [0, 1] },
-    ).pipe(Effect.map((output) => [key, scopedValues(output)] as const)),
-  ).pipe(Effect.map((entries): ScopedConfig<Key> => new Map(entries)));
+): Promise<ScopedConfig<Key>> {
+  const values = new Map<Key, readonly ScopedValue[]>();
+  for (const key of keys)
+    values.set(
+      key,
+      scopedValues(
+        await runRepositoryGit(
+          git,
+          directory,
+          ["config", "-z", "--show-scope", "--show-origin", "--get-all", key],
+          { exitCodes: [0, 1] },
+        ),
+      ),
+    );
+  return values;
 }
 
 export function scopedValue<Key extends string>(
@@ -46,7 +51,7 @@ export function scopedValue<Key extends string>(
   return winner(values, scope, key)?.value.trim() || undefined;
 }
 
-export function saveScopedConfig<Key extends string>(
+export async function saveScopedConfig<Key extends string>(
   git: GitCommandRunner,
   directory: string,
   scope: ConfigScope,
@@ -54,47 +59,37 @@ export function saveScopedConfig<Key extends string>(
   writes: Readonly<Partial<Record<Key, string | null>>>,
 ) {
   const written = keys.filter((key) => writes[key] !== undefined);
-  return Effect.forEach(
-    written,
-    (key) => {
-      const value = writes[key];
-      return value === null || value === undefined
-        ? runRepositoryGit(
-            git,
-            directory,
-            ["config", scope, "--unset-all", key],
-            {
-              exitCodes: [0, 5],
-            },
-          )
-        : runRepositoryGit(git, directory, [
-            "config",
-            scope,
-            "--replace-all",
-            key,
-            value,
-          ]);
-    },
-    { discard: true },
-  ).pipe(
-    Effect.andThen(readScopedConfig(git, directory, keys)),
-    Effect.tap((values) => {
-      const key = written.find(
-        (candidate) =>
-          scopedValue(values, scope, candidate) !==
-          (writes[candidate] ?? undefined),
+  for (const key of written) {
+    const value = writes[key];
+    if (value === null || value === undefined)
+      await runRepositoryGit(
+        git,
+        directory,
+        ["config", scope, "--unset-all", key],
+        { exitCodes: [0, 5] },
       );
-      const shadow = key && winner(values, scope, key);
-      return key === undefined || shadow === undefined
-        ? Effect.void
-        : Effect.fail(
-            gitFailed(
-              "Failed",
-              `${shadow.origin.replace(/^file:/, "")} sets ${key}, so change it there.`,
-            ),
-          );
-    }),
+    else
+      await runRepositoryGit(git, directory, [
+        "config",
+        scope,
+        "--replace-all",
+        key,
+        value,
+      ]);
+  }
+  const values = await readScopedConfig(git, directory, keys);
+  const key = written.find(
+    (candidate) =>
+      scopedValue(values, scope, candidate) !==
+      (writes[candidate] ?? undefined),
   );
+  const shadow = key && winner(values, scope, key);
+  if (key !== undefined && shadow !== undefined)
+    throw gitFailed(
+      "Failed",
+      `${shadow.origin.replace(/^file:/, "")} sets ${key}, so change it there.`,
+    );
+  return values;
 }
 
 function scopedValues(output: string): readonly ScopedValue[] {

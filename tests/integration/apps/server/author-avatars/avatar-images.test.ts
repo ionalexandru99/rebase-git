@@ -1,6 +1,5 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { Effect } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import { createAvatarImages } from "#server/features/author-avatars/author-avatars.ts";
 
@@ -23,9 +22,7 @@ async function imageServer() {
   );
   const { port } = server.address() as AddressInfo;
   return (path: string) =>
-    Effect.runPromise(
-      createAvatarImages().download({ url: `http://127.0.0.1:${port}${path}` }),
-    );
+    createAvatarImages().download({ url: `http://127.0.0.1:${port}${path}` });
 }
 
 describe("avatar images", () => {

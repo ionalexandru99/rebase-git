@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Effect } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import {
   GitSigningApi,
@@ -104,23 +103,19 @@ async function fixture() {
       );
       return join(folder, `${name}.pub`);
     },
-    keys: () => Effect.runPromise(signing.keys(undefined)),
-    save: (choice: SigningChoice) => Effect.runPromise(signing.save(choice)),
+    keys: () => signing.keys(undefined),
+    save: (choice: SigningChoice) => signing.save(choice),
     saveRepository: (choice: SigningChoice | null) =>
-      Effect.runPromise(
-        signing.saveRepository({ repositoryId, signing: choice }),
-      ),
+      signing.saveRepository({ repositoryId, signing: choice }),
     commit: async () => {
       await writeFile(join(repository, "file.txt"), "content\n");
       await git("-C", repository, "add", ".");
-      const snapshot = await Effect.runPromise(changes.read(scope));
-      return Effect.runPromise(
-        changes.commit({
-          ...scope,
-          revision: snapshot.revision,
-          message: "Signed",
-        }),
-      );
+      const snapshot = await changes.read(scope);
+      return changes.commit({
+        ...scope,
+        revision: snapshot.revision,
+        message: "Signed",
+      });
     },
   };
 }

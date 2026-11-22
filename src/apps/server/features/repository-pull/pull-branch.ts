@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import {
   type RepositoryRejected,
   repositoryRejected,
@@ -11,9 +10,11 @@ import type {
   PullFailure,
   PullStrategy,
 } from "#contracts/repository-pull/repository-pull.contract.ts";
+import { uninterruptible } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
   type GitFailed,
+  isGitFailed,
   isGitRejection,
   runRepositoryGit,
   runRepositoryGitOutput,
@@ -28,7 +29,6 @@ import {
   readCommit,
 } from "#server/features/repository-operations/operation-outcome.ts";
 import {
-  type Integrated,
   mergeSource,
   rebaseOnto,
 } from "#server/features/repository-operations/start-operation.ts";
@@ -50,116 +50,105 @@ export interface PullTarget {
   readonly strategy: PullBranch["strategy"];
 }
 
-export function pullBranch<E>(
+export async function pullBranch(
   git: GitCommandRunner,
   coordination: RepositoryCoordination,
   lfs: GitLfs,
   { directory, branch, checkedOut, strategy }: PullTarget,
-  stored: Effect.Effect<PullStrategy, E>,
-): Effect.Effect<
-  BranchPulled,
-  PullFailure | RepositoryRejected | GitFailed | E
-> {
-  return Effect.gen(function* () {
-    const tracked = yield* readTrackedBranch(git, directory, branch);
-    const upstreamTarget = yield* resolveUpstream(git, directory, tracked);
-    if (strategy !== undefined && strategy.upstream !== upstreamTarget)
-      return yield* Effect.fail<PullFailure>({ _tag: "UpstreamMoved" });
-    const { ahead, behind } = yield* countDivergence(
-      git,
-      directory,
-      tracked.target,
-      upstreamTarget,
-    );
-    if (behind === 0) return { outcome: "UpToDate", stashKept: false } as const;
-    if (checkedOut) yield* fetchLargeFiles(lfs, git, directory, upstreamTarget);
-    if (ahead === 0)
-      return {
-        outcome: "FastForwarded",
-        ...(yield* Effect.uninterruptible(
-          checkedOut
-            ? mergeFastForward(git, directory, upstreamTarget)
-            : moveBranch(git, directory, tracked, upstreamTarget).pipe(
-                Effect.as(unstashed),
-              ),
-        )),
-      } as const;
-    if (!checkedOut)
-      return yield* Effect.fail(pullBlocked("The branch has diverged."));
-    const kind = strategy?.kind ?? (yield* stored);
-    if (kind === "ask")
-      return yield* Effect.fail<PullFailure>({
-        _tag: "PullDiverged",
-        upstream: tracked.upstream,
-        upstreamCommit: upstreamTarget,
-      });
-    return yield* integrate(
-      git,
-      coordination,
-      directory,
-      kind,
-      tracked,
-      upstreamTarget,
-    );
-  });
+  stored: () => Promise<PullStrategy>,
+): Promise<BranchPulled> {
+  const tracked = await readTrackedBranch(git, directory, branch);
+  const upstreamTarget = await resolveUpstream(git, directory, tracked);
+  if (strategy !== undefined && strategy.upstream !== upstreamTarget)
+    throw { _tag: "UpstreamMoved" } satisfies PullFailure;
+  const { ahead, behind } = await countDivergence(
+    git,
+    directory,
+    tracked.target,
+    upstreamTarget,
+  );
+  if (behind === 0) return { outcome: "UpToDate", stashKept: false };
+  if (checkedOut) await fetchLargeFiles(lfs, git, directory, upstreamTarget);
+  if (ahead === 0) {
+    return {
+      outcome: "FastForwarded",
+      ...(await uninterruptible(() =>
+        checkedOut
+          ? mergeFastForward(git, directory, upstreamTarget)
+          : moveBranch(git, directory, tracked, upstreamTarget).then(
+              () => unstashed,
+            ),
+      )),
+    };
+  }
+  if (!checkedOut) throw pullBlocked("The branch has diverged.");
+  const kind = strategy?.kind ?? (await stored());
+  if (kind === "ask")
+    throw {
+      _tag: "PullDiverged",
+      upstream: tracked.upstream,
+      upstreamCommit: upstreamTarget,
+    } satisfies PullFailure;
+  return integrate(git, coordination, directory, kind, tracked, upstreamTarget);
 }
 
-function integrate(
+async function integrate(
   git: GitCommandRunner,
   coordination: RepositoryCoordination,
   directory: string,
   kind: DivergedPull,
   tracked: TrackedBranch,
   upstreamTarget: string,
-) {
+): Promise<BranchPulled> {
   const expected = { worktreePath: directory, expectedHead: tracked.target };
   const upstream = { ref: tracked.upstreamRef, commit: upstreamTarget };
-  const integration: Effect.Effect<
-    Integrated,
-    OperationFailure | RepositoryRejected | GitFailed
-  > =
-    kind === "merge"
-      ? mergeSource(
-          git,
-          coordination,
-          expected,
-          { _tag: "Merge", source: upstream, mode: "merge" },
-          true,
-        )
-      : rebaseOnto(
-          git,
-          coordination,
-          expected,
-          { _tag: "Rebase", onto: upstream, stash: true },
-          false,
-        );
-  return integration.pipe(
-    Effect.flatMap(
-      ({
-        started,
-        autostashConflict,
-      }): Effect.Effect<BranchPulled, GitFailed> =>
-        started.outcome === "Stopped"
-          ? Effect.succeed({
-              outcome: "Stopped",
-              worktreePath: directory,
-              operation: started.operation,
-            })
-          : pulledStash(git, directory, autostashConflict ?? "").pipe(
-              Effect.map((stash) => ({
-                outcome: kind === "merge" ? "Merged" : "Rebased",
-                ...stash,
-              })),
-            ),
-    ),
-    Effect.catch((error) =>
-      failWithKeptStash(
-        git,
-        directory,
-        error.detail ?? "",
-        error._tag === "OperationFailed" ? integrationFailure(error) : error,
-      ),
-    ),
+  try {
+    const { started, autostashConflict } =
+      kind === "merge"
+        ? await mergeSource(
+            git,
+            coordination,
+            expected,
+            { _tag: "Merge", source: upstream, mode: "merge" },
+            true,
+          )
+        : await rebaseOnto(
+            git,
+            coordination,
+            expected,
+            { _tag: "Rebase", onto: upstream, stash: true },
+            false,
+          );
+    if (started.outcome === "Stopped")
+      return {
+        outcome: "Stopped",
+        worktreePath: directory,
+        operation: started.operation,
+      };
+    return {
+      outcome: kind === "merge" ? "Merged" : "Rebased",
+      ...(await pulledStash(git, directory, autostashConflict ?? "")),
+    };
+  } catch (error) {
+    if (!isIntegrationFailure(error)) throw error;
+    return failWithKeptStash(
+      git,
+      directory,
+      error.detail ?? "",
+      error._tag === "OperationFailed" ? integrationFailure(error) : error,
+    );
+  }
+}
+
+function isIntegrationFailure(
+  error: unknown,
+): error is OperationFailure | RepositoryRejected | GitFailed {
+  return (
+    isGitFailed(error) ||
+    (typeof error === "object" &&
+      error !== null &&
+      "_tag" in error &&
+      (error._tag === "OperationFailed" || error._tag === "RepositoryRejected"))
   );
 }
 
@@ -176,13 +165,13 @@ function integrationFailure(failure: OperationFailure): PullFailure {
   }
 }
 
-function readTrackedBranch(
+async function readTrackedBranch(
   git: GitCommandRunner,
   directory: string,
   branch: string,
-) {
+): Promise<TrackedBranch> {
   const ref = `refs/heads/${branch}`;
-  return runRepositoryGit(
+  const output = await runRepositoryGit(
     git,
     directory,
     [
@@ -191,101 +180,87 @@ function readTrackedBranch(
       ref,
     ],
     pullCommand,
-  ).pipe(
-    Effect.flatMap((output) => {
-      const [, target, upstreamRef, upstream] =
-        output
-          .split("\n")
-          .map((line) => line.split("\0"))
-          .find(([name]) => name === ref) ?? [];
-      if (target === undefined)
-        return Effect.fail<PullFailure>({ _tag: "BranchMissing" });
-      if (!upstreamRef || !upstream)
-        return Effect.fail<PullFailure>({ _tag: "UpstreamMissing" });
-      return Effect.succeed<TrackedBranch>({
-        name: branch,
-        target,
-        upstreamRef,
-        upstream,
-      });
-    }),
   );
+  const [, target, upstreamRef, upstream] =
+    output
+      .split("\n")
+      .map((line) => line.split("\0"))
+      .find(([name]) => name === ref) ?? [];
+  if (target === undefined)
+    throw { _tag: "BranchMissing" } satisfies PullFailure;
+  if (!upstreamRef || !upstream)
+    throw { _tag: "UpstreamMissing" } satisfies PullFailure;
+  return { name: branch, target, upstreamRef, upstream };
 }
 
-function resolveUpstream(
+async function resolveUpstream(
   git: GitCommandRunner,
   directory: string,
   tracked: TrackedBranch,
 ) {
-  return runRepositoryGit(
+  const output = await runRepositoryGit(
     git,
     directory,
     ["rev-parse", "--verify", "--quiet", `${tracked.upstreamRef}^{commit}`],
     { ...pullCommand, exitCodes: [0, 1] },
-  ).pipe(
-    Effect.flatMap((output) =>
-      output.trim() === ""
-        ? Effect.fail<PullFailure>({
-            _tag: "UpstreamMissing",
-            upstream: tracked.upstream,
-          })
-        : Effect.succeed(output.trim()),
-    ),
   );
+  if (output.trim() === "")
+    throw {
+      _tag: "UpstreamMissing",
+      upstream: tracked.upstream,
+    } satisfies PullFailure;
+  return output.trim();
 }
 
-function countDivergence(
+async function countDivergence(
   git: GitCommandRunner,
   directory: string,
   target: string,
   upstreamTarget: string,
 ) {
-  return runRepositoryGit(
+  const output = await runRepositoryGit(
     git,
     directory,
     ["rev-list", "--left-right", "--count", `${target}...${upstreamTarget}`],
     pullCommand,
-  ).pipe(
-    Effect.map((output) => {
-      const [ahead = 0, behind = 0] = output.trim().split(/\s+/).map(Number);
-      return { ahead, behind };
-    }),
   );
+  const [ahead = 0, behind = 0] = output.trim().split(/\s+/).map(Number);
+  return { ahead, behind };
 }
 
-function mergeFastForward(
+async function mergeFastForward(
   git: GitCommandRunner,
   directory: string,
   upstreamTarget: string,
-) {
-  return runRepositoryGitOutput(
-    git,
-    directory,
-    [
-      "merge",
-      "--ff-only",
-      "--autostash",
-      "--no-stat",
-      "--progress",
-      upstreamTarget,
-    ],
-    pullCommand,
-  ).pipe(
-    Effect.flatMap(({ stderr }) => pulledStash(git, directory, stderr)),
-    Effect.catch(
-      (
-        error,
-      ): Effect.Effect<
-        PulledStash,
-        PullFailure | RepositoryRejected | GitFailed
-      > =>
-        isGitRejection(error)
-          ? failWithKeptStash(git, directory, error.detail, mergeFailure(error))
-          : requireAt(git, directory, "HEAD", upstreamTarget, error).pipe(
-              Effect.as(unstashed),
-            ),
-    ),
-  );
+): Promise<PulledStash> {
+  let stderr: string;
+  try {
+    ({ stderr } = await runRepositoryGitOutput(
+      git,
+      directory,
+      [
+        "merge",
+        "--ff-only",
+        "--autostash",
+        "--no-stat",
+        "--progress",
+        upstreamTarget,
+      ],
+      pullCommand,
+    ));
+  } catch (error) {
+    if (!isGitFailed(error)) throw error;
+    if (isGitRejection(error))
+      return failWithKeptStash(
+        git,
+        directory,
+        error.detail,
+        mergeFailure(error),
+      );
+    await requireAt(git, directory, "HEAD", upstreamTarget, error);
+    return unstashed;
+  }
+  return pulledStash(git, directory, stderr);
 }
 
 type PulledStash = Pick<
@@ -295,60 +270,54 @@ type PulledStash = Pick<
 
 const unstashed: PulledStash = { stashKept: false };
 
-function pulledStash(git: GitCommandRunner, directory: string, text: string) {
-  return keptAutostash(git, directory, text).pipe(
-    Effect.flatMap(
-      (stash): Effect.Effect<PulledStash, GitFailed> =>
-        stash === undefined
-          ? Effect.succeed({ stashKept: /resulted in conflicts/.test(text) })
-          : runRepositoryGitOutput(
-              git,
-              directory,
-              ["diff", "--quiet", "HEAD"],
-              { ...pullCommand, exitCodes: [0, 1] },
-            ).pipe(
-              Effect.map(({ exitCode }) =>
-                exitCode === 0
-                  ? { stashKept: false, movedToStash: stash }
-                  : { stashKept: true },
-              ),
-            ),
-    ),
+async function pulledStash(
+  git: GitCommandRunner,
+  directory: string,
+  text: string,
+): Promise<PulledStash> {
+  const stash = await keptAutostash(git, directory, text);
+  if (stash === undefined)
+    return { stashKept: /resulted in conflicts/.test(text) };
+  const { exitCode } = await runRepositoryGitOutput(
+    git,
+    directory,
+    ["diff", "--quiet", "HEAD"],
+    { ...pullCommand, exitCodes: [0, 1] },
   );
+  return exitCode === 0
+    ? { stashKept: false, movedToStash: stash }
+    : { stashKept: true };
 }
 
-function failWithKeptStash<Failure>(
+async function failWithKeptStash(
   git: GitCommandRunner,
   directory: string,
   detail: string,
-  failure: Failure,
-) {
-  return keptAutostash(git, directory, detail).pipe(
-    Effect.flatMap((stash) =>
-      stash === undefined
-        ? Effect.fail(failure)
-        : Effect.fail<PullFailure | Failure>({
-            _tag: "PullStashKept",
-            stash,
-            busy: isGitLocked(detail),
-          }),
-    ),
-  );
+  failure: unknown,
+): Promise<never> {
+  const stash = await keptAutostash(git, directory, detail);
+  if (stash === undefined) throw failure;
+  throw {
+    _tag: "PullStashKept",
+    stash,
+    busy: isGitLocked(detail),
+  } satisfies PullFailure;
 }
 
-function keptAutostash(git: GitCommandRunner, directory: string, text: string) {
-  if (!/safe in the stash/.test(text)) return Effect.succeed(undefined);
-  return runRepositoryGit(
+async function keptAutostash(
+  git: GitCommandRunner,
+  directory: string,
+  text: string,
+) {
+  if (!/safe in the stash/.test(text)) return undefined;
+  const output = await runRepositoryGit(
     git,
     directory,
     ["log", "--walk-reflogs", "-1", "--format=%H%x00%gs", "refs/stash"],
     { ...pullCommand, exitCodes: [0, 128] },
-  ).pipe(
-    Effect.map((output) => {
-      const [stash, subject] = output.trim().split("\0");
-      return stash && subject === "autostash" ? stash : undefined;
-    }),
   );
+  const [stash, subject] = output.trim().split("\0");
+  return stash && subject === "autostash" ? stash : undefined;
 }
 
 function mergeFailure(error: GitFailed): PullFailure | RepositoryRejected {
@@ -363,52 +332,47 @@ function mergeFailure(error: GitFailed): PullFailure | RepositoryRejected {
   return repositoryRejected("GitFailed", error.detail);
 }
 
-function moveBranch(
+async function moveBranch(
   git: GitCommandRunner,
   directory: string,
   tracked: TrackedBranch,
   upstreamTarget: string,
 ) {
-  return runRepositoryGit(
-    git,
-    directory,
-    [
-      "update-ref",
-      "-m",
-      `pull: fast-forward to ${tracked.upstream}`,
+  try {
+    await runRepositoryGit(
+      git,
+      directory,
+      [
+        "update-ref",
+        "-m",
+        `pull: fast-forward to ${tracked.upstream}`,
+        `refs/heads/${tracked.name}`,
+        upstreamTarget,
+        tracked.target,
+      ],
+      pullCommand,
+    );
+  } catch (error) {
+    if (!isGitFailed(error)) throw error;
+    if (isGitRejection(error)) throw branchMoved();
+    await requireAt(
+      git,
+      directory,
       `refs/heads/${tracked.name}`,
       upstreamTarget,
-      tracked.target,
-    ],
-    pullCommand,
-  ).pipe(
-    Effect.catch(
-      (error): Effect.Effect<void, PullFailure | GitFailed> =>
-        isGitRejection(error)
-          ? Effect.fail(branchMoved())
-          : requireAt(
-              git,
-              directory,
-              `refs/heads/${tracked.name}`,
-              upstreamTarget,
-              error,
-            ),
-    ),
-  );
+      error,
+    );
+  }
 }
 
-function requireAt(
+async function requireAt(
   git: GitCommandRunner,
   directory: string,
   ref: string,
   target: string,
   failure: GitFailed,
 ) {
-  return readCommit(git, directory, ref).pipe(
-    Effect.flatMap((tip) =>
-      tip === target ? Effect.void : Effect.fail(failure),
-    ),
-  );
+  if ((await readCommit(git, directory, ref)) !== target) throw failure;
 }
 
 function branchMoved() {

@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
-import { Effect } from "effect";
 import {
   type ChangedFile,
   changesFailed,
@@ -8,6 +7,7 @@ import {
 import type { SaveStash } from "#contracts/repository-stashes/repository-stashes.contract.ts";
 import {
   type GitCommandRunner,
+  isGitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
@@ -32,76 +32,64 @@ interface StashSnapshot {
   readonly subject: string | null;
 }
 
-export function saveStash(
+export async function saveStash(
   git: GitCommandRunner,
   lfs: GitLfs,
   command: SaveStash,
 ) {
   const directory = command.worktreePath;
-  return Effect.gen(function* () {
-    const scope = { ...command, amend: false };
-    const { snapshot } = yield* readChanges(git, scope);
-    if (snapshot.revision !== command.revision)
-      return yield* Effect.fail(
-        changesFailed(
-          "Stale",
-          "The repository changed. Review the refreshed changes and try again.",
-        ),
-      );
-    const head = snapshot.head;
-    if (head === null) return yield* Effect.fail(stashRejected("Unborn"));
-    const files = yield* selectedFiles(
-      snapshot[command.section],
-      command.paths,
+  const scope = { ...command, amend: false };
+  const { snapshot } = await readChanges(git, scope);
+  if (snapshot.revision !== command.revision)
+    throw changesFailed(
+      "Stale",
+      "The repository changed. Review the refreshed changes and try again.",
     );
-    const target =
-      command.into === null
-        ? {
-            base: head,
-            index: head,
-            worktree: head,
-            untracked: null,
-            subject: null,
-          }
-        : yield* readTarget(git, directory, command.into);
-    const patches = yield* readPatches(git, directory, command, head, files);
-    const trees = yield* Effect.scoped(
-      Effect.gen(function* () {
-        const indexFile = yield* temporaryIndex(git, directory);
-        const tree = (from: string | null, ...changes: readonly string[]) =>
-          buildTree(git, directory, indexFile, from, changes);
-        return {
-          index: yield* tree(target.index, patches.staged),
-          worktree: yield* tree(
-            target.worktree,
-            patches.staged,
-            patches.unstaged,
-          ),
-          untracked:
-            target.untracked === null && patches.untracked === ""
-              ? null
-              : yield* tree(target.untracked, patches.untracked),
-        };
-      }),
-    );
-    const label = yield* baseLabel(git, directory, target);
-    const message =
-      target.subject ??
-      (command.name === undefined
-        ? `WIP on ${label.branch}: ${label.commit}`
-        : `On ${label.branch}: ${command.name}`);
-    const oid = yield* commitStash(git, directory, target, trees, {
-      label: `${label.branch}: ${label.commit}`,
-      message,
-    });
-    yield* runRepositoryGit(git, directory, [
-      "stash",
-      "store",
-      "--message",
-      message,
-      oid,
-    ]);
-    yield* mutateRepositoryChanges(
+  const head = snapshot.head;
+  if (head === null) throw stashRejected("Unborn");
+  const files = selectedFiles(snapshot[command.section], command.paths);
+  const target =
+    command.into === null
+      ? {
+          base: head,
+          index: head,
+          worktree: head,
+          untracked: null,
+          subject: null,
+        }
+      : await readTarget(git, directory, command.into);
+  const patches = await readPatches(git, directory, command, head, files);
+  const trees = await withTemporaryIndex(git, directory, async (indexFile) => {
+    const tree = (from: string | null, ...changes: readonly string[]) =>
+      buildTree(git, directory, indexFile, from, changes);
+    return {
+      index: await tree(target.index, patches.staged),
+      worktree: await tree(target.worktree, patches.staged, patches.unstaged),
+      untracked:
+        target.untracked === null && patches.untracked === ""
+          ? null
+          : await tree(target.untracked, patches.untracked),
+    };
+  });
+  const label = await baseLabel(git, directory, target);
+  const message =
+    target.subject ??
+    (command.name === undefined
+      ? `WIP on ${label.branch}: ${label.commit}`
+      : `On ${label.branch}: ${command.name}`);
+  const oid = await commitStash(git, directory, target, trees, {
+    label: `${label.branch}: ${label.commit}`,
+    message,
+  });
+  await runRepositoryGit(git, directory, [
+    "stash",
+    "store",
+    "--message",
+    message,
+    oid,
+  ]);
+  try {
+    await mutateRepositoryChanges(
       {
         ...scope,
         action: "discard",
@@ -109,20 +97,19 @@ export function saveStash(
       },
       git,
       lfs,
-    ).pipe(
-      Effect.tapError(() =>
-        requireStashIndex(git, directory, oid).pipe(
-          Effect.flatMap((entry) => dropEntry(git, directory, entry)),
-          Effect.ignore,
-        ),
-      ),
     );
-    if (command.into !== null) {
-      const previous = yield* requireStashIndex(git, directory, command.into);
-      yield* dropEntry(git, directory, previous);
-    }
-    return { oid };
-  });
+  } catch (error) {
+    if (!(error instanceof Error))
+      await requireStashIndex(git, directory, oid)
+        .then((entry) => dropEntry(git, directory, entry))
+        .catch(() => undefined);
+    throw error;
+  }
+  if (command.into !== null) {
+    const previous = await requireStashIndex(git, directory, command.into);
+    await dropEntry(git, directory, previous);
+  }
+  return { oid };
 }
 
 function selectedFiles(
@@ -133,145 +120,145 @@ function selectedFiles(
     files.find((file) => file.path === path),
   );
   if (selected.some((file) => file === undefined))
-    return Effect.fail(
-      changesFailed(
-        "Stale",
-        "A selected file has changed. Refresh the changes and try again.",
-      ),
+    throw changesFailed(
+      "Stale",
+      "A selected file has changed. Refresh the changes and try again.",
     );
   const chosen = selected.filter((file) => file !== undefined);
   if (chosen.some((file) => file.status === "U"))
-    return Effect.fail(
-      changesFailed(
-        "Conflict",
-        "Resolve this file's merge conflict before stashing it.",
-      ),
+    throw changesFailed(
+      "Conflict",
+      "Resolve this file's merge conflict before stashing it.",
     );
-  return Effect.succeed(chosen);
+  return chosen;
 }
 
-function readTarget(git: GitCommandRunner, directory: string, oid: string) {
-  return Effect.gen(function* () {
-    const { subject } = yield* requireStashIndex(git, directory, oid);
-    const [base, index, untracked = null] = (yield* runRepositoryGit(
-      git,
-      directory,
-      ["rev-list", "--parents", "--max-count=1", oid, "--"],
-    ))
-      .trim()
-      .split(" ")
-      .slice(1);
-    if (base === undefined || index === undefined)
-      return yield* Effect.fail(stashRejected("DoesNotFit"));
-    return {
-      base,
-      index,
-      worktree: oid,
-      untracked,
-      subject,
-    } satisfies StashSnapshot;
-  });
+async function readTarget(
+  git: GitCommandRunner,
+  directory: string,
+  oid: string,
+) {
+  const { subject } = await requireStashIndex(git, directory, oid);
+  const [base, index, untracked = null] = (
+    await runRepositoryGit(git, directory, [
+      "rev-list",
+      "--parents",
+      "--max-count=1",
+      oid,
+      "--",
+    ])
+  )
+    .trim()
+    .split(" ")
+    .slice(1);
+  if (base === undefined || index === undefined)
+    throw stashRejected("DoesNotFit");
+  return {
+    base,
+    index,
+    worktree: oid,
+    untracked,
+    subject,
+  } satisfies StashSnapshot;
 }
 
-function readPatches(
+async function readPatches(
   git: GitCommandRunner,
   directory: string,
   command: SaveStash,
   head: string,
   files: readonly ChangedFile[],
 ) {
-  return Effect.gen(function* () {
-    const diff = (args: readonly string[], paths: readonly string[]) =>
-      paths.length === 0
-        ? Effect.succeed("")
-        : runRepositoryGit(git, directory, [
-            "diff",
-            ...patchOptions,
-            "--no-renames",
-            ...args,
-            "--",
-            ...paths,
-          ]);
-    if (command.section === "staged")
-      return {
-        staged: yield* diff(
-          ["--cached", head],
-          files.flatMap((file) =>
-            file.previousPath === null
-              ? [file.path]
-              : [file.path, file.previousPath],
-          ),
-        ),
-        unstaged: "",
-        untracked: "",
-      };
-    const created = files.filter((file) => file.status === "?");
+  const diff = async (args: readonly string[], paths: readonly string[]) =>
+    paths.length === 0
+      ? ""
+      : runRepositoryGit(git, directory, [
+          "diff",
+          ...patchOptions,
+          "--no-renames",
+          ...args,
+          "--",
+          ...paths,
+        ]);
+  if (command.section === "staged")
     return {
-      staged: "",
-      unstaged: yield* diff(
-        [],
-        files.filter((file) => file.status !== "?").map((file) => file.path),
+      staged: await diff(
+        ["--cached", head],
+        files.flatMap((file) =>
+          file.previousPath === null
+            ? [file.path]
+            : [file.path, file.previousPath],
+        ),
       ),
-      untracked: yield* createdFilesPatch(
-        git,
-        {},
-        directory,
-        created.map((file) => file.path),
-      ),
+      unstaged: "",
+      untracked: "",
     };
-  });
-}
-
-function temporaryIndex(git: GitCommandRunner, directory: string) {
-  return Effect.acquireRelease(
-    runRepositoryGit(git, directory, [
-      "rev-parse",
-      "--path-format=absolute",
-      "--git-path",
-      "index",
-    ]).pipe(
-      Effect.map((index) => `${index.trim()}.rebase-stash-${randomUUID()}`),
+  const created = files.filter((file) => file.status === "?");
+  return {
+    staged: "",
+    unstaged: await diff(
+      [],
+      files.filter((file) => file.status !== "?").map((file) => file.path),
     ),
-    (path) =>
-      Effect.promise(() =>
-        Promise.all([
-          rm(path, { force: true }),
-          rm(`${path}.lock`, { force: true }),
-        ]),
-      ),
-  );
+    untracked: await createdFilesPatch(
+      git,
+      {},
+      directory,
+      created.map((file) => file.path),
+    ),
+  };
 }
 
-function buildTree(
+async function withTemporaryIndex<Value>(
+  git: GitCommandRunner,
+  directory: string,
+  use: (indexFile: string) => Promise<Value>,
+) {
+  const index = await runRepositoryGit(git, directory, [
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-path",
+    "index",
+  ]);
+  const path = `${index.trim()}.rebase-stash-${randomUUID()}`;
+  try {
+    return await use(path);
+  } finally {
+    await Promise.all([
+      rm(path, { force: true }),
+      rm(`${path}.lock`, { force: true }),
+    ]);
+  }
+}
+
+async function buildTree(
   git: GitCommandRunner,
   directory: string,
   indexFile: string,
   from: string | null,
   patches: readonly string[],
 ) {
-  return Effect.gen(function* () {
-    yield* runRepositoryGit(
+  await runRepositoryGit(
+    git,
+    directory,
+    from === null ? ["read-tree", "--empty"] : ["read-tree", `${from}^{tree}`],
+    { indexFile },
+  );
+  for (const patch of patches.filter((text) => text.trim() !== ""))
+    await runRepositoryGit(
       git,
       directory,
-      from === null
-        ? ["read-tree", "--empty"]
-        : ["read-tree", `${from}^{tree}`],
-      { indexFile },
-    );
-    for (const patch of patches.filter((text) => text.trim() !== ""))
-      yield* runRepositoryGit(
-        git,
-        directory,
-        ["apply", "--cached", "--3way", "--whitespace=nowarn"],
-        { indexFile, input: patch },
-      ).pipe(Effect.mapError(() => stashRejected("DoesNotFit")));
-    return (yield* runRepositoryGit(git, directory, ["write-tree"], {
-      indexFile,
-    })).trim();
-  });
+      ["apply", "--cached", "--3way", "--whitespace=nowarn"],
+      { indexFile, input: patch },
+    ).catch((error) => {
+      throw isGitFailed(error) ? stashRejected("DoesNotFit") : error;
+    });
+  return (
+    await runRepositoryGit(git, directory, ["write-tree"], { indexFile })
+  ).trim();
 }
 
-function commitStash(
+async function commitStash(
   git: GitCommandRunner,
   directory: string,
   target: StashSnapshot,
@@ -282,52 +269,56 @@ function commitStash(
   },
   { label, message }: { readonly label: string; readonly message: string },
 ) {
-  return Effect.gen(function* () {
-    const commit = (tree: string, text: string, parents: readonly string[]) =>
-      runRepositoryGit(git, directory, [
+  const commit = async (
+    tree: string,
+    text: string,
+    parents: readonly string[],
+  ) =>
+    (
+      await runRepositoryGit(git, directory, [
         "commit-tree",
         tree,
         ...parents.flatMap((parent) => ["-p", parent]),
         "-m",
         text,
-      ]).pipe(Effect.map((oid) => oid.trim()));
-    const index = yield* commit(trees.index, `index on ${label}`, [
-      target.base,
-    ]);
-    const untracked =
-      trees.untracked === null
-        ? null
-        : yield* commit(trees.untracked, `untracked files on ${label}`, []);
-    return yield* commit(trees.worktree, message, [
-      target.base,
-      index,
-      ...(untracked === null ? [] : [untracked]),
-    ]);
-  });
+      ])
+    ).trim();
+  const index = await commit(trees.index, `index on ${label}`, [target.base]);
+  const untracked =
+    trees.untracked === null
+      ? null
+      : await commit(trees.untracked, `untracked files on ${label}`, []);
+  return commit(trees.worktree, message, [
+    target.base,
+    index,
+    ...(untracked === null ? [] : [untracked]),
+  ]);
 }
 
-function baseLabel(
+async function baseLabel(
   git: GitCommandRunner,
   directory: string,
   target: StashSnapshot,
 ) {
-  return Effect.gen(function* () {
-    const branch =
-      target.subject === null
-        ? (yield* runRepositoryGit(
+  const branch =
+    target.subject === null
+      ? (
+          await runRepositoryGit(
             git,
             directory,
             ["symbolic-ref", "--short", "--quiet", "HEAD"],
             { exitCodes: [0, 1] },
-          )).trim()
-        : (describeStash(target.subject).branch ?? "");
-    const commit = (yield* runRepositoryGit(git, directory, [
+          )
+        ).trim()
+      : (describeStash(target.subject).branch ?? "");
+  const commit = (
+    await runRepositoryGit(git, directory, [
       "log",
       "-1",
       "--format=%h %s",
       target.base,
       "--",
-    ])).trim();
-    return { branch: branch === "" ? "(no branch)" : branch, commit };
-  });
+    ])
+  ).trim();
+  return { branch: branch === "" ? "(no branch)" : branch, commit };
 }

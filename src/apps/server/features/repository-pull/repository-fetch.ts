@@ -1,4 +1,3 @@
-import { Cause, Effect, Fiber, Option, Semaphore } from "effect";
 import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
@@ -8,8 +7,10 @@ import {
   RepositoryPullApi,
 } from "#contracts/repository-pull/repository-pull.contract.ts";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
+import { inRequest } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
+  isGitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import type { CommandProgress } from "#server/features/command-progress/command-progress.ts";
@@ -24,20 +25,19 @@ const settingKey = "rebase.autoFetchIntervalSeconds";
 interface FetchedRepository {
   readonly path: string;
   readonly repositoryIds: Set<string>;
+  readonly stopped: AbortController;
   setting: RepositoryFetchSetting;
   failure?: FetchFailed;
-  fetching?: Fiber.Fiber<FetchFailed | undefined> | undefined;
-  schedule?: Fiber.Fiber<void> | undefined;
+  fetching?: Promise<FetchFailed | undefined> | undefined;
+  timer?: NodeJS.Timeout | undefined;
 }
 
-export type RepositoryFetch = Effect.Success<
-  ReturnType<typeof acquireRepositoryFetch>
->;
+export type RepositoryFetch = ReturnType<typeof acquireRepositoryFetch>;
 
 export type AfterFetch = (
   directory: string,
   repositoryIds: readonly string[],
-) => Effect.Effect<void>;
+) => Promise<void>;
 
 export function acquireRepositoryFetch({
   access,
@@ -54,58 +54,59 @@ export function acquireRepositoryFetch({
   readonly git: GitCommandRunner;
   readonly progress: CommandProgress;
 }) {
-  return Effect.gen(function* () {
-    const scope = yield* Effect.scope;
-    const mutex = yield* Semaphore.make(1);
-    const repositories = new Map<string, FetchedRepository>();
+  const withLock = createLock();
+  const repositories = new Map<string, FetchedRepository>();
+  let closed = false;
 
-    const status = (repository: FetchedRepository): RepositoryFetchStatus => ({
-      fetching: repository.fetching !== undefined,
-      defaultIntervalSeconds,
-      setting: repository.setting,
-      ...(repository.failure === undefined
-        ? {}
-        : { failure: repository.failure }),
+  const status = (repository: FetchedRepository): RepositoryFetchStatus => ({
+    fetching: repository.fetching !== undefined,
+    defaultIntervalSeconds,
+    setting: repository.setting,
+    ...(repository.failure === undefined
+      ? {}
+      : { failure: repository.failure }),
+  });
+  const publish = (repository: FetchedRepository) =>
+    events.publishChanged([...repository.repositoryIds], "Fetch");
+
+  const schedule = (repository: FetchedRepository) => {
+    clearTimeout(repository.timer);
+    repository.timer = undefined;
+    if (
+      closed ||
+      repository.stopped.signal.aborted ||
+      repository.fetching !== undefined ||
+      repository.setting._tag === "Disabled"
+    )
+      return;
+    const seconds =
+      repository.setting._tag === "Interval"
+        ? repository.setting.seconds
+        : defaultIntervalSeconds;
+    repository.timer = setTimeout(() => void tick(repository), seconds * 1_000);
+  };
+
+  const tick = (repository: FetchedRepository) =>
+    withLock(async () => {
+      repository.timer = undefined;
+      if (repository.stopped.signal.aborted) return;
+      if (events.listening()) begin(repository);
+      else schedule(repository);
     });
-    const publish = (repository: FetchedRepository) =>
-      events.publishChanged([...repository.repositoryIds], "Fetch");
 
-    const schedule = (repository: FetchedRepository): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        const previous = repository.schedule;
-        repository.schedule = undefined;
-        if (previous !== undefined) yield* Fiber.interrupt(previous);
-        if (
-          repository.fetching !== undefined ||
-          repository.setting._tag === "Disabled"
-        )
-          return;
-        const seconds =
-          repository.setting._tag === "Interval"
-            ? repository.setting.seconds
-            : defaultIntervalSeconds;
-        repository.schedule = yield* Effect.sleep(seconds * 1_000).pipe(
-          Effect.andThen(tick(repository)),
-          Effect.forkIn(scope),
-        );
-      });
-
-    const tick = (repository: FetchedRepository) =>
-      Effect.gen(function* () {
-        repository.schedule = undefined;
-        if (events.listening()) yield* begin(repository);
-        else yield* schedule(repository);
-      }).pipe(Semaphore.withPermit(mutex));
-
-    const begin = (
-      repository: FetchedRepository,
-    ): Effect.Effect<Fiber.Fiber<FetchFailed | undefined>> =>
-      Effect.gen(function* () {
-        if (repository.fetching !== undefined) return repository.fetching;
-        const previous = repository.schedule;
-        repository.schedule = undefined;
-        if (previous !== undefined) yield* Fiber.interrupt(previous);
-        const fetching = yield* runFetch(
+  const begin = (repository: FetchedRepository) => {
+    if (repository.fetching !== undefined) return repository.fetching;
+    clearTimeout(repository.timer);
+    repository.timer = undefined;
+    const signal = repository.stopped.signal;
+    const fetching = inRequest(
+      {
+        procedure: RepositoryPullApi.fetch._tag,
+        signal,
+        ...firstRepositoryId(repository),
+      },
+      () =>
+        runFetch(
           git,
           coordination,
           repository.path,
@@ -113,154 +114,170 @@ export function acquireRepositoryFetch({
             repository.repositoryIds,
             RepositoryPullApi.fetch._tag,
           ),
-        ).pipe(
-          Effect.tap((failure) =>
-            Effect.gen(function* () {
-              repository.fetching = undefined;
-              if (failure === undefined) delete repository.failure;
-              else repository.failure = failure;
-              publish(repository);
-              yield* schedule(repository);
-              if (failure === undefined)
-                yield* afterFetch(repository.path, [
-                  ...repository.repositoryIds,
-                ]).pipe(Effect.forkIn(scope));
-            }).pipe(Semaphore.withPermit(mutex)),
-          ),
-          Effect.forkIn(scope),
-        );
-        repository.fetching = fetching;
-        publish(repository);
-        return fetching;
-      });
+          signal,
+        ).then((failure) =>
+          withLock(async () => {
+            repository.fetching = undefined;
+            if (failure === undefined) delete repository.failure;
+            else repository.failure = failure;
+            publish(repository);
+            schedule(repository);
+            if (failure === undefined && !signal.aborted)
+              void afterFetch(repository.path, [
+                ...repository.repositoryIds,
+              ]).catch(() => undefined);
+            return failure;
+          }),
+        ),
+    );
+    fetching.catch(() => undefined);
+    repository.fetching = fetching;
+    publish(repository);
+    return fetching;
+  };
 
-    const register = (repositoryId: string) =>
-      Effect.gen(function* () {
-        const entry = yield* access.repository(repositoryId);
-        const key = entry.logicalRepositoryId ?? entry.id;
-        const known = repositories.get(key);
-        if (known !== undefined) {
-          known.repositoryIds.add(repositoryId);
-          repositories.delete(key);
-          repositories.set(key, known);
-          return known;
-        }
-        const repository: FetchedRepository = {
-          path: entry.path,
-          repositoryIds: new Set([repositoryId]),
-          setting: yield* readFetchSetting(git, entry.path),
-        };
-        repositories.set(key, repository);
-        yield* evictOldest;
-        if (repository.setting._tag !== "Disabled") yield* begin(repository);
-        return repository;
-      }).pipe(Semaphore.withPermit(mutex));
-
-    const evictOldest = Effect.suspend(() => {
-      const oldest = repositories.entries().next().value;
-      if (
-        repositories.size <= maximumFetchedRepositories ||
-        oldest === undefined
-      )
-        return Effect.void;
-      repositories.delete(oldest[0]);
-      const { schedule: scheduled, fetching } = oldest[1];
-      return Effect.all([
-        scheduled === undefined ? Effect.void : Fiber.interrupt(scheduled),
-        fetching === undefined ? Effect.void : Fiber.interrupt(fetching),
-      ]);
+  const register = (repositoryId: string) =>
+    withLock(async () => {
+      const entry = await access.repository(repositoryId);
+      const key = entry.logicalRepositoryId ?? entry.id;
+      const known = repositories.get(key);
+      if (known !== undefined) {
+        known.repositoryIds.add(repositoryId);
+        repositories.delete(key);
+        repositories.set(key, known);
+        return known;
+      }
+      const repository: FetchedRepository = {
+        path: entry.path,
+        repositoryIds: new Set([repositoryId]),
+        stopped: new AbortController(),
+        setting: await readFetchSetting(git, entry.path),
+      };
+      repositories.set(key, repository);
+      evictOldest();
+      if (repository.setting._tag !== "Disabled") begin(repository);
+      return repository;
     });
 
-    return {
-      status: (repositoryId: string) =>
-        register(repositoryId).pipe(Effect.map(status)),
-      fetch: (repositoryId: string) =>
-        Effect.gen(function* () {
-          const repository = yield* register(repositoryId);
-          const fetching = yield* begin(repository).pipe(
-            Semaphore.withPermit(mutex),
-          );
-          const failure = yield* Fiber.join(fetching);
-          if (failure !== undefined) return yield* Effect.fail(failure);
-          return status(repository);
-        }),
-      configure: (repositoryId: string, setting: RepositoryFetchSetting) =>
-        Effect.gen(function* () {
-          const repository = yield* register(repositoryId);
-          return yield* Effect.gen(function* () {
-            yield* writeFetchSetting(git, repository.path, setting);
-            repository.setting = setting;
-            yield* schedule(repository);
-            publish(repository);
-            return status(repository);
-          }).pipe(Semaphore.withPermit(mutex));
-        }),
-    };
-  });
+  const stop = (repository: FetchedRepository) => {
+    clearTimeout(repository.timer);
+    repository.timer = undefined;
+    repository.stopped.abort();
+  };
+
+  const evictOldest = () => {
+    const oldest = repositories.entries().next().value;
+    if (repositories.size <= maximumFetchedRepositories || oldest === undefined)
+      return;
+    repositories.delete(oldest[0]);
+    stop(oldest[1]);
+  };
+
+  return {
+    status: async (repositoryId: string) =>
+      status(await register(repositoryId)),
+    fetch: async (repositoryId: string) => {
+      const repository = await register(repositoryId);
+      const { fetching } = await withLock(async () => ({
+        fetching: begin(repository),
+      }));
+      const failure = await fetching;
+      if (failure !== undefined) throw failure;
+      return status(repository);
+    },
+    configure: async (
+      repositoryId: string,
+      setting: RepositoryFetchSetting,
+    ) => {
+      const repository = await register(repositoryId);
+      return withLock(async () => {
+        await writeFetchSetting(git, repository.path, setting);
+        repository.setting = setting;
+        schedule(repository);
+        publish(repository);
+        return status(repository);
+      });
+    },
+    close: () => {
+      closed = true;
+      for (const repository of repositories.values()) stop(repository);
+      repositories.clear();
+    },
+  };
 }
 
-function runFetch(
+function firstRepositoryId(repository: FetchedRepository) {
+  const [repositoryId] = repository.repositoryIds;
+  return repositoryId === undefined ? {} : { repositoryId };
+}
+
+function createLock() {
+  let tail: Promise<unknown> = Promise.resolve();
+  return <Value>(run: () => Promise<Value>) => {
+    const result = tail.then(run);
+    tail = result.catch(() => undefined);
+    return result;
+  };
+}
+
+async function runFetch(
   git: GitCommandRunner,
   coordination: RepositoryCoordination,
   path: string,
   report: (output: string) => void,
-) {
-  return coordination
-    .run(
+  signal: AbortSignal,
+): Promise<FetchFailed | undefined> {
+  try {
+    await coordination.run(
       path,
       {
         name: "fetch",
         locks: { refs: "wait" },
         duringOperation: "proceed",
       },
-      defaultPruneArguments(git, path).pipe(
-        Effect.flatMap((globalArguments) =>
-          runRepositoryGit(git, path, ["fetch", "--progress"], {
-            globalArguments,
-            timeoutMilliseconds: 120_000,
-            progress: report,
-          }),
-        ),
-      ),
-    )
-    .pipe(
-      Effect.as<FetchFailed | undefined>(undefined),
-      Effect.catchCause((cause) => {
-        if (Cause.hasInterrupts(cause))
-          return Effect.failCause(Cause.interrupt());
-        const error = Cause.findErrorOption(cause);
-        return Effect.succeed<FetchFailed>({
-          _tag: "FetchFailed",
-          reason:
-            Option.isSome(error) && error.value._tag === "GitFailed"
-              ? error.value.reason
-              : "Failed",
-        });
-      }),
+      async () =>
+        runRepositoryGit(git, path, ["fetch", "--progress"], {
+          globalArguments: await defaultPruneArguments(git, path),
+          timeoutMilliseconds: 120_000,
+          progress: report,
+          signal,
+        }),
     );
+    return undefined;
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return {
+      _tag: "FetchFailed",
+      reason: isGitFailed(error) ? error.reason : "Failed",
+    };
+  }
 }
 
-function readFetchSetting(git: GitCommandRunner, path: string) {
-  return runRepositoryGit(
-    git,
-    path,
-    ["config", "--local", "--get", settingKey],
-    { exitCodes: [0, 1] },
-  ).pipe(
-    Effect.map((output): RepositoryFetchSetting => {
-      const value = output.trim();
-      const seconds = Number(value);
-      return value === "0"
-        ? { _tag: "Disabled" }
-        : Number.isInteger(seconds) && seconds > 0 && seconds <= 86_400
-          ? { _tag: "Interval", seconds }
-          : { _tag: "Inherit" };
-    }),
-    Effect.mapError(settingsUnavailable),
-  );
+async function readFetchSetting(
+  git: GitCommandRunner,
+  path: string,
+): Promise<RepositoryFetchSetting> {
+  let output: string;
+  try {
+    output = await runRepositoryGit(
+      git,
+      path,
+      ["config", "--local", "--get", settingKey],
+      { exitCodes: [0, 1] },
+    );
+  } catch (error) {
+    throw isGitFailed(error) ? settingsUnavailable() : error;
+  }
+  const value = output.trim();
+  const seconds = Number(value);
+  return value === "0"
+    ? { _tag: "Disabled" }
+    : Number.isInteger(seconds) && seconds > 0 && seconds <= 86_400
+      ? { _tag: "Interval", seconds }
+      : { _tag: "Inherit" };
 }
 
-function writeFetchSetting(
+async function writeFetchSetting(
   git: GitCommandRunner,
   path: string,
   setting: RepositoryFetchSetting,
@@ -271,12 +288,11 @@ function writeFetchSetting(
       : setting._tag === "Interval"
         ? String(setting.seconds)
         : "inherit";
-  return runRepositoryGit(git, path, [
-    "config",
-    "--local",
-    settingKey,
-    value,
-  ]).pipe(Effect.asVoid, Effect.mapError(settingsUnavailable));
+  try {
+    await runRepositoryGit(git, path, ["config", "--local", settingKey, value]);
+  } catch (error) {
+    throw isGitFailed(error) ? settingsUnavailable() : error;
+  }
 }
 
 function settingsUnavailable(): RepositoryRejected {

@@ -1,7 +1,6 @@
 import { mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import {
   type ReflogRef,
@@ -137,9 +136,9 @@ async function reflogClient(path: string) {
   const routes = environment.routes(RepositoryReflogApi);
   const scope = { repositoryId, worktreePath: path };
   return {
-    read: (ref: ReflogRef) => Effect.runPromise(routes.read({ ...scope, ref })),
+    read: (ref: ReflogRef) => routes.read({ ...scope, ref }),
     reset: (command: Omit<ResetToCommit, "repositoryId" | "worktreePath">) =>
-      Effect.runPromise(routes.reset({ ...scope, ...command })),
+      routes.reset({ ...scope, ...command }),
   };
 }
 

@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher.ts";
@@ -16,7 +15,7 @@ describe("local repository watcher", () => {
     it(`continues watching stash history after ${entry} is replaced`, async () => {
       const fixture = await createFixture();
       const gitDirectory = join(fixture.local, ".git");
-      const changes = await watch(gitDirectory);
+      const changes = watch(gitDirectory);
       await waitForObservation(
         () => expect(changes.count()).toBeGreaterThan(0),
         () => git(fixture.local, "branch", "-f", "watcher-ready"),
@@ -41,9 +40,7 @@ describe("local repository watcher", () => {
 
   it("watches Git paths with forward slashes on every platform", async () => {
     const fixture = await createFixture();
-    const changes = await watch(
-      join(fixture.local, ".git").replaceAll("\\", "/"),
-    );
+    const changes = watch(join(fixture.local, ".git").replaceAll("\\", "/"));
     await waitForObservation(
       () => expect(changes.count()).toBeGreaterThan(0),
       () => git(fixture.local, "branch", "-f", "watcher-path"),
@@ -54,7 +51,7 @@ describe("local repository watcher", () => {
     const fixture = await createFixture();
     const linked = join(fixture.root, "linked");
     await git(fixture.local, "worktree", "add", "--detach", linked);
-    const changes = await watch(join(fixture.local, ".git"));
+    const changes = watch(join(fixture.local, ".git"));
     const edits = [
       () => git(fixture.local, "branch", "local-branch"),
       () => git(fixture.local, "tag", "local-tag"),
@@ -76,16 +73,14 @@ describe("local repository watcher", () => {
   });
 });
 
-async function watch(gitDirectory: string) {
+function watch(gitDirectory: string) {
   const kinds: RepositoryChangeKind[] = [];
-  const handle = await Effect.runPromise(
-    createLocalRepositoryWatcher().watch(gitDirectory, {
-      changed: (kind) => {
-        kinds.push(kind);
-      },
-      failed: () => {},
-    }),
-  );
+  const handle = createLocalRepositoryWatcher().watch(gitDirectory, {
+    changed: (kind) => {
+      kinds.push(kind);
+    },
+    failed: () => {},
+  });
   onTestFinished(() => handle.close());
   return {
     count: () => kinds.length,

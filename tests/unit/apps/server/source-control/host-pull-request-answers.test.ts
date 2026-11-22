@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import type { GitHost } from "#server/features/source-control/git-host.ts";
 import { createForgejoHost } from "#server/features/source-control/hosts/forgejo-host.ts";
@@ -71,14 +70,8 @@ async function pullRequests(
   remoteUrl: string,
   heads: readonly string[],
 ) {
-  return Effect.runPromise(
-    host.repository(remoteUrl).pipe(
-      Effect.flatMap((repository) =>
-        repository === undefined
-          ? Effect.die("the host does not serve this remote")
-          : repository.pullRequests(heads),
-      ),
-      Effect.map((byHead) => Object.fromEntries(byHead)),
-    ),
-  );
+  const repository = await host.repository(remoteUrl);
+  if (repository === undefined)
+    throw new Error("the host does not serve this remote");
+  return Object.fromEntries(await repository.pullRequests(heads));
 }

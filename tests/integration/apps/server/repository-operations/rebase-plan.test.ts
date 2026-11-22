@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import {
   type PlanStep,
@@ -33,21 +32,17 @@ async function fixture() {
     plan: readonly PlanStep[],
     onto: { ref: string | null; commit: string } = base,
   ) =>
-    Effect.runPromise(
-      service.start({
-        ...scope,
-        expectedHead: await tip("HEAD"),
-        operation: { _tag: "Rebase", onto, stash: false, plan },
-      }),
-    );
+    service.start({
+      ...scope,
+      expectedHead: await tip("HEAD"),
+      operation: { _tag: "Rebase", onto, stash: false, plan },
+    });
   const execute = async (action: "continue" | "abort") =>
-    Effect.runPromise(
-      service.execute({
-        ...scope,
-        revision: (await Effect.runPromise(service.read(scope))).revision,
-        action,
-      }),
-    );
+    service.execute({
+      ...scope,
+      revision: (await service.read(scope)).revision,
+      action,
+    });
   const log = () =>
     git(directory, "log", "--format=%s|%an", "topic~0", "--not", "main~2");
   return { directory, tip, step, start, execute, log };

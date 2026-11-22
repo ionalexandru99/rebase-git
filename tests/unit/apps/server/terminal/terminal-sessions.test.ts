@@ -1,4 +1,3 @@
-import { Effect, Stream } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import type { TerminalOutput } from "#contracts/terminal/terminal.contract.ts";
 import {
@@ -24,11 +23,19 @@ function sessions() {
     (id) => changed.push(id),
   );
   const open = (worktree: typeof main) =>
-    Effect.runPromise(terminals.open({ ...worktree, ...size }));
-  const read = (id: string, since: number, count: number) =>
-    Effect.runPromise(
-      terminals.attach(id, since).pipe(Stream.take(count), Stream.runCollect),
-    );
+    terminals.open({ ...worktree, ...size });
+  const read = async (id: string, since: number, count: number) => {
+    const outputs: TerminalOutput[] = [];
+    for await (const output of terminals.attach(
+      id,
+      since,
+      new AbortController().signal,
+    )) {
+      outputs.push(output);
+      if (outputs.length === count) break;
+    }
+    return outputs;
+  };
   return { terminals, processes, changed, open, read };
 }
 
@@ -39,7 +46,7 @@ describe("terminal sessions", () => {
     const first = await open(main);
     await open(main);
     await open(topic);
-    terminals.close({ ...main, id: first.id });
+    terminals.closeTerminal({ ...main, id: first.id });
     const reopened = await open(main);
 
     expect(terminals.list(main).terminals.map(({ number }) => number)).toEqual([
@@ -56,7 +63,7 @@ describe("terminal sessions", () => {
     const { terminals, open, processes } = sessions();
     const terminal = await open(main);
 
-    terminals.close({ ...topic, id: terminal.id });
+    terminals.closeTerminal({ ...topic, id: terminal.id });
 
     expect(terminals.list(main).terminals).toEqual([terminal]);
     expect(processes[0]?.killed).toBe(false);
@@ -85,16 +92,14 @@ describe("terminal sessions", () => {
     const seen: TerminalOutput[] = [];
 
     processes[0]?.emit("bye\r\n");
-    await Effect.runPromise(
-      terminals.attach(id, 0).pipe(
-        Stream.runForEach((output) =>
-          Effect.sync(() => {
-            seen.push(output);
-            if (output._tag === "Output") processes[0]?.exit();
-          }),
-        ),
-      ),
-    );
+    for await (const output of terminals.attach(
+      id,
+      0,
+      new AbortController().signal,
+    )) {
+      seen.push(output);
+      if (output._tag === "Output") processes[0]?.exit();
+    }
 
     expect(seen).toEqual([
       { _tag: "Output", data: "bye\r\n", end: 5 },
@@ -109,7 +114,7 @@ describe("terminal sessions", () => {
 
     terminals.write(id, "ls\r");
     terminals.resize(id, 120, 40);
-    terminals.close({ ...main, id });
+    terminals.closeTerminal({ ...main, id });
     terminals.write(id, "ignored");
 
     expect(processes[0]).toMatchObject({

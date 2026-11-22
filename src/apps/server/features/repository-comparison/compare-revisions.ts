@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { changesFailed } from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
   CompareApi,
@@ -40,40 +39,35 @@ export function comparisonFeature(
   };
 }
 
-export function compareRevisions(
+export async function compareRevisions(
   git: GitCommandRunner,
   { repositoryId, worktreePath, from, to }: CompareRevisions,
-) {
-  return Effect.gen(function* () {
-    const [fromOid, toOid] = yield* Effect.all(
-      [resolve(git, worktreePath, from), resolve(git, worktreePath, to)],
-      { concurrency: 2 },
-    );
-    const base = yield* mergeBase(git, worktreePath, fromOid, toOid);
-    const [files, commits] = yield* Effect.all(
-      [
-        readCommitFiles(git, { repositoryId, worktreePath, oid: toOid }, base),
-        readCommits(git, worktreePath, fromOid, toOid),
-      ],
-      { concurrency: 2 },
-    );
-    return {
-      from: fromOid,
-      to: toOid,
-      base,
-      ...fitFiles(files, Buffer.byteLength(JSON.stringify(commits))),
-      commits: commits.slice(0, maximumComparisonCommits),
-      commitsComplete: commits.length <= maximumComparisonCommits,
-    } satisfies Comparison;
-  });
+): Promise<Comparison> {
+  const [fromOid, toOid] = await Promise.all([
+    resolve(git, worktreePath, from),
+    resolve(git, worktreePath, to),
+  ]);
+  const base = await mergeBase(git, worktreePath, fromOid, toOid);
+  const [files, commits] = await Promise.all([
+    readCommitFiles(git, { repositoryId, worktreePath, oid: toOid }, base),
+    readCommits(git, worktreePath, fromOid, toOid),
+  ]);
+  return {
+    from: fromOid,
+    to: toOid,
+    base,
+    ...fitFiles(files, Buffer.byteLength(JSON.stringify(commits))),
+    commits: commits.slice(0, maximumComparisonCommits),
+    commitsComplete: commits.length <= maximumComparisonCommits,
+  };
 }
 
-function resolve(
+async function resolve(
   git: GitCommandRunner,
   worktreePath: string,
   side: ComparisonSide,
 ) {
-  return runRepositoryGit(
+  const output = await runRepositoryGit(
     git,
     worktreePath,
     [
@@ -84,14 +78,10 @@ function resolve(
       `${revision(side)}^{commit}`,
     ],
     { ...originalObjects, exitCodes: [0, 1] },
-  ).pipe(
-    Effect.flatMap((output) => {
-      const oid = output.trim();
-      return oid === ""
-        ? Effect.fail(changesFailed("Stale", `${sideName(side)} is gone.`))
-        : Effect.succeed(oid);
-    }),
   );
+  const oid = output.trim();
+  if (oid === "") throw changesFailed("Stale", `${sideName(side)} is gone.`);
+  return oid;
 }
 
 function revision(side: ComparisonSide) {
@@ -118,39 +108,44 @@ function sideName(side: ComparisonSide) {
   }
 }
 
-function mergeBase(
+async function mergeBase(
   git: GitCommandRunner,
   worktreePath: string,
   from: string,
   to: string,
 ) {
-  return runRepositoryGit(git, worktreePath, ["merge-base", from, to], {
-    ...originalObjects,
-    exitCodes: [0, 1],
-  }).pipe(Effect.map((output) => output.trim() || null));
-}
-
-function readCommits(
-  git: GitCommandRunner,
-  worktreePath: string,
-  from: string,
-  to: string,
-) {
-  return runRepositoryGit(
+  const output = await runRepositoryGit(
     git,
     worktreePath,
-    [
-      "log",
-      "-z",
-      "--no-show-signature",
-      "--format=%H%x1f%P%x1f%s",
-      `--max-count=${maximumComparisonCommits + 1}`,
-      to,
-      `^${from}`,
-      "--",
-    ],
-    originalObjects,
-  ).pipe(Effect.map(parseCommits));
+    ["merge-base", from, to],
+    { ...originalObjects, exitCodes: [0, 1] },
+  );
+  return output.trim() || null;
+}
+
+async function readCommits(
+  git: GitCommandRunner,
+  worktreePath: string,
+  from: string,
+  to: string,
+) {
+  return parseCommits(
+    await runRepositoryGit(
+      git,
+      worktreePath,
+      [
+        "log",
+        "-z",
+        "--no-show-signature",
+        "--format=%H%x1f%P%x1f%s",
+        `--max-count=${maximumComparisonCommits + 1}`,
+        to,
+        `^${from}`,
+        "--",
+      ],
+      originalObjects,
+    ),
+  );
 }
 
 function parseCommits(output: string): ComparisonCommit[] {

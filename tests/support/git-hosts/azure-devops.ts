@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import type { AzureDevOpsClient } from "#server/features/source-control/hosts/azure-devops-client.ts";
 
 interface AzureDevOpsPullRequestNode {
@@ -62,16 +61,16 @@ export function fakeAzureDevOps(
     );
   };
   const azureDevOps: AzureDevOpsClient = {
-    version: Effect.succeed("azure-cli 2.78.0"),
-    account: Effect.succeed("octo@example.com"),
-    accessToken:
-      byHead === null
-        ? Effect.fail({ _tag: "PullRequestsUnavailable" })
-        : Effect.succeed("token"),
+    version: async () => "azure-cli 2.78.0",
+    account: async () => "octo@example.com",
+    accessToken: async () => {
+      if (byHead === null) throw { _tag: "PullRequestsUnavailable" };
+      return "token";
+    },
     get: (url) => {
       requests.push(url);
       const listed = listing(new URL(url));
-      if (listed !== undefined) return Effect.succeed(JSON.stringify(listed));
+      if (listed !== undefined) return Promise.resolve(JSON.stringify(listed));
       const search = new URL(url).searchParams;
       const commit = search.get("searchCriteria.itemVersion.version");
       if (commit !== null && commitAuthor !== undefined) {
@@ -80,7 +79,7 @@ export function fakeAzureDevOps(
           search.get("searchCriteria.includeUserImageUrl") === "true"
             ? { email, imageUrl }
             : { email };
-        return Effect.succeed(
+        return Promise.resolve(
           JSON.stringify(listOf([{ commitId: commit, author }])),
         );
       }
@@ -103,8 +102,8 @@ export function fakeAzureDevOps(
       if (wanted !== undefined) {
         const node = nodes.find(({ id }) => String(id) === wanted);
         return node === undefined
-          ? Effect.fail({ _tag: "PullRequestsUnavailable" })
-          : Effect.succeed(JSON.stringify(asNode(node)));
+          ? Promise.reject({ _tag: "PullRequestsUnavailable" })
+          : Promise.resolve(JSON.stringify(asNode(node)));
       }
       const query = new URL(url).searchParams;
       const source = query.get("searchCriteria.sourceRefName");
@@ -122,7 +121,7 @@ export function fakeAzureDevOps(
               },
             }))
           : (byHead?.[source.slice("refs/heads/".length)] ?? []).map(asNode);
-      return Effect.succeed(JSON.stringify({ value }));
+      return Promise.resolve(JSON.stringify({ value }));
     },
   };
   return { azureDevOps, requests };

@@ -1,7 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Effect, Stream } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import type {
@@ -197,15 +196,20 @@ describe("repository history synchronization", () => {
     let hang = true;
     const history = await openHistory((local) => ({
       ...local,
-      stream: (command) =>
-        hang && command.arguments[0] === "log"
-          ? Stream.fromEffect(
-              Effect.sync(() => started.resolve()).pipe(
-                Effect.andThen(Effect.never),
-                Effect.ensuring(Effect.sync(() => interrupted.resolve())),
-              ),
-            )
-          : local.stream(command),
+      stream: async function* (command) {
+        if (!hang || command.arguments[0] !== "log") {
+          yield* local.stream(command);
+          return;
+        }
+        try {
+          started.resolve();
+          await new Promise((_, reject) =>
+            command.signal?.addEventListener("abort", reject, { once: true }),
+          );
+        } finally {
+          interrupted.resolve();
+        }
+      },
     }));
     const path = join(history.home, "cancel");
     await importLinearHistory(path, "sha1", 1);
@@ -229,10 +233,10 @@ describe("repository history synchronization", () => {
   it("reports a Git timeout by its reason alone", async () => {
     const history = await openHistory((local) => ({
       ...local,
-      stream: (command) =>
-        command.arguments[0] === "log"
-          ? Stream.fail(gitFailed("Timeout"))
-          : local.stream(command),
+      stream: async function* (command) {
+        if (command.arguments[0] === "log") throw gitFailed("Timeout");
+        yield* local.stream(command);
+      },
     }));
     const path = join(history.home, "timeout");
     await importLinearHistory(path, "sha1", 1);

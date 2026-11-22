@@ -2,14 +2,12 @@ import { access, mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
-import { Effect, Stream } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import {
   type GitCommandRunner,
   gitFailed,
 } from "#server/adapters/local-git/git-commands.ts";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog.ts";
-import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
 import { repositoryCatalogTable } from "#server/persistence/environment-state.schema.ts";
 import { createRepository, git } from "#tests-support/git.ts";
 import { openTestEnvironment } from "#tests-support/server.ts";
@@ -19,19 +17,19 @@ describe("repository catalog", () => {
   it("reports unavailable Git without remembering the path", async () => {
     const root = await createTemporaryDirectory();
     const unavailable: GitCommandRunner = {
-      run: () => Effect.fail(gitFailed("GitUnavailable")),
-      stream: () => Stream.fail(gitFailed("GitUnavailable")),
-    };
-    const result = await withCatalog(
-      (catalog) =>
-        Effect.gen(function* () {
-          const error = yield* Effect.flip(catalog.remember(root));
-          return { error, repositories: yield* catalog.list() };
+      run: () => Promise.reject(gitFailed("GitUnavailable")),
+      stream: () => ({
+        [Symbol.asyncIterator]: () => ({
+          next: () => Promise.reject(gitFailed("GitUnavailable")),
         }),
-      unavailable,
-    );
-    expect(result.error).toMatchObject({ reason: "InspectionFailed" });
-    expect(result.repositories).toEqual([]);
+      }),
+    };
+    const { catalog } = await catalogEnvironment(unavailable);
+
+    await expect(catalog.remember(root)).rejects.toMatchObject({
+      reason: "InspectionFailed",
+    });
+    expect(await catalog.list()).toEqual([]);
   });
 
   it("remembers one canonical worktree root and keeps its identity stable", async () => {
@@ -40,22 +38,15 @@ describe("repository catalog", () => {
     const nestedPath = join(repositoryPath, "src", "nested");
     await createRepository(repositoryPath);
     await mkdir(nestedPath, { recursive: true });
+    const { catalog } = await catalogEnvironment();
 
-    const result = await withCatalog((catalog) =>
-      Effect.gen(function* () {
-        const first = yield* catalog.remember(nestedPath);
-        const second = yield* catalog.remember(repositoryPath);
-        return { first, repositories: yield* catalog.list(), second };
-      }),
-    );
+    const first = await catalog.remember(nestedPath);
+    const second = await catalog.remember(repositoryPath);
 
-    expect(result.first).toMatchObject({
-      name: "rebase git",
-      path: repositoryPath,
-    });
-    expect(result.first.id).toBe(result.second.id);
-    expect(result.first.addedAt).toBe(result.second.addedAt);
-    expect(result.repositories).toEqual([result.second]);
+    expect(first).toMatchObject({ name: "rebase git", path: repositoryPath });
+    expect(first.id).toBe(second.id);
+    expect(first.addedAt).toBe(second.addedAt);
+    expect(await catalog.list()).toEqual([second]);
   });
 
   it("keeps linked worktrees as distinct repository entries", async () => {
@@ -64,14 +55,11 @@ describe("repository catalog", () => {
     const worktreePath = join(root, "feature worktree");
     await createRepository(repositoryPath);
     await git(repositoryPath, "worktree", "add", worktreePath, "-b", "feature");
+    const { catalog } = await catalogEnvironment();
 
-    const repositories = await withCatalog((catalog) =>
-      Effect.gen(function* () {
-        yield* catalog.remember(repositoryPath);
-        yield* catalog.remember(worktreePath);
-        return yield* catalog.list();
-      }),
-    );
+    await catalog.remember(repositoryPath);
+    await catalog.remember(worktreePath);
+    const repositories = await catalog.list();
 
     expect(repositories.map(({ name, path }) => ({ name, path }))).toEqual([
       { name: "feature worktree", path: worktreePath },
@@ -92,41 +80,31 @@ describe("repository catalog", () => {
     await Promise.all(
       [first, second, third, fourth].map((path) => createRepository(path)),
     );
+    const { catalog } = await catalogEnvironment();
 
-    const colors = await withCatalog((catalog) =>
-      Effect.gen(function* () {
-        const blue = yield* catalog.remember(first);
-        const green = yield* catalog.remember(second);
-        const violet = yield* catalog.remember(third);
-        yield* catalog.remove(green.id);
-        const reused = yield* catalog.remember(fourth);
-        const reopened = yield* catalog.remember(first);
-        return [blue, green, violet, reused, reopened].map(
-          ({ color }) => color,
-        );
-      }),
-    );
+    const blue = await catalog.remember(first);
+    const green = await catalog.remember(second);
+    const violet = await catalog.remember(third);
+    await catalog.remove(green.id);
+    const reused = await catalog.remember(fourth);
+    const reopened = await catalog.remember(first);
 
-    expect(colors).toEqual(["blue", "green", "violet", "green", "blue"]);
+    expect(
+      [blue, green, violet, reused, reopened].map(({ color }) => color),
+    ).toEqual(["blue", "green", "violet", "green", "blue"]);
   });
 
   it("creates a new logical identity after the last catalog entry is removed", async () => {
     const root = await createTemporaryDirectory();
     const repositoryPath = join(root, "repository");
     await createRepository(repositoryPath);
+    const { catalog } = await catalogEnvironment();
 
-    const result = await withCatalog((catalog) =>
-      Effect.gen(function* () {
-        const first = yield* catalog.remember(repositoryPath);
-        yield* catalog.remove(first.id);
-        const second = yield* catalog.remember(repositoryPath);
-        return { first, second };
-      }),
-    );
+    const first = await catalog.remember(repositoryPath);
+    await catalog.remove(first.id);
+    const second = await catalog.remember(repositoryPath);
 
-    expect(result.second.logicalRepositoryId).not.toBe(
-      result.first.logicalRepositoryId,
-    );
+    expect(second.logicalRepositoryId).not.toBe(first.logicalRepositoryId);
   });
 
   it("repairs linked-worktree identities created before the identity migration", async () => {
@@ -135,53 +113,44 @@ describe("repository catalog", () => {
     const worktreePath = join(root, "feature");
     await createRepository(repositoryPath);
     await git(repositoryPath, "worktree", "add", worktreePath, "-b", "feature");
-
-    const result = await withCatalog((catalog, context) =>
-      Effect.gen(function* () {
-        const main = yield* catalog.remember(repositoryPath);
-        const feature = yield* catalog.remember(worktreePath);
-        yield* context.write("Could not simulate legacy catalog", (database) =>
-          database
-            .update(repositoryCatalogTable)
-            .set({ gitCommonDirectory: null, logicalRepositoryId: null }),
-        );
-        yield* context.write("Could not simulate legacy color", (database) =>
-          database
-            .update(repositoryCatalogTable)
-            .set({ color: "red" })
-            .where(eq(repositoryCatalogTable.id, feature.id)),
-        );
-        return {
-          feature: yield* catalog.find(feature.id),
-          main: yield* catalog.find(main.id),
-        };
-      }),
+    const { catalog, context } = await catalogEnvironment();
+    const main = await catalog.remember(repositoryPath);
+    const feature = await catalog.remember(worktreePath);
+    await context.write("Could not simulate legacy catalog", (database) =>
+      database
+        .update(repositoryCatalogTable)
+        .set({ gitCommonDirectory: null, logicalRepositoryId: null }),
+    );
+    await context.write("Could not simulate legacy color", (database) =>
+      database
+        .update(repositoryCatalogTable)
+        .set({ color: "red" })
+        .where(eq(repositoryCatalogTable.id, feature.id)),
     );
 
-    expect(result.feature?.logicalRepositoryId).toBeDefined();
-    expect(result.feature?.logicalRepositoryId).toBe(
-      result.main?.logicalRepositoryId,
+    const repairedFeature = await catalog.find(feature.id);
+    const repairedMain = await catalog.find(main.id);
+
+    expect(repairedFeature?.logicalRepositoryId).toBeDefined();
+    expect(repairedFeature?.logicalRepositoryId).toBe(
+      repairedMain?.logicalRepositoryId,
     );
-    expect(result.feature?.color).toBe(result.main?.color);
+    expect(repairedFeature?.color).toBe(repairedMain?.color);
   });
 
   it("records an open and removes only the catalog entry", async () => {
     const root = await createTemporaryDirectory();
     const repositoryPath = join(root, "repository");
     await createRepository(repositoryPath);
+    const { catalog } = await catalogEnvironment();
+    const remembered = await catalog.remember(repositoryPath);
 
-    const result = await withCatalog((catalog) =>
-      Effect.gen(function* () {
-        const remembered = yield* catalog.remember(repositoryPath);
-        const opened = yield* catalog.recordOpened(remembered.id);
-        const removed = yield* catalog.remove(remembered.id);
-        return { opened, removed, repositories: yield* catalog.list() };
-      }),
-    );
+    const opened = await catalog.recordOpened(remembered.id);
+    const removed = await catalog.remove(remembered.id);
 
-    expect(result.opened.lastOpenedAt >= result.opened.addedAt).toBe(true);
-    expect(result.removed.repositoryId).toBe(result.opened.id);
-    expect(result.repositories).toEqual([]);
+    expect(opened.lastOpenedAt >= opened.addedAt).toBe(true);
+    expect(removed.repositoryId).toBe(opened.id);
+    expect(await catalog.list()).toEqual([]);
     await expect(access(repositoryPath)).resolves.toBeUndefined();
   });
 
@@ -191,74 +160,47 @@ describe("repository catalog", () => {
     const plainFile = join(root, "plain-file");
     await mkdir(plainDirectory);
     await writeFile(plainFile, "plain", "utf8");
+    const { catalog } = await catalogEnvironment();
+    const rejected = (reason: string) => ({
+      _tag: "RepositoryPathRejected",
+      reason,
+    });
 
-    await withCatalog((catalog) =>
-      Effect.gen(function* () {
-        yield* expectFailure(catalog.remember("relative"), "MalformedPath");
-        yield* expectFailure(
-          catalog.remember(join(root, "missing")),
-          "NotFound",
-        );
-        yield* expectFailure(catalog.remember(plainFile), "NotDirectory");
-        yield* expectFailure(catalog.remember(plainDirectory), "NotRepository");
-      }),
+    await expect(catalog.remember("relative")).rejects.toEqual(
+      rejected("MalformedPath"),
+    );
+    await expect(catalog.remember(join(root, "missing"))).rejects.toEqual(
+      rejected("NotFound"),
+    );
+    await expect(catalog.remember(plainFile)).rejects.toEqual(
+      rejected("NotDirectory"),
+    );
+    await expect(catalog.remember(plainDirectory)).rejects.toEqual(
+      rejected("NotRepository"),
     );
   });
 
   it("reports missing repository ids for open and remove", async () => {
     const missingId = "00000000-0000-4000-8000-000000000099";
+    const { catalog } = await catalogEnvironment();
+    const missing = { _tag: "RepositoryRejected", reason: "Missing" };
 
-    await withCatalog((catalog) =>
-      Effect.gen(function* () {
-        yield* expectMissing(catalog.recordOpened(missingId));
-        yield* expectMissing(catalog.remove(missingId));
-      }),
+    await expect(catalog.recordOpened(missingId)).rejects.toMatchObject(
+      missing,
     );
+    await expect(catalog.remove(missingId)).rejects.toMatchObject(missing);
   });
 });
 
-async function withCatalog<A, E>(
-  use: (
-    catalog: ReturnType<typeof createRepositoryCatalog>,
-    context: EnvironmentContext,
-  ) => Effect.Effect<A, E>,
-  git?: GitCommandRunner,
-) {
+async function catalogEnvironment(git?: GitCommandRunner) {
   const environment = await openTestEnvironment();
-  return Effect.runPromise(
-    use(
+  return {
+    catalog:
       git === undefined
         ? environment.catalog
         : createRepositoryCatalog(environment.context, git),
-      environment.context,
-    ),
-  );
-}
-
-function expectFailure<A, E>(
-  effect: Effect.Effect<A, E>,
-  reason: "MalformedPath" | "NotDirectory" | "NotFound" | "NotRepository",
-) {
-  return Effect.flip(effect).pipe(
-    Effect.tap((error) =>
-      Effect.sync(() =>
-        expect(error).toEqual({ _tag: "RepositoryPathRejected", reason }),
-      ),
-    ),
-  );
-}
-
-function expectMissing<A, E>(effect: Effect.Effect<A, E>) {
-  return Effect.flip(effect).pipe(
-    Effect.tap((error) =>
-      Effect.sync(() =>
-        expect(error).toMatchObject({
-          _tag: "RepositoryRejected",
-          reason: "Missing",
-        }),
-      ),
-    ),
-  );
+    context: environment.context,
+  };
 }
 
 async function createTemporaryDirectory() {

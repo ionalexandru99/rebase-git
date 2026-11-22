@@ -1,5 +1,8 @@
-import { Effect, Schema } from "effect";
-import { cloneableRepository } from "#server/features/source-control/git-host.ts";
+import { z } from "zod";
+import {
+  cloneableRepository,
+  mapConcurrently,
+} from "#server/features/source-control/git-host.ts";
 import {
   type AzureDevOpsClient,
   reader,
@@ -8,36 +11,40 @@ import {
 const organizationsAtOnce = 4;
 const repositoriesListed = 1_000;
 
-export function cloneableRepositories(client: AzureDevOpsClient) {
-  return Effect.gen(function* () {
-    const account = yield* client.account;
+export async function cloneableRepositories(client: AzureDevOpsClient) {
+  try {
+    const account = await client.account();
     if (account === undefined) return [];
-    const read = reader(client, yield* client.accessToken);
-    const { id } = yield* read(profileUrl, decodeProfile);
-    const { value: organizations } = yield* read(
+    const read = reader(client, await client.accessToken());
+    const { id } = await read(profileUrl, Profile);
+    const { value: organizations } = await read(
       organizationsUrl(id),
-      decodeOrganizations,
+      Organizations,
     );
-    const repositories = yield* Effect.forEach(
+    const repositories = await mapConcurrently(
       organizations,
-      ({ accountName }) =>
-        read(repositoriesUrl(accountName), decodeRepositories).pipe(
-          Effect.map(({ value }) =>
-            value
-              .filter(({ isDisabled }) => isDisabled !== true)
-              .map((repository) =>
-                cloneableRepository({
-                  name: `${accountName}/${repository.project.name}/${repository.name}`,
-                  url: repository.sshUrl ?? repository.remoteUrl,
-                  private: repository.project.visibility !== "public",
-                  description: null,
-                  updatedAt: null,
-                }),
-              ),
-          ),
-          Effect.orElseSucceed(() => []),
-        ),
-      { concurrency: organizationsAtOnce },
+      organizationsAtOnce,
+      async ({ accountName }) => {
+        try {
+          const { value } = await read(
+            repositoriesUrl(accountName),
+            Repositories,
+          );
+          return value
+            .filter(({ isDisabled }) => isDisabled !== true)
+            .map((repository) =>
+              cloneableRepository({
+                name: `${accountName}/${repository.project.name}/${repository.name}`,
+                url: repository.sshUrl ?? repository.remoteUrl,
+                private: repository.project.visibility !== "public",
+                description: null,
+                updatedAt: null,
+              }),
+            );
+        } catch {
+          return [];
+        }
+      },
     );
     return [
       {
@@ -50,7 +57,9 @@ export function cloneableRepositories(client: AzureDevOpsClient) {
           .slice(0, repositoriesListed),
       },
     ];
-  }).pipe(Effect.orElseSucceed(() => []));
+  } catch {
+    return [];
+  }
 }
 
 const profileUrl =
@@ -66,29 +75,23 @@ function repositoriesUrl(organization: string) {
   return `https://dev.azure.com/${encodeURIComponent(organization)}/_apis/git/repositories?api-version=7.1`;
 }
 
-const decodeProfile = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(Schema.Struct({ id: Schema.String })),
-);
+const Profile = z.object({ id: z.string() });
 
-const decodeOrganizations = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(
-    Schema.Struct({
-      value: Schema.Array(Schema.Struct({ accountName: Schema.String })),
-    }),
-  ),
-);
-
-const RepositoryNode = Schema.Struct({
-  name: Schema.String,
-  remoteUrl: Schema.String,
-  sshUrl: Schema.optionalKey(Schema.String),
-  isDisabled: Schema.optionalKey(Schema.Boolean),
-  project: Schema.Struct({
-    name: Schema.String,
-    visibility: Schema.optionalKey(Schema.String),
-  }),
+const Organizations = z.object({
+  value: z.array(z.object({ accountName: z.string() })),
 });
 
-const decodeRepositories = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(Schema.Struct({ value: Schema.Array(RepositoryNode) })),
-);
+const Repositories = z.object({
+  value: z.array(
+    z.object({
+      name: z.string(),
+      remoteUrl: z.string(),
+      sshUrl: z.string().optional(),
+      isDisabled: z.boolean().optional(),
+      project: z.object({
+        name: z.string(),
+        visibility: z.string().optional(),
+      }),
+    }),
+  ),
+});

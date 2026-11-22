@@ -1,6 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
@@ -22,21 +21,17 @@ async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
     file: (path: string) =>
       readFile(join(directory, path), "utf8").catch(() => null),
     revert: async (commits: readonly string[], commit = true) =>
-      Effect.runPromise(
-        service.start({
-          ...scope,
-          expectedHead: await output("rev-parse", "HEAD"),
-          operation: { _tag: "Revert", commits, commit },
-        }),
-      ),
+      service.start({
+        ...scope,
+        expectedHead: await output("rev-parse", "HEAD"),
+        operation: { _tag: "Revert", commits, commit },
+      }),
     abort: async () =>
-      Effect.runPromise(
-        service.execute({
-          ...scope,
-          revision: (await Effect.runPromise(service.read(scope))).revision,
-          action: "abort",
-        }),
-      ),
+      service.execute({
+        ...scope,
+        revision: (await service.read(scope)).revision,
+        action: "abort",
+      }),
   };
 }
 

@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { AuthorAvatarsApi } from "#contracts/author-avatars/author-avatars.contract.ts";
 import type { AvatarImages } from "#server/features/author-avatars/author-avatars.ts";
@@ -32,10 +31,7 @@ async function avatarsFixture(
   const service = environment.routes(AuthorAvatarsApi);
   return {
     commit: await git(repositoryPath, "rev-parse", "HEAD"),
-    read: () =>
-      Effect.runPromise(
-        service.read({ repositoryId, email: "Rebase@Example.test" }),
-      ),
+    read: () => service.read({ repositoryId, email: "Rebase@Example.test" }),
   };
 }
 

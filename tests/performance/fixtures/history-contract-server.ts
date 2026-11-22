@@ -1,7 +1,6 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import {
   EnvironmentPairingExchanged,
   environmentPairingExchangePath,
@@ -17,45 +16,42 @@ const repositoryPath = process.argv[2];
 if (repositoryPath === undefined)
   throw new Error("Missing prepared corpus path");
 const temporary = await mkdtemp(join(tmpdir(), "rebase-history-contract-"));
-const controller = new AbortController();
-process.on("SIGTERM", () => controller.abort());
+const stopped = Promise.withResolvers<void>();
+process.on("SIGTERM", () => stopped.resolve());
 try {
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const dependencies = yield* acquireEnvironment(
-          temporary,
-          createLocalGitCommandRunner(),
-        );
-        const server = yield* serveEnvironment(dependencies, {});
-        const repository = yield* dependencies.catalog.remember(repositoryPath);
-        const { credential } = yield* Effect.promise(async () => {
-          const response = await fetch(
-            new URL(environmentPairingExchangePath, server.origin),
-            {
-              body: JSON.stringify({
-                label: "History contract fixture",
-                pairingMaterial: new URL(server.pairingUrl).hash.slice(1),
-              }),
-              headers: { "content-type": "application/json" },
-              method: "POST",
-            },
-          );
-          return EnvironmentPairingExchanged.parse(await response.json());
-        });
-        yield* Effect.sync(() => {
-          globalThis.gc?.();
-          process.stdout.write(
-            `${JSON.stringify({ origin: server.origin, repositoryId: repository.id, credential, idleRssBytes: process.memoryUsage().rss })}\n`,
-          );
-        });
-        yield* Effect.never;
-      }),
-    ),
-    { signal: controller.signal },
-  ).catch((error) => {
-    if (!controller.signal.aborted) throw error;
-  });
+  const dependencies = await acquireEnvironment(
+    temporary,
+    createLocalGitCommandRunner(),
+  );
+  try {
+    const server = await serveEnvironment(dependencies, {});
+    try {
+      const repository = await dependencies.catalog.remember(repositoryPath);
+      const response = await fetch(
+        new URL(environmentPairingExchangePath, server.origin),
+        {
+          body: JSON.stringify({
+            label: "History contract fixture",
+            pairingMaterial: new URL(server.pairingUrl).hash.slice(1),
+          }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        },
+      );
+      const { credential } = EnvironmentPairingExchanged.parse(
+        await response.json(),
+      );
+      globalThis.gc?.();
+      process.stdout.write(
+        `${JSON.stringify({ origin: server.origin, repositoryId: repository.id, credential, idleRssBytes: process.memoryUsage().rss })}\n`,
+      );
+      await stopped.promise;
+    } finally {
+      await server.close();
+    }
+  } finally {
+    await dependencies.close();
+  }
 } finally {
   await removeTemporaryDirectory(temporary);
 }

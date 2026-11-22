@@ -1,4 +1,3 @@
-import { Effect, Exit } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import {
   CompareApi,
@@ -57,18 +56,13 @@ describe("compare revisions", () => {
     onTestFinished(() => removeTemporaryDirectory(path));
     const compare = await comparisonClient(path);
 
-    const exit = await compare.exit(main, {
-      _tag: "LocalBranch",
-      name: "deleted",
+    await expect(
+      compare.revisions(main, { _tag: "LocalBranch", name: "deleted" }),
+    ).rejects.toEqual({
+      _tag: "ChangesFailed",
+      reason: "Stale",
+      detail: "deleted is gone.",
     });
-
-    expect(exit).toMatchObject(
-      Exit.fail({
-        _tag: "ChangesFailed",
-        reason: "Stale",
-        detail: "deleted is gone.",
-      }),
-    );
   });
 });
 
@@ -79,19 +73,14 @@ async function comparisonClient(path: string) {
   const request = (from: ComparisonSide, to: ComparisonSide) =>
     routes.compare({ repositoryId, worktreePath: path, from, to });
   return {
-    revisions: (from: ComparisonSide, to: ComparisonSide) =>
-      Effect.runPromise(request(from, to)),
-    exit: (from: ComparisonSide, to: ComparisonSide) =>
-      Effect.runPromiseExit(request(from, to)),
+    revisions: (from: ComparisonSide, to: ComparisonSide) => request(from, to),
     diff: (base: string | null, to: string, file: string) =>
-      Effect.runPromise(
-        routes.diff({
-          repositoryId,
-          worktreePath: path,
-          oid: to,
-          ...(base === null ? {} : { parentOid: base }),
-          path: file,
-        }),
-      ),
+      routes.diff({
+        repositoryId,
+        worktreePath: path,
+        oid: to,
+        ...(base === null ? {} : { parentOid: base }),
+        path: file,
+      }),
   };
 }

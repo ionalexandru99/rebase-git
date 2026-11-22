@@ -1,4 +1,3 @@
-import { Effect, Queue, Stream } from "effect";
 import {
   CommandProgressApi,
   type CommandProgressUpdate,
@@ -108,23 +107,39 @@ export function commandProgressFeature(
 ): EnvironmentFeature {
   return {
     routes: [
-      stream(CommandProgressApi.watch, ({ repositoryId, route }) =>
-        Stream.unwrap(
-          Effect.gen(function* () {
-            const queue = yield* Queue.sliding<CommandProgressUpdate>(1);
-            yield* Effect.addFinalizer(() => Queue.shutdown(queue));
-            yield* Effect.acquireRelease(
-              Effect.sync(() =>
-                progress.subscribe(repositoryId, route, (update) =>
-                  Queue.offerUnsafe(queue, update),
-                ),
-              ),
-              (release) => Effect.sync(release),
-            );
-            return Stream.fromQueue(queue);
-          }),
-        ),
+      stream(CommandProgressApi.watch, ({ repositoryId, route }, { signal }) =>
+        latestProgress(progress, repositoryId, route, signal),
       ),
     ],
   };
+}
+
+async function* latestProgress(
+  progress: CommandProgress,
+  repositoryId: string,
+  route: string,
+  signal: AbortSignal,
+) {
+  let latest: CommandProgressUpdate | undefined;
+  let wake: (() => void) | undefined;
+  const awake = () => wake?.();
+  const unsubscribe = progress.subscribe(repositoryId, route, (update) => {
+    latest = update;
+    awake();
+  });
+  signal.addEventListener("abort", awake, { once: true });
+  try {
+    while (!signal.aborted) {
+      const update = latest;
+      latest = undefined;
+      if (update !== undefined) yield update;
+      else
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+        });
+    }
+  } finally {
+    signal.removeEventListener("abort", awake);
+    unsubscribe();
+  }
 }

@@ -1,6 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
 import {
   type SigningKey,
   signingKeyName,
@@ -8,105 +7,111 @@ import {
 } from "#contracts/git-signing/git-signing.contract.ts";
 import {
   type GitCommandRunner,
+  isGitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 
-export function listSigningKeys(git: GitCommandRunner, directory: string) {
-  return Effect.all(
-    [
-      sshFileKeys(git, directory),
-      sshAgentKeys(git, directory),
-      gpgKeys(git, directory),
-    ],
-    { concurrency: "unbounded" },
-  ).pipe(
-    Effect.map(([files, agent, gpg]) => [
-      ...files,
-      ...agent.filter((key) => !files.some((file) => file.blob === key.blob)),
-      ...gpg,
-    ]),
-    Effect.map((found) =>
-      found.map(({ format, key, label }) => ({ format, key, label })),
-    ),
-  );
+export async function listSigningKeys(
+  git: GitCommandRunner,
+  directory: string,
+) {
+  const [files, agent, gpg] = await Promise.all([
+    sshFileKeys(git, directory),
+    sshAgentKeys(git, directory),
+    gpgKeys(git, directory),
+  ]);
+  return [
+    ...files,
+    ...agent.filter((key) => !files.some((file) => file.blob === key.blob)),
+    ...gpg,
+  ].map(({ format, key, label }) => ({ format, key, label }));
 }
 
-function sshFileKeys(git: GitCommandRunner, directory: string) {
-  return runRepositoryGit(git, directory, [
-    "-c",
-    "rebase.sshdirectory=~/.ssh",
-    "config",
-    "--type=path",
-    "--get",
-    "rebase.sshdirectory",
-  ]).pipe(
-    Effect.map((output) => output.trim()),
-    Effect.flatMap((folder) =>
-      Effect.promise(async () => {
-        const names = await readdir(folder).catch(() => []);
-        const found = await Promise.all(
-          names
-            .filter((name) => name.endsWith(".pub"))
-            .sort()
-            .map(async (name) => {
-              const path = join(folder, name);
-              const publicKey = sshPublicKey(
-                await readFile(path, "utf8").catch(() => ""),
-              );
-              return publicKey === undefined
-                ? []
-                : [
-                    {
-                      format: "ssh" as const,
-                      key: path,
-                      label: signingKeyName(name),
-                      blob: publicKey.blob,
-                    },
-                  ];
-            }),
+async function sshFileKeys(git: GitCommandRunner, directory: string) {
+  let folder: string;
+  try {
+    folder = (
+      await runRepositoryGit(git, directory, [
+        "-c",
+        "rebase.sshdirectory=~/.ssh",
+        "config",
+        "--type=path",
+        "--get",
+        "rebase.sshdirectory",
+      ])
+    ).trim();
+  } catch (error) {
+    if (isGitFailed(error)) return [];
+    throw error;
+  }
+  const names = await readdir(folder).catch(() => []);
+  const found = await Promise.all(
+    names
+      .filter((name) => name.endsWith(".pub"))
+      .sort()
+      .map(async (name) => {
+        const path = join(folder, name);
+        const publicKey = sshPublicKey(
+          await readFile(path, "utf8").catch(() => ""),
         );
-        return found.flat();
-      }),
-    ),
-    Effect.orElseSucceed(() => []),
-  );
-}
-
-function sshAgentKeys(git: GitCommandRunner, directory: string) {
-  return shell(git, directory, "ssh-add -L").pipe(
-    Effect.map((output) =>
-      output.split("\n").flatMap((line) => {
-        const publicKey = sshPublicKey(line);
         return publicKey === undefined
           ? []
           : [
               {
                 format: "ssh" as const,
-                key: `key::${publicKey.type} ${publicKey.blob}`,
-                label: publicKey.comment || `…${publicKey.blob.slice(-8)}`,
+                key: path,
+                label: signingKeyName(name),
                 blob: publicKey.blob,
               },
             ];
       }),
+  );
+  return found.flat();
+}
+
+async function sshAgentKeys(git: GitCommandRunner, directory: string) {
+  const output = await shell(git, directory, "ssh-add -L");
+  return output.split("\n").flatMap((line) => {
+    const publicKey = sshPublicKey(line);
+    return publicKey === undefined
+      ? []
+      : [
+          {
+            format: "ssh" as const,
+            key: `key::${publicKey.type} ${publicKey.blob}`,
+            label: publicKey.comment || `…${publicKey.blob.slice(-8)}`,
+            blob: publicKey.blob,
+          },
+        ];
+  });
+}
+
+async function gpgKeys(git: GitCommandRunner, directory: string) {
+  return parseGpgKeys(
+    await shell(
+      git,
+      directory,
+      '"$(git config gpg.openpgp.program || git config gpg.program || echo gpg)" --list-secret-keys --with-colons',
     ),
   );
 }
 
-function gpgKeys(git: GitCommandRunner, directory: string) {
-  return shell(
-    git,
-    directory,
-    '"$(git config gpg.openpgp.program || git config gpg.program || echo gpg)" --list-secret-keys --with-colons',
-  ).pipe(Effect.map(parseGpgKeys));
-}
-
-function shell(git: GitCommandRunner, directory: string, command: string) {
-  return runRepositoryGit(
-    git,
-    directory,
-    ["-c", `alias.rebase-signing-keys=!${command}`, "rebase-signing-keys"],
-    { exitCodes: [0, 1, 2, 127] },
-  ).pipe(Effect.orElseSucceed(() => ""));
+async function shell(
+  git: GitCommandRunner,
+  directory: string,
+  command: string,
+) {
+  try {
+    return await runRepositoryGit(
+      git,
+      directory,
+      ["-c", `alias.rebase-signing-keys=!${command}`, "rebase-signing-keys"],
+      { exitCodes: [0, 1, 2, 127] },
+    );
+  } catch (error) {
+    if (isGitFailed(error)) return "";
+    throw error;
+  }
 }
 
 function parseGpgKeys(output: string): readonly SigningKey[] {

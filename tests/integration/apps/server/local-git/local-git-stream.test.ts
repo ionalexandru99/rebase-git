@@ -1,7 +1,6 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect, Stream } from "effect";
 import { afterAll, beforeAll, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { createRepository, fastImport } from "#tests-support/git.ts";
@@ -20,49 +19,48 @@ afterAll(async () => {
 });
 
 it("streams stdout and reports a rejected command with its exit code and stderr", async () => {
-  const output = await Effect.runPromise(
-    git
-      .stream({ arguments: ["log", "--format=%H", "--all"], directory })
-      .pipe(Stream.mkString),
-  );
-  const error = await Effect.runPromise(
-    Effect.flip(
-      Stream.runDrain(
-        git.stream({
-          arguments: ["rev-parse", "--verify", "refs/heads/missing"],
-          directory,
-        }),
-      ),
-    ),
+  const output = (
+    await collect(
+      git.stream({ arguments: ["log", "--format=%H", "--all"], directory }),
+    )
+  ).join("");
+  const rejected = collect(
+    git.stream({
+      arguments: ["rev-parse", "--verify", "refs/heads/missing"],
+      directory,
+    }),
   );
 
   expect(output.trim().split("\n")).toHaveLength(2_000);
-  expect(error).toMatchObject({ exitCode: 128, reason: "Failed" });
-  expect(error.detail).toContain("Needed a single revision");
+  await expect(rejected).rejects.toMatchObject({
+    exitCode: 128,
+    reason: "Failed",
+    detail: expect.stringContaining("Needed a single revision"),
+  });
 });
 
 it("fails with a timeout when the command outlives its deadline", async () => {
-  const error = await Effect.runPromise(
-    Effect.flip(
-      git
-        .stream({
-          arguments: ["log", "--format=%H %s", "--all"],
-          directory,
-          timeoutMilliseconds: 200,
-        })
-        .pipe(Stream.runForEach(() => Effect.sleep(500))),
-    ),
-  );
+  const consume = async () => {
+    for await (const _ of git.stream({
+      arguments: ["log", "--format=%H %s", "--all"],
+      directory,
+      timeoutMilliseconds: 200,
+    }))
+      await new Promise((resolve) => setTimeout(resolve, 500));
+  };
 
-  expect(error.reason).toBe("Timeout");
+  await expect(consume()).rejects.toMatchObject({ reason: "Timeout" });
 });
 
 it("stops Git when the consumer finishes early", async () => {
-  const chunks = await Effect.runPromise(
-    git
-      .stream({ arguments: ["log", "--format=%H %s", "--all"], directory })
-      .pipe(Stream.take(1), Stream.runCollect),
-  );
+  const chunks: string[] = [];
+  for await (const chunk of git.stream({
+    arguments: ["log", "--format=%H %s", "--all"],
+    directory,
+  })) {
+    chunks.push(chunk);
+    break;
+  }
 
   expect(chunks).toHaveLength(1);
 });
@@ -82,4 +80,10 @@ async function createHistory(directory: string) {
     );
   }
   await fastImport(directory, commands.join(""));
+}
+
+async function collect(chunks: AsyncIterable<string>) {
+  const collected: string[] = [];
+  for await (const chunk of chunks) collected.push(chunk);
+  return collected;
 }

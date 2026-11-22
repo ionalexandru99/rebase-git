@@ -1,6 +1,5 @@
 import { lstatSync, realpathSync, type WatchEventType, watch } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { Effect } from "effect";
 import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import {
   reportWatchLimit,
@@ -20,7 +19,7 @@ export interface RepositoryWatcher {
   readonly watch: (
     gitDirectory: string,
     listener: RepositoryWatchListener,
-  ) => Effect.Effect<RepositoryWatchHandle>;
+  ) => RepositoryWatchHandle;
 }
 
 const watchedRootEntries = new Set([
@@ -48,28 +47,27 @@ const watchGitDirectory =
 export function createLocalRepositoryWatcher(): RepositoryWatcher {
   const directories = new Map<string, WatchedDirectory>();
   return {
-    watch: (gitDirectory, listener) =>
-      Effect.sync(() => {
-        let canonical: string;
-        try {
-          canonical = realpathSync.native(gitDirectory);
-        } catch {
-          return { close: () => {} };
-        }
-        const owned = directories.get(canonical) ?? watchDirectory(canonical);
-        directories.set(canonical, owned);
-        const own = { ...listener };
-        owned.listeners.add(own);
-        if (owned.failure !== undefined) own.failed(owned.failure);
-        return {
-          close: () => {
-            if (!owned.listeners.delete(own)) return;
-            if (owned.listeners.size > 0) return;
-            directories.delete(canonical);
-            owned.handle.close();
-          },
-        };
-      }),
+    watch: (gitDirectory, listener) => {
+      let canonical: string;
+      try {
+        canonical = realpathSync.native(gitDirectory);
+      } catch {
+        return { close: () => {} };
+      }
+      const owned = directories.get(canonical) ?? watchDirectory(canonical);
+      directories.set(canonical, owned);
+      const own = { ...listener };
+      owned.listeners.add(own);
+      if (owned.failure !== undefined) own.failed(owned.failure);
+      return {
+        close: () => {
+          if (!owned.listeners.delete(own)) return;
+          if (owned.listeners.size > 0) return;
+          directories.delete(canonical);
+          owned.handle.close();
+        },
+      };
+    },
   };
 }
 

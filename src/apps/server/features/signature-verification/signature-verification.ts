@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import {
   type SignatureCheck,
   SignatureVerificationApi,
@@ -11,6 +10,7 @@ import {
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
+  isGitFailed,
   runRepositoryGit,
   runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
@@ -47,33 +47,32 @@ export function signatureVerificationFeature(
   };
 }
 
-function verifySignature(
+async function verifySignature(
   git: GitCommandRunner,
   { worktreePath, kind, object }: VerifySignature,
-) {
-  return runRepositoryGit(git, worktreePath, ["cat-file", kind, object]).pipe(
-    Effect.flatMap((content) =>
-      isSigned(kind, content)
-        ? runRepositoryGitOutput(
-            git,
-            worktreePath,
-            [`verify-${kind}`, "--raw", object],
-            { exitCodes: [0, 1] },
-          ).pipe(
-            Effect.map((output) =>
-              readSignatureOutput(
-                `${output.stdout}\n${output.stderr}`,
-                output.exitCode,
-              ),
-            ),
-          )
-        : Effect.succeed<SignatureCheck>({ _tag: "Unsigned" }),
-    ),
-    Effect.catchIf(
-      (failure) => failure._tag === "GitFailed" && failure.reason === "Timeout",
-      () => Effect.succeed(cantCheck("TimedOut")),
-    ),
-  );
+): Promise<SignatureCheck> {
+  try {
+    const content = await runRepositoryGit(git, worktreePath, [
+      "cat-file",
+      kind,
+      object,
+    ]);
+    if (!isSigned(kind, content)) return { _tag: "Unsigned" };
+    const output = await runRepositoryGitOutput(
+      git,
+      worktreePath,
+      [`verify-${kind}`, "--raw", object],
+      { exitCodes: [0, 1] },
+    );
+    return readSignatureOutput(
+      `${output.stdout}\n${output.stderr}`,
+      output.exitCode,
+    );
+  } catch (error) {
+    if (isGitFailed(error) && error.reason === "Timeout")
+      return cantCheck("TimedOut");
+    throw error;
+  }
 }
 
 function isSigned(kind: VerifySignature["kind"], content: string) {

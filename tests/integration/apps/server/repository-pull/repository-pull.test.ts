@@ -1,6 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import {
   type PullBranch,
@@ -394,15 +393,15 @@ function keepAutostash(message: string, landed: boolean) {
     run: (command) =>
       command.arguments[0] !== "merge"
         ? runner.run(command)
-        : Effect.gen(function* () {
+        : (async () => {
             const git = (...args: string[]) =>
               runner.run({ ...command, arguments: args });
-            const stash = (yield* git("stash", "create")).stdout.trim();
-            yield* git("stash", "store", "-m", message, stash);
-            yield* git("reset", "--hard", "--quiet");
+            const stash = (await git("stash", "create")).stdout.trim();
+            await git("stash", "store", "-m", message, stash);
+            await git("reset", "--hard", "--quiet");
             if (landed)
               return {
-                ...(yield* runner.run(command)),
+                ...(await runner.run(command)),
                 stderr:
                   "error: could not apply autostash; your changes are safe in the stash\n",
               };
@@ -411,7 +410,7 @@ function keepAutostash(message: string, landed: boolean) {
               stdout: "",
               stderr: `fatal: Unable to create '${command.directory}/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository.\nApplying autostash resulted in conflicts.\nYour changes are safe in the stash.\nYou can run "git stash pop" or "git stash drop" at any time.\n`,
             };
-          }),
+          })(),
   });
 }
 
@@ -454,18 +453,14 @@ async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
   return {
     repositoryPath,
     pull: (branch: string, strategy?: PullBranch["strategy"]) =>
-      Effect.runPromise(
-        service.pull({
-          repositoryId,
-          worktreePath: repositoryPath,
-          branch,
-          ...(strategy === undefined ? {} : { strategy }),
-        }),
-      ),
+      service.pull({
+        repositoryId,
+        worktreePath: repositoryPath,
+        branch,
+        ...(strategy === undefined ? {} : { strategy }),
+      }),
     save: (strategy: "merge" | "rebase") =>
-      Effect.runPromise(
-        service.saveRepositoryPullStrategy({ repositoryId, strategy }),
-      ),
+      service.saveRepositoryPullStrategy({ repositoryId, strategy }),
     publish: (branch: string, file: string, content: string) =>
       commitFile(originPath, { branch, parent: branch, file, content }),
   };

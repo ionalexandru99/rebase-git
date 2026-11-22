@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import type { PushDestination } from "#contracts/repository-push/repository-push.contract.ts";
 import {
   type GitCommandRunner,
@@ -7,7 +6,7 @@ import {
 
 const reconcileTimeoutMilliseconds = 30_000;
 
-export function reconcileRemoteBranch(
+export async function reconcileRemoteBranch(
   git: GitCommandRunner,
   directory: string,
   { remote, branch }: PushDestination,
@@ -15,34 +14,32 @@ export function reconcileRemoteBranch(
   const remoteRef = `refs/heads/${branch}`;
   const trackingRef = `refs/remotes/${remote}/${branch}`;
   const options = { timeoutMilliseconds: reconcileTimeoutMilliseconds };
-  return Effect.gen(function* () {
-    const listed = yield* runRepositoryGit(
+  const listed = await runRepositoryGit(
+    git,
+    directory,
+    ["ls-remote", "--refs", remote, remoteRef],
+    options,
+  );
+  const target = listed.split("\t")[0]?.trim() || null;
+  if (target === null)
+    await runRepositoryGit(
       git,
       directory,
-      ["ls-remote", "--refs", remote, remoteRef],
+      ["update-ref", "-d", trackingRef],
       options,
     );
-    const target = listed.split("\t")[0]?.trim() || null;
-    if (target === null)
-      yield* runRepositoryGit(
-        git,
-        directory,
-        ["update-ref", "-d", trackingRef],
-        options,
-      );
-    else
-      yield* runRepositoryGit(
-        git,
-        directory,
-        [
-          "fetch",
-          "--no-tags",
-          "--no-write-fetch-head",
-          remote,
-          `+${remoteRef}:${trackingRef}`,
-        ],
-        options,
-      );
-    return target;
-  });
+  else
+    await runRepositoryGit(
+      git,
+      directory,
+      [
+        "fetch",
+        "--no-tags",
+        "--no-write-fetch-head",
+        remote,
+        `+${remoteRef}:${trackingRef}`,
+      ],
+      options,
+    );
+  return target;
 }

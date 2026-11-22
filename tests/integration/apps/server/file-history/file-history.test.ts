@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import { FileHistoryApi } from "#contracts/file-history/file-history.contract.ts";
 import { createRepository, git } from "#tests-support/git.ts";
@@ -85,9 +84,7 @@ async function historyClient(path: string) {
   const routes = environment.routes(FileHistoryApi);
   return {
     read: (file: string, limit: number) =>
-      Effect.runPromise(
-        routes.read({ repositoryId, worktreePath: path, path: file, limit }),
-      ),
+      routes.read({ repositoryId, worktreePath: path, path: file, limit }),
   };
 }
 

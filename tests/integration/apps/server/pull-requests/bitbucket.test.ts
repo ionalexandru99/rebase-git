@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { fakeBitbucket } from "#tests-support/git-hosts/bitbucket.ts";
 import { pullRequestsFixture } from "#tests-support/git-hosts/pull-requests-fixture.ts";
@@ -23,12 +22,10 @@ describe("Bitbucket pull requests", () => {
     await f.track("topic", "origin", "remote-topic");
     await f.track("main", "origin", "main");
     await f.track("elsewhere", "other", "elsewhere");
-    await Effect.runPromise(
-      f.sourceControl.saveBitbucketToken({
-        _tag: "AccessToken",
-        token: "access-token",
-      }),
-    );
+    await f.sourceControl.saveBitbucketToken({
+      _tag: "AccessToken",
+      token: "access-token",
+    });
 
     const url = (id: number) =>
       `https://bitbucket.org/Acme/rebase/pull-requests/${id}`;
@@ -95,12 +92,10 @@ describe("Bitbucket pull requests", () => {
       { origin: "git@ssh.bitbucket.org:acme/rebase.git" },
       { bitbucket },
     );
-    await Effect.runPromise(
-      f.sourceControl.saveBitbucketToken({
-        _tag: "AccessToken",
-        token: "access-token",
-      }),
-    );
+    await f.sourceControl.saveBitbucketToken({
+      _tag: "AccessToken",
+      token: "access-token",
+    });
 
     await expect(f.find(12)).resolves.toEqual({
       kind: "PullRequest",

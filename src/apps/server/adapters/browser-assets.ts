@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { isAbsolute, relative, resolve } from "node:path";
-import { Effect } from "effect";
 import { expectedRequestOrigin } from "#server/adapters/environment-transport/environment-request-authorization.ts";
 
 const contentTypes: Readonly<Record<string, string>> = {
@@ -12,39 +11,37 @@ const contentTypes: Readonly<Record<string, string>> = {
   ".svg": "image/svg+xml",
 };
 
-export function respondWithBrowserAsset(
+export async function respondWithBrowserAsset(
   request: IncomingMessage,
   response: ServerResponse,
   assetsRoot: string,
 ) {
   const asset = resolveBrowserAsset(request.url, assetsRoot);
   if (asset === undefined) {
-    return Effect.succeed(false);
+    return false;
   }
 
   if (request.method !== "GET" && request.method !== "HEAD") {
     response.writeHead(405, { allow: "GET, HEAD" }).end();
-    return Effect.succeed(true);
+    return true;
   }
 
-  return Effect.promise(async () => {
-    try {
-      const content = await readFile(asset.path);
-      response.writeHead(
-        200,
-        browserAssetHeaders(
-          asset.extension,
-          asset.cache,
-          expectedRequestOrigin(request).replace("http://", "ws://"),
-        ),
-      );
-      response.end(request.method === "HEAD" ? undefined : content);
-    } catch (error) {
-      const status = isMissingAsset(error) ? 404 : 500;
-      response.writeHead(status).end();
-    }
-    return true;
-  });
+  try {
+    const content = await readFile(asset.path);
+    response.writeHead(
+      200,
+      browserAssetHeaders(
+        asset.extension,
+        asset.cache,
+        expectedRequestOrigin(request).replace("http://", "ws://"),
+      ),
+    );
+    response.end(request.method === "HEAD" ? undefined : content);
+  } catch (error) {
+    const status = isMissingAsset(error) ? 404 : 500;
+    response.writeHead(status).end();
+  }
+  return true;
 }
 
 export function resolveBrowserAsset(

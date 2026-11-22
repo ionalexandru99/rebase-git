@@ -129,9 +129,6 @@ importers:
       drizzle-orm:
         specifier: 1.0.0-rc.5-5935859
         version: 1.0.0-rc.5-5935859(effect@4.0.3)(zod@4.6.7)
-      effect:
-        specifier: 4.0.3
-        version: 4.0.3
       electron:
         specifier: 43.8.8
         version: 43.8.8(supports-color@10.2.2)
@@ -6587,7 +6584,8 @@ snapshots:
     dependencies:
       readable-stream: 2.3.8
 
-  effect@4.0.3: {}
+  effect@4.0.3:
+    optional: true
 
   ejs@3.1.10:
     dependencies:

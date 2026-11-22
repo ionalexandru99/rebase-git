@@ -1,6 +1,5 @@
 import { lstat, open, readdir, readlink, realpath } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect, Stream } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   type ListWorktreeFolder,
@@ -21,7 +20,7 @@ import {
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
-  type GitFailed,
+  isGitFailed,
   runRepositoryGit,
   streamRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
@@ -53,130 +52,125 @@ export function worktreeFilesFeature(
   };
 }
 
-export function listWorktreeFolder(
+export async function listWorktreeFolder(
   git: GitCommandRunner,
   { worktreePath, folder }: ListWorktreeFolder,
 ) {
-  return Effect.gen(function* () {
-    const target = yield* folderPath(worktreePath, folder);
-    const entries = yield* changeIo(() => readFolder(target));
-    const listed = entries.slice(0, maximumFolderEntries);
-    const ignored = yield* ignoredNames(
-      git,
-      worktreePath,
-      folder,
-      listed.map((entry) => entry.name),
-    );
-    return {
-      entries: listed.map((entry) => ({
-        ...entry,
-        ignored: ignored.has(entry.name),
-      })),
-      complete: entries.length <= maximumFolderEntries,
-    };
-  });
+  const target = await folderPath(worktreePath, folder);
+  const entries = await changeIo(() => readFolder(target));
+  const listed = entries.slice(0, maximumFolderEntries);
+  const ignored = await ignoredNames(
+    git,
+    worktreePath,
+    folder,
+    listed.map((entry) => entry.name),
+  );
+  return {
+    entries: listed.map((entry) => ({
+      ...entry,
+      ignored: ignored.has(entry.name),
+    })),
+    complete: entries.length <= maximumFolderEntries,
+  };
 }
 
-export function readWorktreeFile(
+export async function readWorktreeFile(
   git: GitCommandRunner,
   { worktreePath, path }: ReadWorktreeFile,
-) {
-  return Effect.gen(function* () {
-    const target = yield* safeChangePath(worktreePath, path);
-    const kind = yield* changeIo(() => entryKind(target));
-    if (kind === undefined || kind === "folder")
-      return { _tag: "Missing" } as const;
-    if (kind === "symlink")
-      return {
-        _tag: "Symlink",
-        target: (yield* changeIo(() => readlink(target))).slice(0, 4_096),
-      } as const;
-    if (kind === "submodule")
-      return {
-        _tag: "Submodule",
-        oid: yield* submoduleOid(git, worktreePath, path),
-      } as const;
-    return yield* changeIo(() => readText(target));
-  });
+): Promise<WorktreeFile> {
+  const target = await safeChangePath(worktreePath, path);
+  const kind = await changeIo(() => entryKind(target));
+  if (kind === undefined || kind === "folder") return { _tag: "Missing" };
+  if (kind === "symlink")
+    return {
+      _tag: "Symlink",
+      target: (await changeIo(() => readlink(target))).slice(0, 4_096),
+    };
+  if (kind === "submodule")
+    return {
+      _tag: "Submodule",
+      oid: await submoduleOid(git, worktreePath, path),
+    };
+  return changeIo(() => readText(target));
 }
 
-export function searchWorktreeNames(
+export async function searchWorktreeNames(
   git: GitCommandRunner,
   { worktreePath, query }: SearchWorktree,
 ) {
   const needle = query.trim().toLowerCase();
-  return streamRepositoryGit(git, worktreePath, [
-    "ls-files",
-    "-z",
-    "--cached",
-    "--others",
-    "--exclude-standard",
-  ]).pipe(
-    splitRecords("\0"),
-    Stream.filter(
-      (path) =>
-        path !== "" &&
-        !path.endsWith("/") &&
-        path.toLowerCase().includes(needle),
-    ),
-    Stream.runCollect,
-    Effect.map((paths) => {
-      const ranked = [...new Set(paths)]
-        .map((path) => ({ path, rank: nameRank(path, needle) }))
-        .sort(
-          (left, right) =>
-            left.rank - right.rank ||
-            left.path.length - right.path.length ||
-            (left.path < right.path ? -1 : 1),
-        );
-      return {
-        paths: ranked.slice(0, maximumSearchResults).map((match) => match.path),
-        complete: ranked.length <= maximumSearchResults,
-      };
-    }),
-  );
+  const paths = new Set<string>();
+  for await (const path of splitRecords(
+    streamRepositoryGit(git, worktreePath, [
+      "ls-files",
+      "-z",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+    ]),
+    "\0",
+  ))
+    if (
+      path !== "" &&
+      !path.endsWith("/") &&
+      path.toLowerCase().includes(needle)
+    )
+      paths.add(path);
+  const ranked = [...paths]
+    .map((path) => ({ path, rank: nameRank(path, needle) }))
+    .sort(
+      (left, right) =>
+        left.rank - right.rank ||
+        left.path.length - right.path.length ||
+        (left.path < right.path ? -1 : 1),
+    );
+  return {
+    paths: ranked.slice(0, maximumSearchResults).map((match) => match.path),
+    complete: ranked.length <= maximumSearchResults,
+  };
 }
 
-export function searchWorktreeText(
+export async function searchWorktreeText(
   git: GitCommandRunner,
   { worktreePath, query }: SearchWorktree,
 ) {
-  return streamRepositoryGit(git, worktreePath, [
-    "grep",
-    "-z",
-    "-n",
-    "-I",
-    "-F",
-    "--untracked",
-    "--no-color",
-    ...(query === query.toLowerCase() ? ["-i"] : []),
-    "-e",
-    query,
-  ]).pipe(
-    Stream.splitLines,
-    Stream.map(parseMatch),
-    Stream.filter((match) => match !== undefined),
-    Stream.take(maximumSearchResults + 1),
-    Stream.runCollect,
-    Effect.catchIf(noMatches, () => Effect.succeed([])),
-    Effect.map((matches) => ({
-      matches: matches.slice(0, maximumSearchResults),
-      complete: matches.length <= maximumSearchResults,
-    })),
-  );
+  const matches: WorktreeTextMatch[] = [];
+  try {
+    for await (const line of splitRecords(
+      streamRepositoryGit(git, worktreePath, [
+        "grep",
+        "-z",
+        "-n",
+        "-I",
+        "-F",
+        "--untracked",
+        "--no-color",
+        ...(query === query.toLowerCase() ? ["-i"] : []),
+        "-e",
+        query,
+      ]),
+      /\r?\n|\r/,
+    )) {
+      const match = parseMatch(line);
+      if (match === undefined) continue;
+      matches.push(match);
+      if (matches.length > maximumSearchResults) break;
+    }
+  } catch (error) {
+    if (!isGitFailed(error) || error.exitCode !== 1) throw error;
+  }
+  return {
+    matches: matches.slice(0, maximumSearchResults),
+    complete: matches.length <= maximumSearchResults,
+  };
 }
 
-function folderPath(worktreePath: string, folder: string) {
-  return folder === ""
-    ? changeIo(() => realpath(worktreePath))
-    : Effect.gen(function* () {
-        const target = yield* safeChangePath(worktreePath, folder);
-        if ((yield* changeIo(() => entryKind(target))) !== "folder")
-          return yield* Effect.fail(
-            repositoryRejected("Missing", "The folder is no longer there."),
-          );
-        return target;
-      });
+async function folderPath(worktreePath: string, folder: string) {
+  if (folder === "") return changeIo(() => realpath(worktreePath));
+  const target = await safeChangePath(worktreePath, folder);
+  if ((await changeIo(() => entryKind(target))) !== "folder")
+    throw repositoryRejected("Missing", "The folder is no longer there.");
+  return target;
 }
 
 async function readFolder(target: string) {
@@ -233,15 +227,15 @@ async function readText(target: string): Promise<WorktreeFile> {
   }
 }
 
-function ignoredNames(
+async function ignoredNames(
   git: GitCommandRunner,
   worktreePath: string,
   folder: string,
   names: readonly string[],
 ) {
-  if (names.length === 0) return Effect.succeed(new Set<string>());
+  if (names.length === 0) return new Set<string>();
   const prefix = folder === "" ? "./" : `./${folder}/`;
-  return runRepositoryGit(
+  const output = await runRepositoryGit(
     git,
     worktreePath,
     ["check-ignore", "-z", "--stdin"],
@@ -250,51 +244,42 @@ function ignoredNames(
       exitCodes: [0, 1],
       literalPathspecs: false,
     },
-  ).pipe(
-    Effect.map(
-      (output) =>
-        new Set(
-          output
-            .split("\0")
-            .filter(Boolean)
-            .map((path) => path.slice(prefix.length)),
-        ),
-    ),
+  );
+  return new Set(
+    output
+      .split("\0")
+      .filter(Boolean)
+      .map((path) => path.slice(prefix.length)),
   );
 }
 
-function submoduleOid(
+async function submoduleOid(
   git: GitCommandRunner,
   worktreePath: string,
   path: string,
 ) {
-  return runRepositoryGit(git, worktreePath, [
+  const output = await runRepositoryGit(git, worktreePath, [
     "ls-files",
     "-s",
     "-z",
     "--",
     path,
-  ]).pipe(
-    Effect.map((output) => {
-      const [mode, oid] = output.split(" ");
-      return mode === "160000" && oid !== undefined ? oid : null;
-    }),
-  );
+  ]);
+  const [mode, oid] = output.split(" ");
+  return mode === "160000" && oid !== undefined ? oid : null;
 }
 
-function splitRecords(separator: string) {
-  return <E>(stream: Stream.Stream<string, E>) =>
-    stream.pipe(
-      Stream.mapAccum(
-        () => "",
-        (pending, chunk) => {
-          const parts = (pending + chunk).split(separator);
-          const rest = parts.pop() ?? "";
-          return [rest, parts];
-        },
-        { onHalt: (pending) => (pending === "" ? [] : [pending]) },
-      ),
-    );
+async function* splitRecords(
+  chunks: AsyncIterable<string>,
+  separator: string | RegExp,
+) {
+  let pending = "";
+  for await (const chunk of chunks) {
+    const parts = (pending + chunk).split(separator);
+    pending = parts.pop() ?? "";
+    yield* parts;
+  }
+  if (pending !== "") yield pending;
 }
 
 function parseMatch(line: string) {
@@ -315,8 +300,4 @@ function nameRank(path: string, needle: string) {
   if (name.startsWith(needle)) return 1;
   if (name.includes(needle)) return 2;
   return 3;
-}
-
-function noMatches(error: GitFailed) {
-  return error.exitCode === 1;
 }
