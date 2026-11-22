@@ -62,6 +62,7 @@ function usePanelController(scope: WorkspacePanelScope) {
 
 function focusesPanel(action: WorkspacePanelAction) {
   if (action.type === "open") return action.focus !== false;
+  if (action.type === "visibility") return action.open;
   return (
     action.type !== "resize" &&
     action.type !== "expand" &&

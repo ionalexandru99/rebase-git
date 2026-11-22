@@ -14,8 +14,10 @@ export function createStoredStore<T>(
   return {
     getSnapshot: store.getSnapshot,
     subscribe: (listener) => {
-      if (subscribers++ === 0 && options.followOtherWindows)
+      if (subscribers++ === 0 && options.followOtherWindows) {
+        store.set(read(key, decode));
         window.addEventListener("storage", reload);
+      }
       const unsubscribe = store.subscribe(listener);
       return () => {
         unsubscribe();
