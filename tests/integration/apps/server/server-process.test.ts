@@ -249,7 +249,7 @@ async function verifyBrowserAssets(origin: string) {
   expect(licenses.map(({ name }) => name)).toEqual(
     expect.arrayContaining([
       "react",
-      "effect",
+      "zod",
       "@lydell/node-pty",
       "tailwindcss",
       "lazy-val",
