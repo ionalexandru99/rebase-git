@@ -7,23 +7,17 @@ import {
   ObjectId,
   RefName,
   RemoteName,
-  RepositoryId,
-  RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 import {
   RefMissing,
   RepositoryTag,
 } from "#contracts/repository-refs/repository-refs.contract.ts";
 
-const TagScope = {
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
-};
-
 const TagMessage = z.string().min(1).max(65_536);
 
 export const CreateRepositoryTag = z.object({
-  ...TagScope,
+  ...WorktreeScope.shape,
   name: RefName,
   target: ObjectId,
   message: TagMessage.optional(),
@@ -31,7 +25,7 @@ export const CreateRepositoryTag = z.object({
 export type CreateRepositoryTag = z.infer<typeof CreateRepositoryTag>;
 
 export const DeleteRepositoryTag = z.object({
-  ...TagScope,
+  ...WorktreeScope.shape,
   name: RefName,
   local: z.object({ object: ObjectId }).optional(),
   remote: z.object({ remote: RemoteName, object: ObjectId }).optional(),
@@ -44,7 +38,7 @@ export const RepositoryTagDeleted = z.object({
 export type RepositoryTagDeleted = z.infer<typeof RepositoryTagDeleted>;
 
 export const ReadRepositoryTag = z.object({
-  ...TagScope,
+  ...WorktreeScope.shape,
   name: RefName,
 });
 export type ReadRepositoryTag = z.infer<typeof ReadRepositoryTag>;

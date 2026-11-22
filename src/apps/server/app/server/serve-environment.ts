@@ -6,10 +6,14 @@ import {
   combineEnvironmentFeatures,
   requestScopedGit,
 } from "#server/adapters/environment-transport/environment-routes.ts";
-import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
+import {
+  createLocalGitCommandRunner,
+  type GitCommandRunner,
+} from "#server/adapters/local-git/git-commands.ts";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher.ts";
 import { productVersion } from "#server/app/runtime/product-version.ts";
 import { acquireRuntimeMarker } from "#server/app/runtime/runtime-marker.ts";
+import { verifyGitVersion } from "#server/app/runtime/runtime-requirements.ts";
 import {
   acquireEnvironmentListener,
   type EnvironmentListener,
@@ -105,6 +109,19 @@ export interface EnvironmentServer {
   readonly origin: string;
   readonly pairingUrl: string;
   readonly port: number;
+}
+
+export async function startEnvironmentServer(
+  options: EnvironmentServerOptions,
+) {
+  const git = createLocalGitCommandRunner();
+  await verifyGitVersion(git);
+  return acquireScoped(async (scope) => {
+    const dependencies = scope.use(await acquireEnvironment(options.home, git));
+    const { close, ...server } = await serveEnvironment(dependencies, options);
+    scope.defer(close);
+    return server;
+  });
 }
 
 export type EnvironmentDependencies = Omit<

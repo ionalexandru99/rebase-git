@@ -20,7 +20,7 @@ import {
   createApplicationUpdater,
   updatesItself,
 } from "#desktop/features/application-updates/application-updater.ts";
-import { registerRepositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc.ts";
+import { registerRepositoryFilesystemIpc } from "#desktop/features/repository-filesystem-ipc.ts";
 import {
   applicationUpdaterIpc,
   desktopApplicationIpc,

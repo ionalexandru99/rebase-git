@@ -4,8 +4,7 @@ import {
   ObjectId,
   RefName,
   RemoteName,
-  RepositoryId,
-  RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 
 export const PushDestination = z.object({
@@ -21,8 +20,7 @@ export const PushMode = z.discriminatedUnion("_tag", [
 export type PushMode = z.infer<typeof PushMode>;
 
 export const PushBranch = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
+  ...WorktreeScope.shape,
   branch: RefName,
   destination: PushDestination,
   setUpstream: z.boolean(),
@@ -37,8 +35,7 @@ export const RemoteBranchUpdated = z.object({
 export type RemoteBranchUpdated = z.infer<typeof RemoteBranchUpdated>;
 
 export const PushTags = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
+  ...WorktreeScope.shape,
   remote: RemoteName,
   tags: z.array(RefName).min(1).max(100).readonly(),
 });

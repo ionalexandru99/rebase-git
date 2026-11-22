@@ -11,6 +11,7 @@ import {
   RemoteName,
   RepositoryId,
   RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 
 export const RepositoryHead = z.object({
@@ -120,9 +121,8 @@ export const RepositoryRefTarget = z.discriminatedUnion("_tag", [
 export type RepositoryRefTarget = z.infer<typeof RepositoryRefTarget>;
 
 export const CheckoutRepositoryRef = z.object({
-  repositoryId: RepositoryId,
+  ...WorktreeScope.shape,
   target: RepositoryRefTarget,
-  worktreePath: RepositoryPath,
 });
 export type CheckoutRepositoryRef = z.infer<typeof CheckoutRepositoryRef>;
 

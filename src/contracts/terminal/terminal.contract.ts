@@ -5,20 +5,11 @@ import {
   route,
   streamRoute,
 } from "#contracts/environment-connection/environment-route.contract.ts";
-import {
-  RepositoryId,
-  RepositoryPath,
-} from "#contracts/git/git-values.contract.ts";
+import { WorktreeScope } from "#contracts/git/git-values.contract.ts";
 
 export const terminalWriteLimit = 65_536;
 
 const TerminalId = z.uuidv4();
-
-const TerminalWorktree = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
-});
-export type TerminalWorktree = z.infer<typeof TerminalWorktree>;
 
 const TerminalSize = z.object({
   cols: z.int().min(2).max(1_000),
@@ -38,13 +29,13 @@ export const Terminals = z.object({
 export type Terminals = z.infer<typeof Terminals>;
 
 export const OpenTerminal = z.object({
-  ...TerminalWorktree.shape,
+  ...WorktreeScope.shape,
   ...TerminalSize.shape,
 });
 export type OpenTerminal = z.infer<typeof OpenTerminal>;
 
 export const CloseTerminal = z.object({
-  ...TerminalWorktree.shape,
+  ...WorktreeScope.shape,
   id: TerminalId,
 });
 export type CloseTerminal = z.infer<typeof CloseTerminal>;
@@ -90,7 +81,7 @@ export type TerminalUnavailable = z.infer<typeof TerminalUnavailable>;
 
 export const TerminalsApi = {
   list: repositoryQuery("terminals/list", {
-    request: TerminalWorktree,
+    request: WorktreeScope,
     success: Terminals,
   }),
   open: repositoryCommand("terminals/open", {

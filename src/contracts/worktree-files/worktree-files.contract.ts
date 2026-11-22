@@ -2,23 +2,18 @@ import { z } from "zod";
 import { repositoryQuery } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   ObjectId,
-  RepositoryId,
   RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 
 export const maximumFolderEntries = 20_000;
 export const maximumSearchResults = 200;
 export const maximumFileBytes = 1_048_576;
 
-const WorktreeScope = {
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
-};
-
 const RelativePath = z.string().max(4_096);
 
 export const ListWorktreeFolder = z.object({
-  ...WorktreeScope,
+  ...WorktreeScope.shape,
   folder: RelativePath,
 });
 export type ListWorktreeFolder = z.infer<typeof ListWorktreeFolder>;
@@ -37,7 +32,7 @@ export const WorktreeFolder = z.object({
 export type WorktreeFolder = z.infer<typeof WorktreeFolder>;
 
 export const ReadWorktreeFile = z.object({
-  ...WorktreeScope,
+  ...WorktreeScope.shape,
   path: RepositoryPath,
 });
 export type ReadWorktreeFile = z.infer<typeof ReadWorktreeFile>;
@@ -57,7 +52,7 @@ export const WorktreeFile = z.discriminatedUnion("_tag", [
 export type WorktreeFile = z.infer<typeof WorktreeFile>;
 
 export const SearchWorktree = z.object({
-  ...WorktreeScope,
+  ...WorktreeScope.shape,
   query: z.string().min(1).max(256),
 });
 export type SearchWorktree = z.infer<typeof SearchWorktree>;

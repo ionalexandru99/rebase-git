@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { WorktreeScope } from "#contracts/git/git-values.contract.ts";
 import {
   maximumFileBytes,
   type WorktreeFile,
@@ -37,10 +38,7 @@ import {
   TextMatches,
   useQueuedSearch,
 } from "#web/features/worktree-files/worktree-search.tsx";
-import {
-  type WorktreeScope,
-  WorktreeTree,
-} from "#web/features/worktree-files/worktree-tree.tsx";
+import { WorktreeTree } from "#web/features/worktree-files/worktree-tree.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
 

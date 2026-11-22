@@ -6,8 +6,8 @@ import {
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   ObjectId,
-  RepositoryId,
   RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 import {
   ChangeSection,
@@ -16,11 +16,6 @@ import {
 
 const maximumStashes = 1_000;
 const StashText = z.string().max(1_024);
-
-const StashScope = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
-});
 
 export const RepositoryStash = z.object({
   oid: ObjectId,
@@ -40,7 +35,7 @@ export const RepositoryStashes = z.object({
 export type RepositoryStashes = z.infer<typeof RepositoryStashes>;
 
 export const StashTarget = z.object({
-  ...StashScope.shape,
+  ...WorktreeScope.shape,
   oid: ObjectId,
 });
 export type StashTarget = z.infer<typeof StashTarget>;
@@ -70,7 +65,7 @@ export const StashApplied = z.object({ conflicts: z.int().nonnegative() });
 export type StashApplied = z.infer<typeof StashApplied>;
 
 export const SaveStash = z.object({
-  ...StashScope.shape,
+  ...WorktreeScope.shape,
   revision: z.string().max(128),
   into: ObjectId.nullable(),
   name: StashText.min(1).optional(),
@@ -90,7 +85,7 @@ export type StashRejected = z.infer<typeof StashRejected>;
 
 export const RepositoryStashesApi = {
   list: repositoryQuery("repositories/stashes/list", {
-    request: StashScope,
+    request: WorktreeScope,
     success: RepositoryStashes,
   }),
   contents: repositoryQuery("repositories/stashes/contents", {

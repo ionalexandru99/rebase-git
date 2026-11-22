@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
-import { errorMessage, isFileSystemError } from "#server/error-inspection.ts";
+import {
+  errorMessage,
+  isFileSystemError,
+  isMissingPath,
+} from "#server/error-inspection.ts";
 
 const RuntimeMarker = z.object({
   controlToken: z.string(),
@@ -56,7 +60,7 @@ async function removeRuntimeMarker(runtimePath: string, pid: number) {
   try {
     contents = await readFile(runtimePath, "utf8");
   } catch (error) {
-    if (isMissingFile(error)) return;
+    if (isMissingPath(error)) return;
     throw runtimeMarkerError(error);
   }
   const marker = await fileSystemOperation(
@@ -66,7 +70,7 @@ async function removeRuntimeMarker(runtimePath: string, pid: number) {
   try {
     await rm(runtimePath);
   } catch (error) {
-    if (!isMissingFile(error)) throw runtimeMarkerError(error);
+    if (!isMissingPath(error)) throw runtimeMarkerError(error);
   }
 }
 
@@ -93,10 +97,6 @@ function runtimeMarkerError(cause: unknown) {
     `Could not update the runtime marker: ${errorMessage(cause)}`,
     { cause },
   );
-}
-
-function isMissingFile(error: unknown) {
-  return isFileSystemError(error) && error.code === "ENOENT";
 }
 
 function isReplaceConflict(error: unknown) {

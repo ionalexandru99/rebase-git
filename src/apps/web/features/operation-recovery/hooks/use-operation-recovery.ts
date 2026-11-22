@@ -1,8 +1,8 @@
 import { useState } from "react";
+import type { WorktreeScope } from "#contracts/git/git-values.contract.ts";
 import type {
   OperationAction,
   OperationKind,
-  OperationScope,
   RepositoryOperation,
   RepositoryOperationsApi,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
@@ -49,7 +49,7 @@ export function showsOperationHeader(state: OperationRecoveryState) {
 }
 
 export function useOperationRecovery(
-  scope: OperationScope | undefined,
+  scope: WorktreeScope | undefined,
   options: { readonly polling?: boolean } = {},
 ) {
   const repository = useRepositoryScope();
@@ -124,7 +124,7 @@ export function useOperationRecovery(
 
 function lastExecution(
   action: Command<ExecuteRoute>,
-  scope: OperationScope | undefined,
+  scope: WorktreeScope | undefined,
 ) {
   const last = action.lastOk;
   return scope !== undefined && last?.value.kind === "idle"

@@ -6,8 +6,7 @@ import {
 import {
   ObjectId,
   RefName,
-  RepositoryId,
-  RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 import { RefMissing } from "#contracts/repository-refs/repository-refs.contract.ts";
 
@@ -23,8 +22,7 @@ export const isReflogRef = (value: unknown): value is ReflogRef =>
   ReflogRef.safeParse(value).success;
 
 export const ReadRepositoryReflog = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
+  ...WorktreeScope.shape,
   ref: ReflogRef,
 });
 export type ReadRepositoryReflog = z.infer<typeof ReadRepositoryReflog>;
@@ -72,8 +70,7 @@ export const ResetMode = z.enum(["soft", "mixed", "hard"]);
 export type ResetMode = z.infer<typeof ResetMode>;
 
 export const ResetToCommit = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
+  ...WorktreeScope.shape,
   target: ObjectId,
   mode: ResetMode,
   expectedHead: ObjectId,

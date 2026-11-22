@@ -7,3 +7,10 @@ export function isFileSystemError(
 export function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
+
+export function isMissingPath(error: unknown) {
+  return (
+    isFileSystemError(error) &&
+    (error.code === "ENOENT" || error.code === "ENOTDIR")
+  );
+}

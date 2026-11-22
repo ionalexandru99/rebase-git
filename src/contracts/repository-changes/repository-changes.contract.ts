@@ -4,8 +4,8 @@ import {
   repositoryQuery,
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
-  RepositoryId,
   RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 import { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 
@@ -13,8 +13,7 @@ const Revision = z.string().max(128);
 export const ChangeSection = z.enum(["unstaged", "staged"]);
 export type ChangeSection = z.infer<typeof ChangeSection>;
 export const ChangesScope = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
+  ...WorktreeScope.shape,
   amend: z.boolean(),
 });
 export type ChangesScope = z.infer<typeof ChangesScope>;
@@ -129,8 +128,7 @@ export function ignoreTracked(path: string, count: number): IgnoreTracked {
   return { _tag: "IgnoreTracked", path, count };
 }
 export const ReadIgnoreRule = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
+  ...WorktreeScope.shape,
   path: RepositoryPath,
   includeTracked: z.boolean(),
 });

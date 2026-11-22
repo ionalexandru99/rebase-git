@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { DesktopUpdateSettings } from "#contracts/desktop-updates/desktop-updates.contract.ts";
+import { isMissingPath } from "#server/error-inspection.ts";
 
 export interface ApplicationUpdateSettingsStore {
   read(): Promise<DesktopUpdateSettings>;
@@ -27,7 +28,7 @@ export function createApplicationUpdateSettingsStore(
           return defaultSettings;
         }
       } catch (error) {
-        if (isMissingFile(error)) return defaultSettings;
+        if (isMissingPath(error)) return defaultSettings;
         throw error;
       }
     },
@@ -49,12 +50,4 @@ async function writeAtomically(path: string, settings: DesktopUpdateSettings) {
     await rm(temporaryPath, { force: true });
     throw error;
   }
-}
-
-function isMissingFile(error: unknown): error is NodeJS.ErrnoException {
-  return (
-    error instanceof Error &&
-    "code" in error &&
-    (error as NodeJS.ErrnoException).code === "ENOENT"
-  );
 }

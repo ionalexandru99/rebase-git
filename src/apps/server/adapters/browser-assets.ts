@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { isAbsolute, relative, resolve } from "node:path";
 import { expectedRequestOrigin } from "#server/adapters/environment-transport/environment-request-authorization.ts";
+import { isFileSystemError, isMissingPath } from "#server/error-inspection.ts";
 
 const contentTypes: Readonly<Record<string, string>> = {
   ".css": "text/css; charset=utf-8",
@@ -105,9 +106,7 @@ function browserAssetHeaders(
 
 function isMissingAsset(error: unknown) {
   return (
-    error !== null &&
-    typeof error === "object" &&
-    "code" in error &&
-    (error.code === "ENOENT" || error.code === "EISDIR")
+    isMissingPath(error) ||
+    (isFileSystemError(error) && error.code === "EISDIR")
   );
 }

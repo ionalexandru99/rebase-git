@@ -3,22 +3,13 @@ import {
   repositoryCommand,
   repositoryQuery,
 } from "#contracts/environment-connection/environment-route.contract.ts";
-import {
-  RefName,
-  RepositoryId,
-  RepositoryPath,
-} from "#contracts/git/git-values.contract.ts";
+import { RefName, WorktreeScope } from "#contracts/git/git-values.contract.ts";
 
 export const SettledDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export type SettledDay = z.infer<typeof SettledDay>;
 
-const SettlingScope = {
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
-};
-
 export const SettleBranches = z.object({
-  ...SettlingScope,
+  ...WorktreeScope.shape,
   names: z.array(RefName).min(1).max(1_000).readonly(),
   settled: z.boolean(),
 });
@@ -38,11 +29,11 @@ export const BranchSettlingApi = {
     success: z.object({}),
   }),
   settings: repositoryQuery("repositories/branch-settings", {
-    request: z.object(SettlingScope),
+    request: WorktreeScope,
     success: BranchSettings,
   }),
   saveSettings: repositoryCommand("repositories/branch-settings/save", {
-    request: z.object({ ...SettlingScope, ...BranchSettings.shape }),
+    request: z.object({ ...WorktreeScope.shape, ...BranchSettings.shape }),
     success: BranchSettings,
   }),
 };

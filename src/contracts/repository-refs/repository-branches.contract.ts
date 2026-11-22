@@ -8,8 +8,7 @@ import {
   ObjectId,
   RefName,
   RemoteName,
-  RepositoryId,
-  RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 import {
   BranchCheckedOutElsewhere,
@@ -23,13 +22,8 @@ export const BranchUpstreamTarget = z.object({
 });
 export type BranchUpstreamTarget = z.infer<typeof BranchUpstreamTarget>;
 
-const BranchScope = {
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
-};
-
 export const CreateRepositoryBranch = z.object({
-  ...BranchScope,
+  ...WorktreeScope.shape,
   name: RefName,
   startPoint: ObjectId,
   track: BranchUpstreamTarget.optional(),
@@ -37,7 +31,7 @@ export const CreateRepositoryBranch = z.object({
 export type CreateRepositoryBranch = z.infer<typeof CreateRepositoryBranch>;
 
 export const RenameRepositoryBranch = z.object({
-  ...BranchScope,
+  ...WorktreeScope.shape,
   expectedTarget: ObjectId.optional(),
   name: RefName,
   newName: RefName,
@@ -58,14 +52,14 @@ export const BranchDeletion = z.object({
 export type BranchDeletion = z.infer<typeof BranchDeletion>;
 
 export const DeleteRepositoryBranches = z.object({
-  ...BranchScope,
+  ...WorktreeScope.shape,
   branches: z.array(BranchDeletion).min(1).max(1_000).readonly(),
   force: z.boolean(),
 });
 export type DeleteRepositoryBranches = z.infer<typeof DeleteRepositoryBranches>;
 
 export const ReadUnmergedBranches = z.object({
-  ...BranchScope,
+  ...WorktreeScope.shape,
   branches: DeleteRepositoryBranches.shape.branches,
 });
 export type ReadUnmergedBranches = z.infer<typeof ReadUnmergedBranches>;

@@ -1,14 +1,9 @@
 import { z } from "zod";
 import { repositoryQuery } from "#contracts/environment-connection/environment-route.contract.ts";
-import {
-  ObjectId,
-  RepositoryId,
-  RepositoryPath,
-} from "#contracts/git/git-values.contract.ts";
+import { ObjectId, WorktreeScope } from "#contracts/git/git-values.contract.ts";
 
 export const VerifySignature = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
+  ...WorktreeScope.shape,
   kind: z.enum(["commit", "tag"]),
   object: ObjectId,
 });

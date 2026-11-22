@@ -6,15 +6,10 @@ import {
 import {
   ObjectId,
   RefName,
-  RepositoryId,
   RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 
-export const OperationScope = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
-});
-export type OperationScope = z.infer<typeof OperationScope>;
 export const OperationAction = z.enum(["continue", "skip", "abort"]);
 export type OperationAction = z.infer<typeof OperationAction>;
 export const OperationKind = z.enum([
@@ -75,7 +70,7 @@ export const RepositoryOperation = z.object({
 });
 export type RepositoryOperation = z.infer<typeof RepositoryOperation>;
 export const ExecuteOperation = z.object({
-  ...OperationScope.shape,
+  ...WorktreeScope.shape,
   revision: z.string().regex(/^[a-f0-9]{64}$/),
   action: OperationAction,
 });
@@ -111,7 +106,7 @@ export const StartCherryPick = z.object({
 });
 export type StartCherryPick = z.infer<typeof StartCherryPick>;
 export const StartOperation = z.object({
-  ...OperationScope.shape,
+  ...WorktreeScope.shape,
   expectedHead: ObjectId,
   operation: z.discriminatedUnion("_tag", [
     StartMerge,
@@ -151,7 +146,7 @@ export const OperationFailure = z.object({
 export type OperationFailure = z.infer<typeof OperationFailure>;
 export const RepositoryOperationsApi = {
   read: repositoryQuery("repositories/operations/read", {
-    request: OperationScope,
+    request: WorktreeScope,
     success: RepositoryOperation,
   }),
   execute: repositoryCommand("repositories/operations/execute", {

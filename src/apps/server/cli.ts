@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { environmentProtocol } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import { productVersion } from "#server/app/runtime/product-version.ts";
 import { resolveHostAddress } from "#server/app/server/host-address.ts";
-import { startEnvironmentServer } from "#server/app/server/start-environment-server.ts";
+import { startEnvironmentServer } from "#server/app/server/serve-environment.ts";
 import {
   browserOrigin,
   findRunningServer,

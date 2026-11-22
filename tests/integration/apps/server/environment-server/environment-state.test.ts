@@ -69,7 +69,7 @@ describe("Environment state", () => {
       const environment = await readCurrentEnvironment(context);
       return {
         automaticPort: environment.automaticPort,
-        databaseSettings: readDatabaseSettings(context),
+        databaseSettings: await readDatabaseSettings(context),
         environmentId: environment.id,
       };
     });
@@ -79,7 +79,7 @@ describe("Environment state", () => {
       const environment = await readCurrentEnvironment(context);
       return {
         automaticPort: environment.automaticPort,
-        databaseSettings: readDatabaseSettings(context),
+        databaseSettings: await readDatabaseSettings(context),
         environmentId: environment.id,
       };
     });
@@ -370,11 +370,11 @@ function saveAutomaticPort(context: EnvironmentContext) {
 }
 
 function readDatabaseSettings(context: EnvironmentContext) {
-  return {
-    busyTimeout: context.database.get(sql`PRAGMA busy_timeout`),
-    foreignKeys: context.database.get(sql`PRAGMA foreign_keys`),
-    journalMode: context.database.get(sql`PRAGMA journal_mode`),
-  };
+  return context.read("Could not read the database settings", (database) => ({
+    busyTimeout: database.get(sql`PRAGMA busy_timeout`),
+    foreignKeys: database.get(sql`PRAGMA foreign_keys`),
+    journalMode: database.get(sql`PRAGMA journal_mode`),
+  }));
 }
 
 function readAutomaticPort(paths: ReturnType<typeof environmentPaths>) {

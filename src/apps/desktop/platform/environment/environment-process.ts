@@ -3,7 +3,7 @@ import type {
   EnvironmentProcessCommand,
   EnvironmentProcessMessage,
 } from "#desktop/platform/environment/environment-supervisor.ts";
-import { startEnvironmentServer } from "#server/app/server/start-environment-server.ts";
+import { startEnvironmentServer } from "#server/app/server/serve-environment.ts";
 
 async function serveUntilStopped() {
   const stop = Promise.withResolvers<void>();

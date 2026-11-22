@@ -6,7 +6,7 @@ import {
 import {
   RefName,
   RepositoryId,
-  RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 import type { GitHostKind } from "#contracts/source-control/source-control.contract.ts";
 
@@ -42,8 +42,7 @@ export const PullRequestsUnavailable = z.object({
 export type PullRequestsUnavailable = z.infer<typeof PullRequestsUnavailable>;
 
 export const LinkPullRequest = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
+  ...WorktreeScope.shape,
   branch: RefName,
   number: PullRequestNumber,
   linked: z.boolean(),

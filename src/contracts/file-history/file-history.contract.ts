@@ -2,8 +2,8 @@ import { z } from "zod";
 import { repositoryQuery } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   ObjectId,
-  RepositoryId,
   RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 import {
   ChangedLines,
@@ -14,8 +14,7 @@ export const fileHistoryPage = 100;
 export const maximumFileHistory = 5_000;
 
 export const ReadFileHistory = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
+  ...WorktreeScope.shape,
   path: RepositoryPath,
   limit: z.int().min(1).max(maximumFileHistory),
 });

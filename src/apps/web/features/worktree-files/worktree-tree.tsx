@@ -1,6 +1,7 @@
 import type { FileTreeBatchOperation, GitStatusEntry } from "@pierre/trees";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import { useEffect, useRef, useState } from "react";
+import type { WorktreeScope } from "#contracts/git/git-values.contract.ts";
 import type { RepositoryChanges } from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
   WorktreeFilesApi,
@@ -24,11 +25,6 @@ import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useShowChangeAction } from "#web/features/working-changes/show-change.ts";
 import { useEnvironmentQueries } from "#web/platform/query/environment-query.ts";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
-
-export interface WorktreeScope {
-  readonly repositoryId: string;
-  readonly worktreePath: string;
-}
 
 const treeCSS = `
   :host {
