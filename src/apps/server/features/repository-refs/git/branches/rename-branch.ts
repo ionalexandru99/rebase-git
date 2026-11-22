@@ -1,5 +1,3 @@
-import { Effect } from "effect";
-import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   RenameRepositoryBranch,
   RepositoryBranchesOperationFailure,
@@ -8,7 +6,7 @@ import type {
 import type { RepositoryWorktree } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   type GitCommandRunner,
-  type GitFailed,
+  isGitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures.ts";
@@ -21,57 +19,53 @@ import {
 import { refCommand } from "#server/features/repository-refs/git/ref-git.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
-export function renameBranch(
+export async function renameBranch(
   git: GitCommandRunner,
   access: RepositoryAccess,
   command: RenameRepositoryBranch,
-): Effect.Effect<
-  RepositoryBranchRenamed,
-  RepositoryBranchesOperationFailure | RepositoryRejected | GitFailed
-> {
+): Promise<RepositoryBranchRenamed> {
   const { name, newName, worktreePath } = command;
-  return Effect.gen(function* () {
-    yield* requireValidBranchName(git, worktreePath, newName);
-    const before = yield* access.worktrees(worktreePath);
-    yield* rejectHeldElsewhere(before, name, worktreePath);
-    yield* requireRenameSource(git, command, before);
-    yield* runRepositoryGit(
+  await requireValidBranchName(git, worktreePath, newName);
+  const before = await access.worktrees(worktreePath);
+  rejectHeldElsewhere(before, name, worktreePath);
+  await requireRenameSource(git, command, before);
+  try {
+    await runRepositoryGit(
       git,
       worktreePath,
       ["branch", "-m", name, newName],
       refCommand,
-    ).pipe(Effect.mapError((error) => branchWriteFailed(error, newName)));
-    const after = yield* access.worktrees(worktreePath);
-    const branch = yield* readLocalBranch(git, worktreePath, after, newName);
-    return { branch, previousName: name };
-  });
+    );
+  } catch (error) {
+    throw isGitFailed(error) ? branchWriteFailed(error, newName) : error;
+  }
+  const after = await access.worktrees(worktreePath);
+  const branch = await readLocalBranch(git, worktreePath, after, newName);
+  return { branch, previousName: name };
 }
 
-function requireRenameSource(
+async function requireRenameSource(
   git: GitCommandRunner,
   { expectedTarget, name, worktreePath }: RenameRepositoryBranch,
   worktrees: readonly RepositoryWorktree[],
 ) {
-  return readBranchTarget(git, worktreePath, name).pipe(
-    Effect.flatMap((target) => {
-      if (target !== undefined)
-        return target === expectedTarget
-          ? Effect.void
-          : Effect.fail<RepositoryBranchesOperationFailure>({
-              _tag: "BranchMoved",
-              name,
-            });
-      const unbornHere =
-        expectedTarget === undefined &&
-        worktreeHolding(worktrees, name)?.path === worktreePath;
-      return unbornHere
-        ? Effect.void
-        : Effect.fail<RepositoryBranchesOperationFailure>({
-            _tag: "RefMissing",
-            name,
-          });
-    }),
-  );
+  const target = await readBranchTarget(git, worktreePath, name);
+  if (target !== undefined) {
+    if (target !== expectedTarget)
+      throw {
+        _tag: "BranchMoved",
+        name,
+      } satisfies RepositoryBranchesOperationFailure;
+    return;
+  }
+  const unbornHere =
+    expectedTarget === undefined &&
+    worktreeHolding(worktrees, name)?.path === worktreePath;
+  if (!unbornHere)
+    throw {
+      _tag: "RefMissing",
+      name,
+    } satisfies RepositoryBranchesOperationFailure;
 }
 
 function rejectHeldElsewhere(
@@ -80,11 +74,10 @@ function rejectHeldElsewhere(
   worktreePath: string,
 ) {
   const holder = worktreeHolding(worktrees, name);
-  return holder === undefined || holder.path === worktreePath
-    ? Effect.void
-    : Effect.fail<RepositoryBranchesOperationFailure>({
-        _tag: "BranchCheckedOutElsewhere",
-        name,
-        worktreePath: holder.path,
-      });
+  if (holder !== undefined && holder.path !== worktreePath)
+    throw {
+      _tag: "BranchCheckedOutElsewhere",
+      name,
+      worktreePath: holder.path,
+    } satisfies RepositoryBranchesOperationFailure;
 }

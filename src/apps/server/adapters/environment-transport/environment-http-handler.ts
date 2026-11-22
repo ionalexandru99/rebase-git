@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { type Cause, Data, Effect } from "effect";
 import {
   type EnvironmentAccessFailure,
   EnvironmentBrowserSession,
@@ -15,120 +14,88 @@ import {
   validateRequestOrigin,
   writeBrowserSessionCookie,
 } from "#server/adapters/environment-transport/environment-request-authorization.ts";
-import type {
-  EnvironmentAuthorization,
-  EnvironmentAuthorizationError,
+import {
+  type EnvironmentAuthorization,
+  isEnvironmentAuthorizationError,
 } from "#server/features/environment-authorization/environment-authorization.ts";
-import type { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
 
-export type RunEnvironmentEffect = (
-  effect: Effect.Effect<void, never, never>,
-  signal?: AbortSignal,
-) => void;
-
-class EnvironmentRequestRejected extends Data.TaggedError(
-  "EnvironmentRequestRejected",
-)<{ readonly failure: EnvironmentAccessFailure }> {}
-
-type EnvironmentHttpError =
-  | EnvironmentAuthorizationError
-  | EnvironmentRequestRejected
-  | EnvironmentStorageError;
+interface EnvironmentRequestRejected {
+  readonly _tag: "EnvironmentRequestRejected";
+  readonly failure: EnvironmentAccessFailure;
+}
 
 const maximumRequestBytes = 65_536;
 const strictExchange = ExchangeEnvironmentPairing.strict();
 
 export function createEnvironmentHttpHandler(
   authorization: EnvironmentAuthorization,
-  runEnvironmentEffect: RunEnvironmentEffect,
   browserAssetsRoot?: string,
-  reportDefect?: (where: string, cause: Cause.Cause<unknown>) => void,
+  reportDefect?: (where: string, error: unknown) => void,
 ) {
   return (request: IncomingMessage, response: ServerResponse) => {
-    const abortController = new AbortController();
-    const abort = () => abortController.abort();
-    response.once("close", abort);
-    runEnvironmentEffect(
-      respondToEnvironmentRequest(
-        request,
-        response,
-        authorization,
-        browserAssetsRoot,
-      ).pipe(
-        Effect.catch((error) =>
-          Effect.sync(() => writeEnvironmentHttpError(response, error)),
-        ),
-        Effect.catchCause((cause) =>
-          Effect.sync(() => {
-            reportDefect?.("HTTP", cause);
-            if (!response.headersSent) response.writeHead(500).end();
-          }),
-        ),
-        Effect.ensuring(Effect.sync(() => response.off("close", abort))),
-      ),
-      abortController.signal,
-    );
+    respondToEnvironmentRequest(
+      request,
+      response,
+      authorization,
+      browserAssetsRoot,
+    ).catch((error: unknown) => {
+      const failure = accessFailure(error);
+      if (failure !== undefined) {
+        writeAccessFailure(response, failure);
+        return;
+      }
+      reportDefect?.("HTTP", error);
+      if (!response.headersSent) response.writeHead(500).end();
+    });
   };
 }
 
-function respondToEnvironmentRequest(
+async function respondToEnvironmentRequest(
   request: IncomingMessage,
   response: ServerResponse,
   authorization: EnvironmentAuthorization,
   browserAssetsRoot?: string,
-): Effect.Effect<void, EnvironmentHttpError> {
-  return Effect.gen(function* () {
-    yield* validateRequestHost(request);
-    if (
-      browserAssetsRoot !== undefined &&
-      (yield* respondWithBrowserAsset(request, response, browserAssetsRoot))
-    )
-      return;
-    const browserSession = request.url === environmentBrowserSessionPath;
-    if (!browserSession && request.url !== environmentPairingExchangePath) {
-      response.writeHead(404).end();
-      return;
-    }
-    if (request.method !== "POST") {
-      response.writeHead(405, { allow: "POST" }).end();
-      return;
-    }
-    yield* validateRequestOrigin(request, browserSession);
-    const exchange = yield* readPairingExchange(request);
-    const paired = yield* authorization.exchangePairing(exchange);
-    if (!browserSession) {
-      writeJson(response, 200, EnvironmentPairingExchanged.parse(paired));
-      return;
-    }
-    writeBrowserSessionCookie(request, response, paired.credential);
-    writeJson(
-      response,
-      200,
-      EnvironmentBrowserSession.parse({
-        authorization: paired.authorization,
-      }),
-    );
-  });
+) {
+  validateRequestHost(request);
+  if (
+    browserAssetsRoot !== undefined &&
+    (await respondWithBrowserAsset(request, response, browserAssetsRoot))
+  )
+    return;
+  const browserSession = request.url === environmentBrowserSessionPath;
+  if (!browserSession && request.url !== environmentPairingExchangePath) {
+    response.writeHead(404).end();
+    return;
+  }
+  if (request.method !== "POST") {
+    response.writeHead(405, { allow: "POST" }).end();
+    return;
+  }
+  validateRequestOrigin(request, browserSession);
+  const exchange = parsePairingExchange(await readRequestBody(request));
+  const paired = await authorization.exchangePairing(exchange);
+  if (!browserSession) {
+    writeJson(response, 200, EnvironmentPairingExchanged.parse(paired));
+    return;
+  }
+  writeBrowserSessionCookie(request, response, paired.credential);
+  writeJson(
+    response,
+    200,
+    EnvironmentBrowserSession.parse({
+      authorization: paired.authorization,
+    }),
+  );
 }
 
-function readPairingExchange(request: IncomingMessage) {
-  return Effect.callback<Buffer, EnvironmentRequestRejected>((resume) => {
+function readRequestBody(request: IncomingMessage) {
+  return new Promise<Buffer>((resolve, reject) => {
     const chunks: Buffer[] = [];
     let receivedBytes = 0;
-    const finish = (
-      result: Effect.Effect<Buffer, EnvironmentRequestRejected>,
-    ) => {
-      detach();
-      resume(result);
-    };
     const tooLarge = () => {
-      finish(
-        Effect.fail(
-          rejected({
-            _tag: "PayloadTooLarge",
-            limitBytes: maximumRequestBytes,
-          }),
-        ),
+      detach();
+      reject(
+        rejected({ _tag: "PayloadTooLarge", limitBytes: maximumRequestBytes }),
       );
       request.resume();
     };
@@ -137,9 +104,14 @@ function readPairingExchange(request: IncomingMessage) {
       if (receivedBytes > maximumRequestBytes) tooLarge();
       else chunks.push(chunk);
     };
-    const end = () => finish(Effect.succeed(Buffer.concat(chunks)));
-    const failed = () =>
-      finish(Effect.fail(rejected({ _tag: "InvalidMessage" })));
+    const end = () => {
+      detach();
+      resolve(Buffer.concat(chunks));
+    };
+    const failed = () => {
+      detach();
+      reject(rejected({ _tag: "InvalidMessage" }));
+    };
     const detach = () => {
       request.off("data", receive);
       request.off("end", end);
@@ -152,15 +124,15 @@ function readPairingExchange(request: IncomingMessage) {
     request.on("data", receive);
     request.on("end", end);
     request.on("error", failed);
-    return Effect.sync(detach);
-  }).pipe(
-    Effect.flatMap((body) =>
-      Effect.try({
-        try: () => strictExchange.parse(JSON.parse(body.toString("utf8"))),
-        catch: () => rejected({ _tag: "InvalidMessage" }),
-      }),
-    ),
-  );
+  });
+}
+
+function parsePairingExchange(body: Buffer) {
+  try {
+    return strictExchange.parse(JSON.parse(body.toString("utf8")));
+  } catch {
+    throw rejected({ _tag: "InvalidMessage" });
+  }
 }
 
 function writeJson(response: ServerResponse, status: number, value: unknown) {
@@ -171,18 +143,32 @@ function writeJson(response: ServerResponse, status: number, value: unknown) {
   response.end(JSON.stringify(value));
 }
 
-function writeEnvironmentHttpError(
+function writeAccessFailure(
   response: ServerResponse,
-  error: EnvironmentHttpError,
+  failure: EnvironmentAccessFailure,
 ) {
   if (response.writableEnded) return;
-  if (error._tag === "EnvironmentStorageError") {
-    response.writeHead(500).end();
-    return;
-  }
-  writeJson(response, accessFailureStatus(error.failure), error.failure);
+  writeJson(response, accessFailureStatus(failure), failure);
 }
 
-function rejected(failure: EnvironmentAccessFailure) {
-  return new EnvironmentRequestRejected({ failure });
+function accessFailure(error: unknown) {
+  if (isEnvironmentAuthorizationError(error)) return error.failure;
+  return isRequestRejected(error) ? error.failure : undefined;
+}
+
+function isRequestRejected(
+  error: unknown,
+): error is EnvironmentRequestRejected {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    error._tag === "EnvironmentRequestRejected"
+  );
+}
+
+function rejected(
+  failure: EnvironmentAccessFailure,
+): EnvironmentRequestRejected {
+  return { _tag: "EnvironmentRequestRejected", failure };
 }

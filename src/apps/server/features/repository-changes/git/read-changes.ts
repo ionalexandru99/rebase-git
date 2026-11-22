@@ -1,5 +1,4 @@
 import { stat } from "node:fs/promises";
-import { Effect } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   type ChangedFile,
@@ -24,143 +23,122 @@ import {
 import { fingerprint } from "#server/repository/comparison/fingerprint.ts";
 import { lineCounts } from "#server/repository/comparison/line-counts.ts";
 
-export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
-  return Effect.gen(function* () {
-    const directory = scope.worktreePath;
-    const { head, indexPath } = yield* readHeadAndIndexPath(git, directory);
-    const base = yield* comparisonBase(git, directory, head, scope.amend);
-    const [status, stagedDiff, index, message] = yield* Effect.all(
-      [
-        runRepositoryGit(git, directory, [
-          "status",
-          "--porcelain=v1",
+export async function readChanges(git: GitCommandRunner, scope: ChangesScope) {
+  const directory = scope.worktreePath;
+  const { head, indexPath } = await readHeadAndIndexPath(git, directory);
+  const base = await comparisonBase(git, directory, head, scope.amend);
+  const [status, stagedDiff, index, message] = await Promise.all([
+    runRepositoryGit(git, directory, [
+      "status",
+      "--porcelain=v1",
+      "--no-renames",
+      "-z",
+      "--untracked-files=all",
+    ]),
+    runRepositoryGitOutput(git, directory, [
+      "diff",
+      "--cached",
+      "--find-renames",
+      `-l${renameLimit}`,
+      "--raw",
+      "--numstat",
+      "-z",
+      base,
+    ]),
+    indexIdentity(indexPath),
+    head === null
+      ? ""
+      : runRepositoryGit(git, directory, ["log", "-1", "--format=%B", head]),
+  ]);
+  const records = status
+    .split("\0")
+    .filter((record) => record.length > 0)
+    .map((record) => ({ xy: record.slice(0, 2), path: record.slice(3) }))
+    .filter(({ xy }) => xy[1] !== " " || conflicted(xy));
+  const untracked = records.flatMap(({ xy, path }) =>
+    xy === "??" ? [path] : [],
+  );
+  const [unstagedLines, untrackedLines] = await Promise.all([
+    records.some(({ xy }) => xy !== "??")
+      ? runRepositoryGit(git, directory, [
+          "diff",
+          "--numstat",
           "--no-renames",
           "-z",
-          "--untracked-files=all",
-        ]),
-        runRepositoryGitOutput(git, directory, [
-          "diff",
-          "--cached",
-          "--find-renames",
-          `-l${renameLimit}`,
-          "--raw",
-          "--numstat",
-          "-z",
-          base,
-        ]),
-        indexIdentity(indexPath),
-        head === null
-          ? Effect.succeed("")
-          : runRepositoryGit(git, directory, [
-              "log",
-              "-1",
-              "--format=%B",
-              head,
-            ]),
-      ],
-      { concurrency: 4 },
-    );
-    const records = status
-      .split("\0")
-      .filter((record) => record.length > 0)
-      .map((record) => ({ xy: record.slice(0, 2), path: record.slice(3) }))
-      .filter(({ xy }) => xy[1] !== " " || conflicted(xy));
-    const untracked = records.flatMap(({ xy, path }) =>
-      xy === "??" ? [path] : [],
-    );
-    const [unstagedLines, untrackedLines] = yield* Effect.all(
-      [
-        records.some(({ xy }) => xy !== "??")
-          ? runRepositoryGit(git, directory, [
-              "diff",
-              "--numstat",
-              "--no-renames",
-              "-z",
-            ])
-          : Effect.succeed(""),
-        worktreeLineCounts(
-          directory,
-          untracked.slice(0, countedUntrackedLimit),
-        ),
-      ],
-      { concurrency: 2 },
-    );
-    const counted = new Map([
-      ...lineCounts(unstagedLines),
-      ...untracked.map(
-        (path, index) => [path, untrackedLines[index] ?? null] as const,
+        ])
+      : "",
+    worktreeLineCounts(directory, untracked.slice(0, countedUntrackedLimit)),
+  ]);
+  const counted = new Map([
+    ...lineCounts(unstagedLines),
+    ...untracked.map(
+      (path, index) => [path, untrackedLines[index] ?? null] as const,
+    ),
+  ]);
+  const unstaged = records.map(
+    ({ xy, path }): Omit<ChangedFile, "lfs"> =>
+      conflicted(xy)
+        ? { path, previousPath: null, status: "U", lines: null }
+        : {
+            path,
+            previousPath: null,
+            status: fileStatus(xy[1]),
+            lines: counted.get(path) ?? null,
+          },
+  );
+  const staged = stagedFiles(stagedDiff.stdout);
+  const paths = [
+    ...new Set(
+      [...unstaged, ...staged].flatMap((file) =>
+        file.previousPath === null
+          ? [file.path]
+          : [file.path, file.previousPath],
       ),
-    ]);
-    const unstaged = records.map(
-      ({ xy, path }): Omit<ChangedFile, "lfs"> =>
-        conflicted(xy)
-          ? { path, previousPath: null, status: "U", lines: null }
-          : {
-              path,
-              previousPath: null,
-              status: fileStatus(xy[1]),
-              lines: counted.get(path) ?? null,
-            },
-    );
-    const staged = stagedFiles(stagedDiff.stdout);
-    const paths = [
-      ...new Set(
-        [...unstaged, ...staged].flatMap((file) =>
-          file.previousPath === null
-            ? [file.path]
-            : [file.path, file.previousPath],
-        ),
+    ),
+  ];
+  const [identities, large] = await Promise.all([
+    worktreeIdentities(directory, paths),
+    largeFilePaths(git, directory, paths),
+  ]);
+  return {
+    snapshot: {
+      head,
+      message: message.trimEnd(),
+      revision: fingerprint(head ?? "", index, status, base, ...identities),
+      unstaged: unstaged.map((file) => markLargeFile(file, large)),
+      staged: staged.map((file) => markLargeFile(file, large)),
+      renamesLimited: stagedDiff.stderr.includes(
+        "rename detection was skipped",
       ),
-    ];
-    const [identities, large] = yield* Effect.all(
-      [
-        worktreeIdentities(directory, paths),
-        largeFilePaths(git, directory, paths),
-      ],
-      { concurrency: 2 },
-    );
-    return {
-      snapshot: {
-        head,
-        message: message.trimEnd(),
-        revision: fingerprint(head ?? "", index, status, base, ...identities),
-        unstaged: unstaged.map((file) => markLargeFile(file, large)),
-        staged: staged.map((file) => markLargeFile(file, large)),
-        renamesLimited: stagedDiff.stderr.includes(
-          "rename detection was skipped",
-        ),
-      } satisfies RepositoryChanges,
-      base,
-      files: { paths, identities },
-    };
-  });
+    } satisfies RepositoryChanges,
+    base,
+    files: { paths, identities },
+  };
 }
 
-export function readComparisonBase(git: GitCommandRunner, scope: ChangesScope) {
-  return Effect.gen(function* () {
-    const directory = scope.worktreePath;
-    const head = (yield* runRepositoryGit(
+export async function readComparisonBase(
+  git: GitCommandRunner,
+  scope: ChangesScope,
+) {
+  const directory = scope.worktreePath;
+  const head = (
+    await runRepositoryGit(
       git,
       directory,
       ["rev-parse", "--verify", "--quiet", "HEAD"],
       { exitCodes: [0, 1] },
-    )).trim();
-    return yield* comparisonBase(
-      git,
-      directory,
-      head === "" ? null : head,
-      scope.amend,
-    );
-  });
+    )
+  ).trim();
+  return comparisonBase(git, directory, head === "" ? null : head, scope.amend);
 }
 
-export function readStagedPreviousPath(
+export async function readStagedPreviousPath(
   git: GitCommandRunner,
   directory: string,
   base: string,
   path: string,
 ) {
-  return runRepositoryGit(git, directory, [
+  const output = await runRepositoryGit(git, directory, [
     "diff",
     "--cached",
     "--find-renames",
@@ -168,17 +146,14 @@ export function readStagedPreviousPath(
     "--raw",
     "-z",
     base,
-  ]).pipe(
-    Effect.map(
-      (output) =>
-        stagedFiles(output).find((file) => file.path === path)?.previousPath ??
-        null,
-    ),
+  ]);
+  return (
+    stagedFiles(output).find((file) => file.path === path)?.previousPath ?? null
   );
 }
 
-function readHeadAndIndexPath(git: GitCommandRunner, directory: string) {
-  return runRepositoryGit(
+async function readHeadAndIndexPath(git: GitCommandRunner, directory: string) {
+  const output = await runRepositoryGit(
     git,
     directory,
     [
@@ -191,14 +166,10 @@ function readHeadAndIndexPath(git: GitCommandRunner, directory: string) {
       "HEAD",
     ],
     { exitCodes: [0, 1] },
-  ).pipe(
-    Effect.flatMap((output) => {
-      const [indexPath, head] = output.split("\n");
-      return indexPath
-        ? Effect.succeed({ indexPath, head: head?.trim() || null })
-        : Effect.fail(repositoryRejected("GitFailed", "Could not read HEAD."));
-    }),
   );
+  const [indexPath, head] = output.split("\n");
+  if (!indexPath) throw repositoryRejected("GitFailed", "Could not read HEAD.");
+  return { indexPath, head: head?.trim() || null };
 }
 
 function indexIdentity(indexPath: string) {
@@ -213,37 +184,37 @@ function indexIdentity(indexPath: string) {
   });
 }
 
-function comparisonBase(
+async function comparisonBase(
   git: GitCommandRunner,
   directory: string,
   head: string | null,
   amend: boolean,
 ) {
-  return Effect.gen(function* () {
-    if (amend && head === null)
-      return yield* Effect.fail(
-        changesFailed("Unsupported", "There is no commit to amend."),
-      );
-    if (head !== null && !amend) return head;
-    if (head !== null) {
-      const parents = (yield* runRepositoryGit(git, directory, [
+  if (amend && head === null)
+    throw changesFailed("Unsupported", "There is no commit to amend.");
+  if (head !== null && !amend) return head;
+  if (head !== null) {
+    const parents = (
+      await runRepositoryGit(git, directory, [
         "rev-list",
         "--parents",
         "-n",
         "1",
         head,
-      ]))
-        .trim()
-        .split(" ");
-      if (parents[1]) return parents[1];
-    }
-    return (yield* runRepositoryGit(
+      ])
+    )
+      .trim()
+      .split(" ");
+    if (parents[1]) return parents[1];
+  }
+  return (
+    await runRepositoryGit(
       git,
       directory,
       ["hash-object", "-w", "-t", "tree", "--stdin"],
       { input: "" },
-    )).trim();
-  });
+    )
+  ).trim();
 }
 const renameLimit = 1000;
 const countedUntrackedLimit = 1000;

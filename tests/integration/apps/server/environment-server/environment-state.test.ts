@@ -5,7 +5,6 @@ import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { type MigrationMeta, readMigrationFiles } from "drizzle-orm/migrator";
-import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   acquireEnvironmentContext,
@@ -66,34 +65,24 @@ describe("Environment state", () => {
   it("creates restricted, separated storage and keeps identity and secrets stable", async () => {
     const paths = await createTemporaryPaths();
 
-    const first = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const context = yield* acquireEnvironmentContext(paths);
-          const environment = yield* readCurrentEnvironment(context);
-          return {
-            automaticPort: environment.automaticPort,
-            databaseSettings: readDatabaseSettings(context),
-            environmentId: environment.id,
-          };
-        }),
-      ),
-    );
+    const first = await withContext(paths, async (context) => {
+      const environment = await readCurrentEnvironment(context);
+      return {
+        automaticPort: environment.automaticPort,
+        databaseSettings: readDatabaseSettings(context),
+        environmentId: environment.id,
+      };
+    });
     const firstSecret = await readFile(paths.serverSecret, "utf8");
 
-    const second = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const context = yield* acquireEnvironmentContext(paths);
-          const environment = yield* readCurrentEnvironment(context);
-          return {
-            automaticPort: environment.automaticPort,
-            databaseSettings: readDatabaseSettings(context),
-            environmentId: environment.id,
-          };
-        }),
-      ),
-    );
+    const second = await withContext(paths, async (context) => {
+      const environment = await readCurrentEnvironment(context);
+      return {
+        automaticPort: environment.automaticPort,
+        databaseSettings: readDatabaseSettings(context),
+        environmentId: environment.id,
+      };
+    });
 
     expect(first.environmentId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
@@ -214,41 +203,34 @@ describe("Environment state", () => {
     const environmentId = randomUUID();
     await seedLegacyDatabase(paths, environmentId, version);
 
-    const state = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const context = yield* acquireEnvironmentContext(paths);
-          const environment = yield* readCurrentEnvironment(context);
-          return {
-            automaticPort: environment.automaticPort,
-            authorizations: yield* context.read(
-              "Could not read authorization metadata",
-              (database) =>
-                database
-                  .select()
-                  .from(authorizationMetadataTable)
-                  .where(isNull(authorizationMetadataTable.revokedAt))
-                  .orderBy(authorizationMetadataTable.createdAt),
-            ),
-            environmentId: environment.id,
-            repositories: yield* context.read(
-              "Could not read repositories",
-              (database) =>
-                database
-                  .select({
-                    color: repositoryCatalogTable.color,
-                    id: repositoryCatalogTable.id,
-                    logicalRepositoryId:
-                      repositoryCatalogTable.logicalRepositoryId,
-                    gitCommonDirectory:
-                      repositoryCatalogTable.gitCommonDirectory,
-                  })
-                  .from(repositoryCatalogTable),
-            ),
-          };
-        }),
-      ),
-    );
+    const state = await withContext(paths, async (context) => {
+      const environment = await readCurrentEnvironment(context);
+      return {
+        automaticPort: environment.automaticPort,
+        authorizations: await context.read(
+          "Could not read authorization metadata",
+          (database) =>
+            database
+              .select()
+              .from(authorizationMetadataTable)
+              .where(isNull(authorizationMetadataTable.revokedAt))
+              .orderBy(authorizationMetadataTable.createdAt),
+        ),
+        environmentId: environment.id,
+        repositories: await context.read(
+          "Could not read repositories",
+          (database) =>
+            database
+              .select({
+                color: repositoryCatalogTable.color,
+                id: repositoryCatalogTable.id,
+                logicalRepositoryId: repositoryCatalogTable.logicalRepositoryId,
+                gitCommonDirectory: repositoryCatalogTable.gitCommonDirectory,
+              })
+              .from(repositoryCatalogTable),
+        ),
+      };
+    });
 
     expect(state).toEqual({
       automaticPort: 43123,
@@ -346,36 +328,27 @@ describe("Environment state", () => {
 
   it("serializes concurrent read-modify-write operations", async () => {
     const paths = await createTemporaryPaths();
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const context = yield* acquireEnvironmentContext(paths);
-          yield* saveAutomaticPort(context);
-          yield* Effect.all(
-            Array.from({ length: 5 }, () =>
-              context.write(
-                "Could not increment the port",
-                async (database) => {
-                  const environment = await database
-                    .select()
-                    .from(environmentTable)
-                    .where(eq(environmentTable.singleton, 1))
-                    .get();
-                  if (environment?.automaticPort == null) {
-                    throw new Error("Expected the saved port.");
-                  }
-                  await database
-                    .update(environmentTable)
-                    .set({ automaticPort: environment.automaticPort + 1 })
-                    .where(eq(environmentTable.singleton, 1));
-                },
-              ),
-            ),
-            { concurrency: "unbounded" },
-          );
-        }),
-      ),
-    );
+    await withContext(paths, async (context) => {
+      await saveAutomaticPort(context);
+      await Promise.all(
+        Array.from({ length: 5 }, () =>
+          context.write("Could not increment the port", async (database) => {
+            const environment = await database
+              .select()
+              .from(environmentTable)
+              .where(eq(environmentTable.singleton, 1))
+              .get();
+            if (environment?.automaticPort == null) {
+              throw new Error("Expected the saved port.");
+            }
+            await database
+              .update(environmentTable)
+              .set({ automaticPort: environment.automaticPort + 1 })
+              .where(eq(environmentTable.singleton, 1));
+          }),
+        ),
+      );
+    });
 
     const reopenedPort = await readAutomaticPort(paths);
     expect(reopenedPort).toBe(40128);
@@ -405,15 +378,10 @@ function readDatabaseSettings(context: EnvironmentContext) {
 }
 
 function readAutomaticPort(paths: ReturnType<typeof environmentPaths>) {
-  return Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const context = yield* acquireEnvironmentContext(paths);
-        const environment = yield* readCurrentEnvironment(context);
-        return environment.automaticPort;
-      }),
-    ),
-  );
+  return withContext(paths, async (context) => {
+    const environment = await readCurrentEnvironment(context);
+    return environment.automaticPort;
+  });
 }
 
 async function createTemporaryPaths() {
@@ -544,10 +512,20 @@ function generatedMigrationEntry(
   };
 }
 
-function openState(paths: ReturnType<typeof environmentPaths>) {
-  return Effect.runPromise(
-    Effect.scoped(acquireEnvironmentContext(paths).pipe(Effect.asVoid)),
-  );
+async function openState(paths: ReturnType<typeof environmentPaths>) {
+  await withContext(paths, async () => undefined);
+}
+
+async function withContext<Value>(
+  paths: ReturnType<typeof environmentPaths>,
+  use: (context: EnvironmentContext) => Promise<Value>,
+) {
+  const context = await acquireEnvironmentContext(paths);
+  try {
+    return await use(context);
+  } finally {
+    context.close();
+  }
 }
 
 function readCurrentEnvironment(context: EnvironmentContext) {

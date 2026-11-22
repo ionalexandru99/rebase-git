@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import {
   type GitIdentity,
@@ -77,15 +76,13 @@ describe("Git identity", () => {
     await f.globalConfig("user.email", "ada@example.com");
     await writeFile(join(f.repository, "file.txt"), "content\n");
     await f.git("-C", f.repository, "add", ".");
-    const snapshot = await Effect.runPromise(f.changes.read(f.scope));
+    const snapshot = await f.changes.read(f.scope);
 
-    const commit = Effect.runPromise(
-      f.changes.commit({
-        ...f.scope,
-        revision: snapshot.revision,
-        message: "First",
-      }),
-    );
+    const commit = f.changes.commit({
+      ...f.scope,
+      revision: snapshot.revision,
+      message: "First",
+    });
 
     await expect(commit).rejects.toMatchObject({
       _tag: "RepositoryRejected",
@@ -110,11 +107,9 @@ async function fixture() {
     changes: environment.routes(RepositoryChangesApi),
     scope: { repositoryId, worktreePath: repository, amend: false },
     globalConfig: (...args: string[]) => git("config", "--global", ...args),
-    read: () => Effect.runPromise(identity.read(undefined)),
-    save: (value: GitIdentity) => Effect.runPromise(identity.save(value)),
+    read: () => identity.read(undefined),
+    save: (value: GitIdentity) => identity.save(value),
     saveRepository: (value: GitIdentity) =>
-      Effect.runPromise(
-        identity.saveRepository({ repositoryId, identity: value }),
-      ),
+      identity.saveRepository({ repositoryId, identity: value }),
   };
 }

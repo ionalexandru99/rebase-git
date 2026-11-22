@@ -1,6 +1,7 @@
-import { Effect } from "effect";
 import {
   type GitCommandRunner,
+  type GitFailed,
+  isGitFailed,
   isGitRejection,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
@@ -10,32 +11,38 @@ export const refCommand = {
   timeoutMilliseconds: 30_000,
 };
 
-export function requireValidRefName<Invalid>(
+export async function requireValidRefName(
   git: GitCommandRunner,
   directory: string,
   fullRef: string,
-  invalid: Invalid,
+  invalid: unknown,
 ) {
-  return runRepositoryGit(
-    git,
-    directory,
-    ["check-ref-format", fullRef],
-    refCommand,
-  ).pipe(
-    Effect.catchIf(isGitRejection, () => Effect.fail(invalid)),
-    Effect.asVoid,
-  );
+  try {
+    await runRepositoryGit(
+      git,
+      directory,
+      ["check-ref-format", fullRef],
+      refCommand,
+    );
+  } catch (error) {
+    throw isGitRejected(error) ? invalid : error;
+  }
 }
 
-export function readRefTarget(
+export async function readRefTarget(
   git: GitCommandRunner,
   directory: string,
   revision: string,
 ) {
-  return runRepositoryGit(
+  const output = await runRepositoryGit(
     git,
     directory,
     ["rev-parse", "--verify", "--quiet", revision],
     { ...refCommand, exitCodes: [0, 1] },
-  ).pipe(Effect.map((output) => output.trim() || undefined));
+  );
+  return output.trim() || undefined;
+}
+
+export function isGitRejected(error: unknown): error is GitFailed {
+  return isGitFailed(error) && isGitRejection(error);
 }

@@ -1,5 +1,3 @@
-import { Effect } from "effect";
-import type { RepositoryHistoryFailure } from "#contracts/repository-history/repository-history.contract.ts";
 import {
   cacheByGitEntry,
   type GitCommandRunner,
@@ -13,40 +11,34 @@ export interface HistoryLayout {
   readonly shallowFile: string;
 }
 
-export type HistoryLayoutRead = Effect.Effect<
-  HistoryLayout,
-  RepositoryHistoryFailure
->;
+export type HistoryLayoutRead = (
+  repositoryPath: string,
+) => Promise<HistoryLayout>;
 
-export function createHistoryLayoutCache(git: GitCommandRunner) {
+export function createHistoryLayoutCache(
+  git: GitCommandRunner,
+): HistoryLayoutRead {
   const layouts = cacheByGitEntry((repositoryPath) =>
     readHistoryLayout(git, repositoryPath),
   );
   return layouts.read;
 }
 
-function readHistoryLayout(
+async function readHistoryLayout(
   git: GitCommandRunner,
   repositoryPath: string,
-): HistoryLayoutRead {
-  return runRepositoryGit(git, repositoryPath, [
+): Promise<HistoryLayout> {
+  const output = await runRepositoryGit(git, repositoryPath, [
     "rev-parse",
     "--show-object-format",
     "--path-format=absolute",
     "--git-path",
     "shallow",
-  ]).pipe(
-    Effect.flatMap((output) => {
-      const [objectFormat, shallowFile] = output.trimEnd().split("\n");
-      if (objectFormat !== "sha1" && objectFormat !== "sha256")
-        return Effect.fail(
-          historyFailed(`Unsupported Git object format: ${objectFormat}`),
-        );
-      if (!shallowFile)
-        return Effect.fail(
-          historyFailed("Could not read shallow repository history"),
-        );
-      return Effect.succeed({ objectFormat, shallowFile });
-    }),
-  );
+  ]);
+  const [objectFormat, shallowFile] = output.trimEnd().split("\n");
+  if (objectFormat !== "sha1" && objectFormat !== "sha256")
+    throw historyFailed(`Unsupported Git object format: ${objectFormat}`);
+  if (!shallowFile)
+    throw historyFailed("Could not read shallow repository history");
+  return { objectFormat, shallowFile };
 }

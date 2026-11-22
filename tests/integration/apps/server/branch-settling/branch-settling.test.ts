@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { appendFile, mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { BranchSettlingApi } from "#contracts/branch-settling/branch-settling.contract.ts";
 import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
@@ -297,20 +296,20 @@ async function settlingFixture(
     ...f,
     settling: {
       settings: (input: Parameters<typeof settling.settings>[0]) =>
-        Effect.runPromise(settling.settings(input)),
+        settling.settings(input),
       saveSettings: (input: Parameters<typeof settling.saveSettings>[0]) =>
-        Effect.runPromise(settling.saveSettings(input)),
+        settling.saveSettings(input),
       settle: (input: Parameters<typeof settling.settle>[0]) =>
-        Effect.runPromise(settling.settle(input)),
+        settling.settle(input),
     },
-    fetch: () => Effect.runPromise(pull.fetch({ repositoryId })),
+    fetch: () => pull.fetch({ repositoryId }),
     branches: async () =>
-      (await Effect.runPromise(refs.read({ repositoryId }))).branches
+      (await refs.read({ repositoryId })).branches
         .map(({ name }) => name)
         .sort(),
     settled: async () =>
       Object.fromEntries(
-        (await Effect.runPromise(refs.read({ repositoryId }))).branches.flatMap(
+        (await refs.read({ repositoryId })).branches.flatMap(
           ({ name, settled }) =>
             settled === undefined ? [] : [[name, settled]],
         ),

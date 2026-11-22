@@ -13,7 +13,6 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import {
   type ChangeSelection,
@@ -40,17 +39,12 @@ async function fixture(
   const environment = await openTestEnvironment({
     git: (runner) => ({
       ...runner,
-      run: (command) =>
-        Effect.promise(async () => {
-          await beforeCommand?.(command);
-        }).pipe(
-          Effect.andThen(runner.run(command)),
-          Effect.tap(() =>
-            Effect.promise(async () => {
-              await afterCommand?.(command);
-            }),
-          ),
-        ),
+      run: async (command) => {
+        await beforeCommand?.(command);
+        const output = await runner.run(command);
+        await afterCommand?.(command);
+        return output;
+      },
     }),
   });
   const directory = join(environment.home, "repository");
@@ -71,38 +65,35 @@ async function fixture(
     amend: false,
   };
   const service = environment.routes(RepositoryChangesApi);
-  const read = (amend = false) =>
-    Effect.runPromise(service.read({ ...scope, amend }));
+  const read = (amend = false) => service.read({ ...scope, amend });
   const diff = (
     section: "staged" | "unstaged" = "unstaged",
     amend = false,
     path = "file.txt",
-  ) => Effect.runPromise(service.diff({ ...scope, amend, section, path }));
+  ) => service.diff({ ...scope, amend, section, path });
   const mutate = async (
     action: MutateChanges["action"],
     section: MutateChanges["section"],
     selection: ChangeSelection = { _tag: "All" },
     amend = false,
   ) =>
-    Effect.runPromise(
-      service.mutate({
-        ...scope,
-        amend,
-        revision: (await read(amend)).revision,
-        action,
-        section,
-        selection,
-      }),
-    );
+    service.mutate({
+      ...scope,
+      amend,
+      revision: (await read(amend)).revision,
+      action,
+      section,
+      selection,
+    });
   const undo = ({ discarded }: ChangesMutated) => {
     if (discarded === null) throw new Error("Nothing was discarded.");
-    return Effect.runPromise(service.undoDiscard({ ...scope, discarded }));
+    return service.undoDiscard({ ...scope, discarded });
   };
   const ignore = (
     paths: readonly string[],
     target: IgnorePaths["target"] = "repository",
     untrack = false,
-  ) => Effect.runPromise(service.ignore({ ...scope, target, paths, untrack }));
+  ) => service.ignore({ ...scope, target, paths, untrack });
   return { directory, git, service, scope, read, diff, mutate, undo, ignore };
 }
 
@@ -212,13 +203,11 @@ describe("working changes through Git", () => {
     await f.git("add", ".");
     await writeFile(join(f.directory, "file.txt"), "unstaged\n");
     const snapshot = await f.read();
-    await Effect.runPromise(
-      f.service.commit({
-        ...f.scope,
-        revision: snapshot.revision,
-        message: "Reviewed",
-      }),
-    );
+    await f.service.commit({
+      ...f.scope,
+      revision: snapshot.revision,
+      message: "Reviewed",
+    });
     expect(competingStageRejected).toBe(true);
     expect((await f.git("show", "HEAD:file.txt")).stdout).toBe("reviewed\n");
     expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
@@ -356,13 +345,11 @@ describe("working changes through Git", () => {
     });
     expect((await f.git("show", ":file.txt")).stdout).toBe("one\n");
     const state = await f.read();
-    await Effect.runPromise(
-      f.service.commit({
-        ...f.scope,
-        revision: state.revision,
-        message: "First",
-      }),
-    );
+    await f.service.commit({
+      ...f.scope,
+      revision: state.revision,
+      message: "First",
+    });
     expect((await f.git("show", "HEAD:file.txt")).stdout).toBe("one\n");
     expect((await f.read()).unstaged).toHaveLength(1);
   });
@@ -490,13 +477,11 @@ describe("working changes through Git", () => {
     await writeFile(join(f.directory, "file.txt"), "edited\n");
     await writeFile(join(f.directory, "new.txt"), "new\n");
     const state = await f.read();
-    await Effect.runPromise(
-      f.service.commit({
-        ...f.scope,
-        revision: state.revision,
-        message: "Everything",
-      }),
-    );
+    await f.service.commit({
+      ...f.scope,
+      revision: state.revision,
+      message: "Everything",
+    });
     expect((await f.git("show", "HEAD:file.txt")).stdout).toBe("edited\n");
     expect((await f.git("show", "HEAD:new.txt")).stdout).toBe("new\n");
     const after = await f.read();
@@ -513,13 +498,11 @@ describe("working changes through Git", () => {
     await writeFile(join(f.directory, "file.txt"), "reviewed edit\n");
     const state = await f.read();
     await expect(
-      Effect.runPromise(
-        f.service.commit({
-          ...f.scope,
-          revision: state.revision,
-          message: "Everything",
-        }),
-      ),
+      f.service.commit({
+        ...f.scope,
+        revision: state.revision,
+        message: "Everything",
+      }),
     ).rejects.toMatchObject({ reason: "Stale" });
     expect(changed).toBe(true);
     expect((await f.git("log", "-1", "--format=%s")).stdout.trim()).toBe(
@@ -531,14 +514,12 @@ describe("working changes through Git", () => {
     const f = await fixture();
     await writeFile(join(f.directory, "file.txt"), "working\n");
     const snapshot = await f.read(true);
-    await Effect.runPromise(
-      f.service.commit({
-        ...f.scope,
-        amend: true,
-        revision: snapshot.revision,
-        message: "Reworded",
-      }),
-    );
+    await f.service.commit({
+      ...f.scope,
+      amend: true,
+      revision: snapshot.revision,
+      message: "Reworded",
+    });
     expect((await f.git("log", "-1", "--format=%s")).stdout.trim()).toBe(
       "Reworded",
     );
@@ -550,18 +531,16 @@ describe("working changes through Git", () => {
     const state = await f.read();
     await writeFile(join(f.directory, "file.txt"), "new external edit\n");
     await expect(
-      Effect.runPromise(
-        f.service.mutate({
-          ...f.scope,
-          revision: state.revision,
-          action: "discard",
-          section: "unstaged",
-          selection: { _tag: "All" },
-        }),
-      ),
+      f.service.mutate({
+        ...f.scope,
+        revision: state.revision,
+        action: "discard",
+        section: "unstaged",
+        selection: { _tag: "All" },
+      }),
     ).rejects.toMatchObject({ reason: "Stale" });
     await expect(
-      Effect.runPromise(f.service.read({ ...f.scope, worktreePath: tmpdir() })),
+      f.service.read({ ...f.scope, worktreePath: tmpdir() }),
     ).rejects.toMatchObject({ reason: "Missing" });
   });
   it.each(["unstaged", "staged"] as const)(
@@ -619,8 +598,7 @@ describe("working changes through Git", () => {
     const blob = (
       await git("hash-object", "-w", join(parent, "restaged.txt"))
     ).stdout.trim();
-    const read = () =>
-      Effect.runPromise(f.service.read({ ...f.scope, worktreePath: linked }));
+    const read = () => f.service.read({ ...f.scope, worktreePath: linked });
     const before = await read();
     await git("update-index", "--cacheinfo", `100644,${blob},file.txt`);
     const after = await read();
@@ -830,15 +808,13 @@ describe("ignoring paths through Git", () => {
     await f.git("worktree", "add", "--detach", linked);
     await writeFile(join(linked, "local.log"), "log\n");
 
-    const written = await Effect.runPromise(
-      f.service.ignore({
-        ...f.scope,
-        worktreePath: linked,
-        target: "local",
-        paths: ["local.log"],
-        untrack: false,
-      }),
-    );
+    const written = await f.service.ignore({
+      ...f.scope,
+      worktreePath: linked,
+      target: "local",
+      paths: ["local.log"],
+      untrack: false,
+    });
 
     expect(
       await readFile(join(f.directory, ".git", "info", "exclude"), "utf8"),
@@ -889,9 +865,7 @@ describe("explaining ignored paths through Git", () => {
       "# local\n/notes.md\n",
     );
     const rule = (path: string) =>
-      Effect.runPromise(
-        f.service.ignoreRule({ ...f.scope, path, includeTracked: false }),
-      );
+      f.service.ignoreRule({ ...f.scope, path, includeTracked: false });
 
     expect(await rule("debug.log")).toEqual({
       pattern: "*.log",
@@ -925,9 +899,7 @@ describe("explaining ignored paths through Git", () => {
     const f = await fixture();
     await writeFile(join(f.directory, ".gitignore"), "file.txt\n");
     const rule = (includeTracked: boolean) =>
-      Effect.runPromise(
-        f.service.ignoreRule({ ...f.scope, path: "file.txt", includeTracked }),
-      );
+      f.service.ignoreRule({ ...f.scope, path: "file.txt", includeTracked });
 
     expect(await rule(false)).toBeNull();
     expect(await rule(true)).toEqual({

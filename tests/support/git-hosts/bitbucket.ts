@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { bitbucketApiTokenScopes } from "#contracts/source-control/source-control.contract.ts";
 import type { BitbucketClient } from "#server/features/source-control/hosts/bitbucket-client.ts";
 
@@ -36,13 +35,13 @@ export function fakeBitbucket(
     [];
   const nodes = Object.values(bySourceBranch).flat();
   const answer = (body: unknown, status = 200) =>
-    Effect.succeed({ status, body: JSON.stringify(body) });
+    Promise.resolve({ status, body: JSON.stringify(body) });
   const bitbucket: BitbucketClient = {
     get: (url, authorization) => {
       requests.push({ url, authorization });
       const { pathname, searchParams } = new URL(url);
       if (pathname === "/2.0/user")
-        return Effect.succeed({
+        return Promise.resolve({
           status: userStatus,
           body: JSON.stringify({ username: "octo", display_name: "Octo" }),
           scopes,

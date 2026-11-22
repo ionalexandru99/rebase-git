@@ -1,13 +1,10 @@
 import { realpath } from "node:fs/promises";
-import { Effect, Semaphore } from "effect";
-import {
-  type RepositoryRejected,
-  repositoryRejected,
-} from "#contracts/git/git-failures.contract.ts";
+import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type { RepositoryOperation } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
   cacheByGitEntry,
   type GitCommandRunner,
+  isGitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
@@ -35,149 +32,130 @@ export const atRebaseEditStop: RepositoryWritePolicy["duringOperation"] = {
 };
 
 export interface RepositoryCoordination {
-  readonly run: <A, E, R>(
+  readonly run: <Value>(
     directory: string,
     policy: RepositoryWritePolicy,
-    operation: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E | RepositoryRejected, R>;
-  readonly operation: (
-    directory: string,
-  ) => Effect.Effect<RepositoryOperation, RepositoryRejected>;
+    operation: () => Promise<Value>,
+  ) => Promise<Value>;
+  readonly operation: (directory: string) => Promise<RepositoryOperation>;
 }
 
 export function createRepositoryCoordination(
   git: GitCommandRunner,
 ): RepositoryCoordination {
-  const locks = new Map<
-    string,
-    { semaphore: Semaphore.Semaphore; owners: number }
-  >();
-  const withLock = <A, E, R>(key: string, operation: Effect.Effect<A, E, R>) =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        let entry = locks.get(key);
-        if (entry === undefined) {
-          entry = { semaphore: Semaphore.makeUnsafe(1), owners: 0 };
-          locks.set(key, entry);
-        }
-        entry.owners++;
-        return entry;
-      }),
-      (entry) => entry.semaphore.withPermit(operation),
-      (entry) =>
-        Effect.sync(() => {
-          if (--entry.owners === 0) {
-            locks.delete(key);
-          }
-        }),
-    );
+  const withLock = createKeyedLock();
   const directories = cacheByGitEntry((directory) =>
     resolveGitDirectories(git, directory),
   );
-  const forgetOnError = <A, E, R>(
+  const forgetOnError = async <Value>(
     directory: string,
-    effect: Effect.Effect<A, E, R>,
-  ) =>
-    effect.pipe(
-      Effect.onError(() => Effect.sync(() => directories.forget(directory))),
-    );
+    operation: () => Promise<Value>,
+  ) => {
+    try {
+      return await operation();
+    } catch (error) {
+      directories.forget(directory);
+      throw error;
+    }
+  };
   return {
     run: (directory, policy, operation) =>
-      forgetOnError(
-        directory,
-        Effect.gen(function* () {
-          const { refs, worktree } = policy.locks;
-          const paths = yield* directories.read(directory);
-          const guarded = requireCompatibleWrite(
-            git,
-            directory,
-            paths,
-            policy,
-          ).pipe(Effect.andThen(operation));
-          const inWorktree =
-            worktree === undefined
-              ? guarded
-              : withLock(`worktree:${paths.gitDirectory}`, guarded);
-          return yield* refs === undefined
-            ? inWorktree
-            : withLock(`refs:${paths.commonDirectory}`, inWorktree);
-        }),
-      ),
+      forgetOnError(directory, async () => {
+        const { refs, worktree } = policy.locks;
+        const paths = await directories.read(directory);
+        const guarded = async () => {
+          await requireCompatibleWrite(git, directory, paths, policy);
+          return operation();
+        };
+        const inWorktree =
+          worktree === undefined
+            ? guarded
+            : () => withLock(`worktree:${paths.gitDirectory}`, guarded);
+        return refs === undefined
+          ? inWorktree()
+          : withLock(`refs:${paths.commonDirectory}`, inWorktree);
+      }),
     operation: (directory) =>
-      forgetOnError(
-        directory,
-        directories
-          .read(directory)
-          .pipe(
-            Effect.flatMap((paths) =>
-              readRepositoryOperation(git, directory, paths),
-            ),
-          ),
+      forgetOnError(directory, async () =>
+        readRepositoryOperation(
+          git,
+          directory,
+          await directories.read(directory),
+        ),
       ),
   };
 }
 
-function requireCompatibleWrite(
+function createKeyedLock() {
+  const tails = new Map<string, Promise<void>>();
+  return async <Value>(key: string, operation: () => Promise<Value>) => {
+    const previous = tails.get(key) ?? Promise.resolve();
+    let release = () => {};
+    const tail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queued = previous.then(() => tail);
+    tails.set(key, queued);
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (tails.get(key) === queued) tails.delete(key);
+    }
+  };
+}
+
+async function requireCompatibleWrite(
   git: GitCommandRunner,
   directory: string,
   paths: GitDirectories,
   { name, duringOperation }: RepositoryWritePolicy,
 ) {
-  if (duringOperation === "proceed") return Effect.void;
-  return readRepositoryOperation(git, directory, paths).pipe(
-    Effect.flatMap((state) => {
-      if (state.lock !== null)
-        return Effect.fail(
-          repositoryRejected("Busy", `Git lock exists: ${state.lock}.`),
-        );
-      if (
-        state.kind === "idle" ||
-        (duringOperation !== "block" && duringOperation.allowWhen(state))
-      )
-        return Effect.void;
-      return Effect.fail(
-        repositoryRejected(
-          "Incompatible",
-          `Cannot ${name} while ${state.kind === "unknown" ? "an unrecognized Git operation is" : `${state.kind} is`} in progress.`,
-        ),
-      );
-    }),
+  if (duringOperation === "proceed") return;
+  const state = await readRepositoryOperation(git, directory, paths);
+  if (state.lock !== null)
+    throw repositoryRejected("Busy", `Git lock exists: ${state.lock}.`);
+  if (
+    state.kind === "idle" ||
+    (duringOperation !== "block" && duringOperation.allowWhen(state))
+  )
+    return;
+  throw repositoryRejected(
+    "Incompatible",
+    `Cannot ${name} while ${state.kind === "unknown" ? "an unrecognized Git operation is" : `${state.kind} is`} in progress.`,
   );
 }
 
-function resolveGitDirectories(
+async function resolveGitDirectories(
   git: GitCommandRunner,
   directory: string,
-): Effect.Effect<GitDirectories, RepositoryRejected> {
-  return Effect.gen(function* () {
-    const [gitDirectory = "", commonDirectory = ""] = (yield* runRepositoryGit(
-      git,
-      directory,
-      [
-        "rev-parse",
-        "--path-format=absolute",
-        "--absolute-git-dir",
-        "--git-common-dir",
-      ],
-    ))
-      .trimEnd()
-      .split("\n");
-    return yield* Effect.tryPromise({
-      try: async () => ({
-        gitDirectory: await realpath(gitDirectory),
-        commonDirectory: await realpath(commonDirectory),
-      }),
-      catch: () =>
-        repositoryRejected(
-          "GitFailed",
-          "Could not resolve the worktree's Git directories.",
-        ),
-    });
-  }).pipe(
-    Effect.mapError((error) =>
-      error._tag === "GitFailed"
-        ? repositoryRejected("GitFailed", error.detail)
-        : error,
-    ),
-  );
+): Promise<GitDirectories> {
+  let output: string;
+  try {
+    output = await runRepositoryGit(git, directory, [
+      "rev-parse",
+      "--path-format=absolute",
+      "--absolute-git-dir",
+      "--git-common-dir",
+    ]);
+  } catch (error) {
+    throw isGitFailed(error)
+      ? repositoryRejected("GitFailed", error.detail)
+      : error;
+  }
+  const [gitDirectory = "", commonDirectory = ""] = output
+    .trimEnd()
+    .split("\n");
+  try {
+    return {
+      gitDirectory: await realpath(gitDirectory),
+      commonDirectory: await realpath(commonDirectory),
+    };
+  } catch {
+    throw repositoryRejected(
+      "GitFailed",
+      "Could not resolve the worktree's Git directories.",
+    );
+  }
 }

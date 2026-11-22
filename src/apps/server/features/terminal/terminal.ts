@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { TerminalsApi } from "#contracts/terminal/terminal.contract.ts";
 import {
   type EnvironmentFeature,
@@ -17,36 +16,28 @@ export function terminalFeature({
 }): EnvironmentFeature {
   return {
     routes: [
-      route(TerminalsApi.list, (input) =>
-        access
-          .requireWorktree(input)
-          .pipe(Effect.map(() => terminals.list(input))),
-      ),
-      route(TerminalsApi.open, (input) =>
-        access
-          .requireWorktree(input)
-          .pipe(Effect.andThen(terminals.open(input))),
-      ),
-      route(TerminalsApi.close, (input) =>
-        Effect.sync(() => {
-          terminals.close(input);
-          return {};
-        }),
-      ),
-      route(TerminalsApi.write, ({ id, data }) =>
-        Effect.sync(() => {
-          terminals.write(id, data);
-          return {};
-        }),
-      ),
-      route(TerminalsApi.resize, ({ id, cols, rows }) =>
-        Effect.sync(() => {
-          terminals.resize(id, cols, rows);
-          return {};
-        }),
-      ),
-      stream(TerminalsApi.attach, ({ id, since }) =>
-        terminals.attach(id, since),
+      route(TerminalsApi.list, async (input) => {
+        await access.requireWorktree(input);
+        return terminals.list(input);
+      }),
+      route(TerminalsApi.open, async (input) => {
+        await access.requireWorktree(input);
+        return terminals.open(input);
+      }),
+      route(TerminalsApi.close, async (input) => {
+        terminals.closeTerminal(input);
+        return {};
+      }),
+      route(TerminalsApi.write, async ({ id, data }) => {
+        terminals.write(id, data);
+        return {};
+      }),
+      route(TerminalsApi.resize, async ({ id, cols, rows }) => {
+        terminals.resize(id, cols, rows);
+        return {};
+      }),
+      stream(TerminalsApi.attach, ({ id, since }, { signal }) =>
+        terminals.attach(id, since, signal),
       ),
     ],
   };

@@ -1,6 +1,5 @@
 import { lstat, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
 import type {
   PreviewRestore,
   RestoreFiles,
@@ -25,106 +24,99 @@ import { objectFile } from "#server/repository/comparison/read-object-file.ts";
 const listedOverwrites = 20;
 const argumentCharacters = 24_000;
 
-export function previewRestore(git: GitCommandRunner, command: PreviewRestore) {
-  return Effect.gen(function* () {
-    yield* safeChangePath(command.worktreePath, command.path);
-    const source = yield* restoreSource(git, command);
-    const [current, restored] = yield* Effect.all(
-      [
-        readWorktreeFile(git, command.worktreePath, command.path),
-        objectFile(git, command.worktreePath, command.path, { tree: source }),
-      ],
-      { concurrency: 2 },
-    );
-    return buildChangeDiff(command.path, source, current, restored, {
-      whole: command.whole,
-    });
+export async function previewRestore(
+  git: GitCommandRunner,
+  command: PreviewRestore,
+) {
+  await safeChangePath(command.worktreePath, command.path);
+  const source = await restoreSource(git, command);
+  const [current, restored] = await Promise.all([
+    readWorktreeFile(git, command.worktreePath, command.path),
+    objectFile(git, command.worktreePath, command.path, { tree: source }),
+  ]);
+  return buildChangeDiff(command.path, source, current, restored, {
+    whole: command.whole,
   });
 }
 
-export function restoreFiles(git: GitCommandRunner, command: RestoreFiles) {
+export async function restoreFiles(
+  git: GitCommandRunner,
+  command: RestoreFiles,
+) {
   const directory = command.worktreePath;
   const paths = [...new Set(command.paths)];
-  return Effect.gen(function* () {
-    const targets = yield* Effect.forEach(paths, (path) =>
-      safeChangePath(directory, path),
+  const targets: string[] = [];
+  for (const path of paths) targets.push(await safeChangePath(directory, path));
+  const source = await restoreSource(git, command);
+  await requireOverwriteConfirmed(git, directory, paths, command.overwrite);
+  const present = await sourcePaths(git, directory, source, paths);
+  const removed = targets.filter(
+    (_, index) => !present.has(paths[index] ?? ""),
+  );
+  const folders = await changeIo(() =>
+    Promise.all(removed.map((target) => isFolder(target))),
+  );
+  const folder = removed.find((_, index) => folders[index]);
+  if (folder !== undefined)
+    throw changesFailed(
+      "Unsupported",
+      `${folder} is a folder in the working tree. Move it before restoring.`,
     );
-    const source = yield* restoreSource(git, command);
-    yield* requireOverwriteConfirmed(git, directory, paths, command.overwrite);
-    const present = yield* sourcePaths(git, directory, source, paths);
-    const removed = targets.filter(
-      (_, index) => !present.has(paths[index] ?? ""),
-    );
-    const folders = yield* changeIo(() =>
-      Promise.all(removed.map((target) => isFolder(target))),
-    );
-    const folder = removed.find((_, index) => folders[index]);
-    if (folder !== undefined)
-      return yield* Effect.fail(
-        changesFailed(
-          "Unsupported",
-          `${folder} is a folder in the working tree. Move it before restoring.`,
-        ),
-      );
-    yield* Effect.uninterruptible(
-      Effect.gen(function* () {
-        yield* changeIo(() => Promise.all(removed.map(removeFile)));
-        const restored = paths.filter((path) => present.has(path));
-        if (restored.length === 0) return;
-        yield* runRepositoryGit(
-          git,
-          directory,
-          [
-            "restore",
-            `--source=${source}`,
-            "--worktree",
-            "--pathspec-from-file=-",
-            "--pathspec-file-nul",
-          ],
-          { input: `${restored.join("\0")}\0`, timeoutMilliseconds: 120_000 },
-        );
-      }),
-    );
-  });
+  await changeIo(() => Promise.all(removed.map(removeFile)));
+  const restored = paths.filter((path) => present.has(path));
+  if (restored.length === 0) return;
+  await runRepositoryGit(
+    git,
+    directory,
+    [
+      "restore",
+      `--source=${source}`,
+      "--worktree",
+      "--pathspec-from-file=-",
+      "--pathspec-file-nul",
+    ],
+    {
+      input: `${restored.join("\0")}\0`,
+      timeoutMilliseconds: 120_000,
+      signal: new AbortController().signal,
+    },
+  );
 }
 
-function restoreSource(
+async function restoreSource(
   git: GitCommandRunner,
   command: Pick<RestoreFiles, "worktreePath" | "oid" | "parentOid" | "source">,
 ) {
-  return Effect.gen(function* () {
-    const revision =
-      command.source === "commit"
-        ? command.oid
-        : (command.parentOid ?? `${command.oid}^1`);
-    const source = yield* readRefTarget(
-      git,
-      command.worktreePath,
-      `${revision}^{commit}`,
-    );
-    if (source !== undefined) return source;
-    return yield* Effect.fail(
-      command.source === "parent"
-        ? changesFailed("Unsupported", "This commit has no parent.")
-        : changesFailed("Stale", "That commit no longer exists."),
-    );
-  });
+  const revision =
+    command.source === "commit"
+      ? command.oid
+      : (command.parentOid ?? `${command.oid}^1`);
+  const source = await readRefTarget(
+    git,
+    command.worktreePath,
+    `${revision}^{commit}`,
+  );
+  if (source !== undefined) return source;
+  throw command.source === "parent"
+    ? changesFailed("Unsupported", "This commit has no parent.")
+    : changesFailed("Stale", "That commit no longer exists.");
 }
 
-function requireOverwriteConfirmed(
+async function requireOverwriteConfirmed(
   git: GitCommandRunner,
   directory: string,
   paths: readonly string[],
   overwrite: string | undefined,
 ) {
-  return Effect.gen(function* () {
-    const checked = [
-      ...paths,
-      ...(yield* changeIo(() => blockingAncestors(directory, paths))),
-    ];
-    const read = (args: readonly string[]) =>
-      Effect.forEach(chunks(checked), (chunk) =>
-        runRepositoryGit(
+  const checked = [
+    ...paths,
+    ...(await changeIo(() => blockingAncestors(directory, paths))),
+  ];
+  const read = async (args: readonly string[]) => {
+    const outputs: string[] = [];
+    for (const chunk of chunks(checked))
+      outputs.push(
+        await runRepositoryGit(
           git,
           directory,
           [...args, "--", ...chunk.map((path) => `:(literal,icase)${path}`)],
@@ -134,47 +126,42 @@ function requireOverwriteConfirmed(
             maxOutputBytes: 16 * 1_048_576,
           },
         ),
-      ).pipe(
-        Effect.map((outputs) =>
-          outputs.flatMap((output) => output.split("\0")),
-        ),
       );
-    const [statuses, entries] = yield* Effect.all([
-      read([
-        "status",
-        "--porcelain=v1",
-        "-z",
-        "--untracked-files=all",
-        "--ignored=matching",
-        "--no-renames",
-      ]),
-      read(["ls-files", "-v", "-z"]),
-    ]);
-    const hidden = entries
-      .filter((entry) => entry.length > 2 && hidesEdits(entry))
-      .map((entry) => entry.slice(2));
-    const existing = yield* changeIo(() =>
-      Promise.all(hidden.map((path) => exists(join(directory, path)))),
-    );
-    const edited = [
-      ...new Set([
-        ...statuses
-          .filter((record) => record.length > 3 && hasLocalEdits(record))
-          .map((record) => record.slice(3)),
-        ...hidden.filter((_, index) => existing[index]),
-      ]),
-    ].sort();
-    if (edited.length === 0) return;
-    const identities = yield* worktreeIdentities(directory, edited);
-    const confirmed = fingerprint(...identities);
-    if (overwrite === confirmed) return;
-    return yield* Effect.fail<RestoreOverwrites>({
-      _tag: "RestoreOverwrites",
-      paths: edited.slice(0, listedOverwrites),
-      count: edited.length,
-      fingerprint: confirmed,
-    });
-  });
+    return outputs.flatMap((output) => output.split("\0"));
+  };
+  const statuses = await read([
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all",
+    "--ignored=matching",
+    "--no-renames",
+  ]);
+  const entries = await read(["ls-files", "-v", "-z"]);
+  const hidden = entries
+    .filter((entry) => entry.length > 2 && hidesEdits(entry))
+    .map((entry) => entry.slice(2));
+  const existing = await changeIo(() =>
+    Promise.all(hidden.map((path) => exists(join(directory, path)))),
+  );
+  const edited = [
+    ...new Set([
+      ...statuses
+        .filter((record) => record.length > 3 && hasLocalEdits(record))
+        .map((record) => record.slice(3)),
+      ...hidden.filter((_, index) => existing[index]),
+    ]),
+  ].sort();
+  if (edited.length === 0) return;
+  const identities = await worktreeIdentities(directory, edited);
+  const confirmed = fingerprint(...identities);
+  if (overwrite === confirmed) return;
+  throw {
+    _tag: "RestoreOverwrites",
+    paths: edited.slice(0, listedOverwrites),
+    count: edited.length,
+    fingerprint: confirmed,
+  } satisfies RestoreOverwrites;
 }
 
 function hasLocalEdits(record: string) {
@@ -230,26 +217,25 @@ async function removeFile(target: string) {
   });
 }
 
-function sourcePaths(
+async function sourcePaths(
   git: GitCommandRunner,
   directory: string,
   source: string,
   paths: readonly string[],
 ) {
-  return Effect.forEach(chunks(paths), (chunk) =>
-    runRepositoryGit(git, directory, [
+  const listed = new Set<string>();
+  for (const chunk of chunks(paths)) {
+    const output = await runRepositoryGit(git, directory, [
       "ls-tree",
       "-z",
       "--name-only",
       source,
       "--",
       ...chunk,
-    ]),
-  ).pipe(
-    Effect.map(
-      (outputs) => new Set(outputs.flatMap((output) => output.split("\0"))),
-    ),
-  );
+    ]);
+    for (const path of output.split("\0")) listed.add(path);
+  }
+  return listed;
 }
 
 function chunks(paths: readonly string[]) {

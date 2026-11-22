@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { SettledDay } from "#contracts/branch-settling/branch-settling.contract.ts";
 import type {
   LocalBranch,
@@ -7,7 +6,6 @@ import type {
 } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   type GitCommandRunner,
-  type GitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
@@ -26,76 +24,67 @@ import {
 const readTimeoutMilliseconds = 15_000;
 const maximumRefsOutputBytes = 16 * 1_048_576;
 
-export function readRepositoryRefs(
+export async function readRepositoryRefs(
   git: GitCommandRunner,
   repository: {
     readonly id: string;
     readonly logicalRepositoryId?: string;
     readonly path: string;
   },
-): Effect.Effect<RepositoryRefs, GitFailed> {
-  return Effect.gen(function* () {
-    const output = yield* Effect.all(
-      {
-        branches: listRefs(
-          git,
-          repository.path,
-          "refs/heads",
-          "-committerdate",
-        ),
-        remoteBranches: listRefs(
-          git,
-          repository.path,
-          "refs/remotes",
-          "refname",
-        ),
-        tags: listRefs(git, repository.path, "refs/tags", "-creatordate"),
-        worktrees: readWorktrees(git, repository.path),
-        config: readRefsConfig(git, repository.path),
-      },
-      { concurrency: "unbounded" },
-    );
-    const worktrees = yield* canonicalizeWorktrees(output.worktrees);
-    return fitRepositoryRefs({
-      remoteProviders: remoteProvidersFromConfig(output.config),
-      branches: withSettlements(
-        canonicalizeBranchWorktrees(
-          output.branches.flatMap(withDefined(localBranchFromRecord)),
-          output.worktrees,
-          worktrees,
-        ),
-        branchSettlements(output.config),
+): Promise<RepositoryRefs> {
+  const [branches, remoteBranches, tags, rawWorktrees, config] =
+    await Promise.all([
+      listRefs(git, repository.path, "refs/heads", "-committerdate"),
+      listRefs(git, repository.path, "refs/remotes", "refname"),
+      listRefs(git, repository.path, "refs/tags", "-creatordate"),
+      readWorktrees(git, repository.path),
+      readRefsConfig(git, repository.path),
+    ]);
+  const worktrees = await canonicalizeWorktrees(rawWorktrees);
+  return fitRepositoryRefs({
+    remoteProviders: remoteProvidersFromConfig(config),
+    branches: withSettlements(
+      canonicalizeBranchWorktrees(
+        branches.flatMap(withDefined(localBranchFromRecord)),
+        rawWorktrees,
+        worktrees,
       ),
-      logicalRepositoryId: repository.logicalRepositoryId ?? repository.id,
-      remoteBranches: output.remoteBranches.flatMap(
-        withDefined(remoteBranchFromRecord),
-      ),
-      remoteDefaultBranches: output.remoteBranches.flatMap(
-        withDefined(remoteDefaultBranchFromRecord),
-      ),
-      repositoryId: repository.id,
-      tags: output.tags.flatMap(withDefined(tagFromRecord)),
-      truncated: { branches: false, remoteBranches: false, tags: false },
-      worktrees,
-    });
+      branchSettlements(config),
+    ),
+    logicalRepositoryId: repository.logicalRepositoryId ?? repository.id,
+    remoteBranches: remoteBranches.flatMap(withDefined(remoteBranchFromRecord)),
+    remoteDefaultBranches: remoteBranches.flatMap(
+      withDefined(remoteDefaultBranchFromRecord),
+    ),
+    repositoryId: repository.id,
+    tags: tags.flatMap(withDefined(tagFromRecord)),
+    truncated: { branches: false, remoteBranches: false, tags: false },
+    worktrees,
   });
 }
 
-function listRefs(
+async function listRefs(
   git: GitCommandRunner,
   directory: string,
   pattern: string,
   sort: string,
 ) {
-  return runRepositoryGit(
-    git,
-    directory,
-    ["for-each-ref", `--format=${forEachRefFormat}`, `--sort=${sort}`, pattern],
-    {
-      maxOutputBytes: maximumRefsOutputBytes,
-      timeoutMilliseconds: readTimeoutMilliseconds,
-    },
-  ).pipe(Effect.map(parseForEachRef));
+  return parseForEachRef(
+    await runRepositoryGit(
+      git,
+      directory,
+      [
+        "for-each-ref",
+        `--format=${forEachRefFormat}`,
+        `--sort=${sort}`,
+        pattern,
+      ],
+      {
+        maxOutputBytes: maximumRefsOutputBytes,
+        timeoutMilliseconds: readTimeoutMilliseconds,
+      },
+    ),
+  );
 }
 
 function canonicalizeBranchWorktrees(
@@ -139,7 +128,7 @@ function readRefsConfig(git: GitCommandRunner, directory: string) {
       "^(remote\\..*\\.url|branch\\..*\\.rebasesettled)$",
     ],
     { timeoutMilliseconds: 5_000, maxOutputBytes: 4 * 1_048_576 },
-  ).pipe(Effect.catch(() => Effect.succeed("")));
+  ).catch(() => "");
 }
 
 export function branchSettlements(output: string) {

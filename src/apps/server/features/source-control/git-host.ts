@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { Effect, Schema } from "effect";
+import type { z } from "zod";
 import type {
   PullRequest,
   PullRequestsUnavailable,
@@ -10,6 +10,7 @@ import type {
   GitHostKind,
   HostRepositories,
 } from "#contracts/source-control/source-control.contract.ts";
+import { currentRequest } from "#server/adapters/environment-transport/environment-routes.ts";
 
 export interface GitHostAccount {
   readonly host: string;
@@ -53,23 +54,21 @@ export interface HostedRepository {
   readonly id: string;
   readonly pullRequests: (
     heads: readonly string[],
-  ) => Effect.Effect<PullRequestsByHead, PullRequestsUnavailable>;
+  ) => Promise<PullRequestsByHead>;
   readonly pullRequest: (
     number: number,
-  ) => Effect.Effect<HostedPullRequest | undefined>;
-  readonly avatar: (
-    author: AvatarAuthor,
-  ) => Effect.Effect<HostAvatar, PullRequestsUnavailable>;
+  ) => Promise<HostedPullRequest | undefined>;
+  readonly avatar: (author: AvatarAuthor) => Promise<HostAvatar>;
 }
 
 export interface GitHost {
   readonly kind: GitHostKind;
-  readonly tool: Effect.Effect<GitHostTool>;
+  readonly tool: () => Promise<GitHostTool>;
   readonly repositoryId: (remoteUrl: string) => string | undefined;
   readonly repository: (
     remoteUrl: string,
-  ) => Effect.Effect<HostedRepository | undefined>;
-  readonly cloneable?: Effect.Effect<readonly HostRepositories[]>;
+  ) => Promise<HostedRepository | undefined>;
+  readonly cloneable?: () => Promise<readonly HostRepositories[]>;
 }
 
 interface HostCommandResult {
@@ -92,39 +91,39 @@ const accountsShown = 16;
 export const repositoriesPerPage = 100;
 const repositoriesListed = 1_000;
 
-export function repositoryFor(hosts: readonly GitHost[], remoteUrl: string) {
-  return Effect.gen(function* () {
-    for (const host of hosts) {
-      const repository = yield* host.repository(remoteUrl);
-      if (repository !== undefined) return { host, repository };
-    }
-    return undefined;
-  });
+export async function repositoryFor(
+  hosts: readonly GitHost[],
+  remoteUrl: string,
+) {
+  for (const host of hosts) {
+    const repository = await host.repository(remoteUrl);
+    if (repository !== undefined) return { host, repository };
+  }
+  return undefined;
 }
 
 export function signedInTool(
-  version: Effect.Effect<string | undefined>,
-  accounts: Effect.Effect<readonly GitHostAccount[]>,
-): Effect.Effect<GitHostTool> {
-  return Effect.gen(function* () {
-    const installed = yield* version;
-    if (installed === undefined) return { _tag: "Missing" } as const;
-    const signedIn = (yield* accounts).slice(0, accountsShown);
+  version: () => Promise<string | undefined>,
+  accounts: () => Promise<readonly GitHostAccount[]>,
+) {
+  return async (): Promise<GitHostTool> => {
+    const installed = await version();
+    if (installed === undefined) return { _tag: "Missing" };
+    const signedIn = (await accounts()).slice(0, accountsShown);
     return signedIn.length === 0
-      ? ({ _tag: "SignedOut", version: installed } as const)
-      : ({ _tag: "SignedIn", version: installed, accounts: signedIn } as const);
-  });
+      ? { _tag: "SignedOut", version: installed }
+      : { _tag: "SignedIn", version: installed, accounts: signedIn };
+  };
 }
 
 export function singleAccount(
   host: string,
-  account: Effect.Effect<string | undefined>,
-): Effect.Effect<readonly GitHostAccount[]> {
-  return account.pipe(
-    Effect.map((signedIn) =>
-      signedIn === undefined ? [] : [{ host, account: signedIn }],
-    ),
-  );
+  account: () => Promise<string | undefined>,
+) {
+  return async (): Promise<readonly GitHostAccount[]> => {
+    const signedIn = await account();
+    return signedIn === undefined ? [] : [{ host, account: signedIn }];
+  };
 }
 
 export function runHostCommand(
@@ -137,73 +136,77 @@ export function runHostCommand(
     readonly env?: Readonly<Record<string, string>>;
     readonly shim?: boolean;
   } = {},
-): Effect.Effect<HostCommandResult> {
+): Promise<HostCommandResult> {
   const [file, prefix] =
     shim && process.platform === "win32"
       ? [process.env.ComSpec ?? "cmd.exe", ["/d", "/c", command]]
       : [command, []];
-  return Effect.callback((resume, signal) => {
+  const signal = currentRequest()?.signal;
+  return new Promise((resolve, reject) => {
     execFile(
       file,
       [...prefix, ...args],
       {
         env: { ...process.env, ...env },
         maxBuffer: 16 * 1_048_576,
-        signal,
+        ...(signal === undefined ? {} : { signal }),
         timeout: 30_000,
         windowsHide: true,
       },
       (error, stdout, stderr) =>
-        resume(
-          Effect.succeed({
-            succeeded: error === null,
-            stdout,
-            output: `${stdout}\n${stderr}`,
-          }),
-        ),
+        signal?.aborted
+          ? reject(signal.reason)
+          : resolve({
+              succeeded: error === null,
+              stdout,
+              output: `${stdout}\n${stderr}`,
+            }),
     );
   });
 }
 
-export function hostCommandOutput(
+export async function hostCommandOutput(
   command: string,
   args: readonly string[],
   options?: Parameters<typeof runHostCommand>[2],
-): Effect.Effect<string, PullRequestsUnavailable> {
-  return runHostCommand(command, args, options).pipe(
-    Effect.flatMap(({ succeeded, stdout }) =>
-      succeeded ? Effect.succeed(stdout) : Effect.fail(unavailable),
-    ),
-  );
+) {
+  const { succeeded, stdout } = await runHostCommand(command, args, options);
+  if (!succeeded) throw unavailable;
+  return stdout;
 }
 
-export function hostGet(
+export async function hostGet(
   url: string,
   headers: Readonly<Record<string, string>>,
-): Effect.Effect<HostResponse, PullRequestsUnavailable> {
-  return Effect.tryPromise({
-    try: async (signal) => {
-      const response = await fetch(url, {
-        headers: { accept: "application/json", ...headers },
-        redirect: "error",
-        signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
-      });
-      const scopes = response.headers.get("x-oauth-scopes");
-      return {
-        status: response.status,
-        body: await response.text(),
-        ...(scopes === null
-          ? {}
-          : {
-              scopes: scopes
-                .split(",")
-                .map((scope) => scope.trim())
-                .filter(Boolean),
-            }),
-      };
-    },
-    catch: () => unavailable,
-  });
+  timeoutMilliseconds = 30_000,
+): Promise<HostResponse> {
+  try {
+    const response = await fetch(url, {
+      headers: { accept: "application/json", ...headers },
+      redirect: "error",
+      signal: withRequestSignal(AbortSignal.timeout(timeoutMilliseconds)),
+    });
+    const scopes = response.headers.get("x-oauth-scopes");
+    return {
+      status: response.status,
+      body: await response.text(),
+      ...(scopes === null
+        ? {}
+        : {
+            scopes: scopes
+              .split(",")
+              .map((scope) => scope.trim())
+              .filter(Boolean),
+          }),
+    };
+  } catch {
+    throw unavailable;
+  }
+}
+
+export function withRequestSignal(signal: AbortSignal) {
+  const request = currentRequest()?.signal;
+  return request === undefined ? signal : AbortSignal.any([request, signal]);
 }
 
 export const gravatarHosts = ["gravatar.com"];
@@ -247,28 +250,42 @@ export function sameEmail(
   return email?.toLowerCase() === author.email.toLowerCase();
 }
 
-export function readRepositoryPages<A>(
-  readPage: (
-    page: number,
-  ) => Effect.Effect<readonly A[], PullRequestsUnavailable>,
+export async function readRepositoryPages<A>(
+  readPage: (page: number) => Promise<readonly A[]>,
   pageSize = repositoriesPerPage,
-  page = 1,
-): Effect.Effect<readonly A[], PullRequestsUnavailable> {
-  return readPage(page).pipe(
-    Effect.flatMap((repositories) =>
-      repositories.length < pageSize || page * pageSize >= repositoriesListed
-        ? Effect.succeed(repositories)
-        : readRepositoryPages(readPage, pageSize, page + 1).pipe(
-            Effect.map((next) => [...repositories, ...next]),
-          ),
-    ),
-  );
+): Promise<readonly A[]> {
+  const repositories: A[] = [];
+  for (let page = 1; ; page += 1) {
+    const read = await readPage(page);
+    repositories.push(...read);
+    if (read.length < pageSize || page * pageSize >= repositoriesListed)
+      return repositories;
+  }
 }
 
-export function decodeHostJson<A>(schema: Schema.Codec<A, unknown>) {
-  const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(schema));
-  return (output: string): Effect.Effect<A, PullRequestsUnavailable> =>
-    decode(output).pipe(Effect.mapError(() => unavailable));
+export function decodeHostJson<Schema extends z.ZodType>(schema: Schema) {
+  return (output: string): z.output<Schema> => {
+    let json: unknown;
+    try {
+      json = JSON.parse(output);
+    } catch {
+      throw unavailable;
+    }
+    const decoded = schema.safeParse(json);
+    if (!decoded.success) throw unavailable;
+    return decoded.data;
+  };
+}
+
+export function isPullRequestsUnavailable(
+  error: unknown,
+): error is PullRequestsUnavailable {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    error._tag === "PullRequestsUnavailable"
+  );
 }
 
 export function cloneableRepository(fields: {
@@ -304,39 +321,60 @@ export function pullRequest(
   };
 }
 
-export function eachHead(
+export async function eachHead(
   heads: readonly string[],
   concurrency: number,
-  read: (head: string) => Effect.Effect<HeadAnswer, PullRequestsUnavailable>,
-): Effect.Effect<PullRequestsByHead, PullRequestsUnavailable> {
-  return Effect.forEach(
-    heads,
-    (head) => read(head).pipe(Effect.map((found) => [head, found] as const)),
-    { concurrency },
-  ).pipe(Effect.map(answeredHeads));
+  read: (head: string) => Promise<HeadAnswer>,
+): Promise<PullRequestsByHead> {
+  return answeredHeads(
+    await mapConcurrently(
+      heads,
+      concurrency,
+      async (head) => [head, await read(head)] as const,
+    ),
+  );
 }
 
-export function inBatches(
+export async function inBatches(
   heads: readonly string[],
   size: number,
-  read: (
-    batch: readonly string[],
-  ) => Effect.Effect<readonly HeadAnswer[], PullRequestsUnavailable>,
-): Effect.Effect<PullRequestsByHead, PullRequestsUnavailable> {
+  read: (batch: readonly string[]) => Promise<readonly HeadAnswer[]>,
+): Promise<PullRequestsByHead> {
   const batches = Array.from(
     { length: Math.ceil(heads.length / size) },
     (_, index) => heads.slice(index * size, index * size + size),
   );
-  return Effect.forEach(
-    batches,
-    (batch) =>
-      read(batch).pipe(
-        Effect.map((answers) =>
-          batch.map((head, index) => [head, answers[index]] as const),
-        ),
-      ),
-    { concurrency: 4 },
-  ).pipe(Effect.map((entries) => answeredHeads(entries.flat())));
+  const entries = await mapConcurrently(batches, 4, async (batch) => {
+    const answers = await read(batch);
+    return batch.map((head, index) => [head, answers[index]] as const);
+  });
+  return answeredHeads(entries.flat());
+}
+
+export async function mapConcurrently<A, B>(
+  items: Iterable<A>,
+  concurrency: number,
+  map: (item: A) => Promise<B>,
+): Promise<B[]> {
+  const list = [...items];
+  const results: B[] = [];
+  let next = 0;
+  let failed = false;
+  const work = async () => {
+    while (!failed && next < list.length) {
+      const index = next++;
+      try {
+        results[index] = await map(list[index] as A);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, list.length) }, work),
+  );
+  return results;
 }
 
 export function pageAnswer(

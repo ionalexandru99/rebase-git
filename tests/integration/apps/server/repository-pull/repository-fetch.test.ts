@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
 import { cloneRepository, fastImport, git } from "#tests-support/git.ts";
@@ -94,14 +93,12 @@ async function fixture() {
     root,
     remote,
     local,
-    fetch: () => Effect.runPromise(routes.fetch({ repositoryId })),
-    status: () => Effect.runPromise(routes.fetchStatus({ repositoryId })),
+    fetch: () => routes.fetch({ repositoryId }),
+    status: () => routes.fetchStatus({ repositoryId }),
     savePrune: (prune: boolean | null) =>
-      Effect.runPromise(
-        routes.saveRepositoryFetchPrune({ repositoryId, prune }),
-      ),
+      routes.saveRepositoryFetchPrune({ repositoryId, prune }),
     configure: (
       setting: Parameters<typeof routes.configureFetch>[0]["setting"],
-    ) => Effect.runPromise(routes.configureFetch({ repositoryId, setting })),
+    ) => routes.configureFetch({ repositoryId, setting }),
   };
 }

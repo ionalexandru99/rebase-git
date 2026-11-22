@@ -1,45 +1,39 @@
 import { chmodSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { setTimeout } from "node:timers/promises";
 import { drizzle } from "drizzle-orm/node-sqlite";
-import { Effect, Schedule } from "effect";
 import { migrateEnvironmentState } from "#server/persistence/sqlite/migrations.ts";
-import {
-  type EnvironmentStorageError,
-  storageSync,
-} from "#server/persistence/sqlite/storage-operation.ts";
+import { storageSync } from "#server/persistence/sqlite/storage-operation.ts";
 import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.ts";
 
 const busyTimeoutMilliseconds = 1_000;
-const databaseLockRetryDelay = "10 millis";
+const databaseLockRetryMilliseconds = 10;
 const databaseLockRetryCount = 10;
+const openFailure = "Could not open Environment state";
 
-export function openEnvironmentDatabase(paths: EnvironmentPaths) {
-  return Effect.gen(function* () {
-    const database = yield* storageSync(
-      "Could not open Environment state",
-      () =>
-        new DatabaseSync(paths.stateDatabase, {
-          allowUnknownNamedParameters: false,
-          enableForeignKeyConstraints: true,
-          timeout: busyTimeoutMilliseconds,
-        }),
+export async function openEnvironmentDatabase(paths: EnvironmentPaths) {
+  const database = storageSync(
+    openFailure,
+    () =>
+      new DatabaseSync(paths.stateDatabase, {
+        allowUnknownNamedParameters: false,
+        enableForeignKeyConstraints: true,
+        timeout: busyTimeoutMilliseconds,
+      }),
+  );
+  try {
+    await retryDatabaseLock(() => configureDatabase(database));
+    await retryDatabaseLock(() =>
+      migrateEnvironmentState(drizzle({ client: database })),
     );
-
-    return yield* Effect.gen(function* () {
-      yield* storageSync("Could not open Environment state", () =>
-        configureDatabase(database),
-      ).pipe(retryDatabaseLock);
-      yield* migrateDatabase(database);
-      yield* storageSync("Could not open Environment state", () =>
-        restrictDatabasePermissions(paths.stateDatabase),
-      );
-      return database;
-    }).pipe(Effect.onError(() => closeEnvironmentDatabase(database)));
-  });
-}
-
-export function closeEnvironmentDatabase(database: DatabaseSync) {
-  return Effect.sync(() => database.close()).pipe(Effect.orDie);
+    storageSync(openFailure, () =>
+      restrictDatabasePermissions(paths.stateDatabase),
+    );
+    return database;
+  } catch (error) {
+    database.close();
+    throw error;
+  }
 }
 
 function configureDatabase(database: DatabaseSync) {
@@ -50,26 +44,20 @@ function configureDatabase(database: DatabaseSync) {
   enableWriteAheadLogging(database);
 }
 
-function migrateDatabase(database: DatabaseSync) {
-  return storageSync("Could not open Environment state", () =>
-    migrateEnvironmentState(drizzle({ client: database })),
-  ).pipe(retryDatabaseLock);
+async function retryDatabaseLock(operation: () => void) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return storageSync(openFailure, operation);
+    } catch (error) {
+      if (attempt === databaseLockRetryCount || !isDatabaseLocked(error))
+        throw error;
+      await setTimeout(databaseLockRetryMilliseconds);
+    }
+  }
 }
 
-function retryDatabaseLock<Value>(
-  effect: Effect.Effect<Value, EnvironmentStorageError>,
-) {
-  return effect.pipe(
-    Effect.retry({
-      schedule: Schedule.spaced(databaseLockRetryDelay),
-      times: databaseLockRetryCount,
-      while: isDatabaseLocked,
-    }),
-  );
-}
-
-function isDatabaseLocked(error: EnvironmentStorageError) {
-  return error.message.includes("database is locked");
+function isDatabaseLocked(error: unknown) {
+  return error instanceof Error && error.message.includes("database is locked");
 }
 
 function enableWriteAheadLogging(database: DatabaseSync) {

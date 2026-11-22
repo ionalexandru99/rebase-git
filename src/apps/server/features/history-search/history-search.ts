@@ -1,8 +1,4 @@
-import { Effect, Stream } from "effect";
-import {
-  type RepositoryRejected,
-  repositoryRejected,
-} from "#contracts/git/git-failures.contract.ts";
+import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   type CodeMatch,
   type CodeSearchUpdate,
@@ -16,7 +12,7 @@ import {
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
-  type GitFailed,
+  isGitFailed,
   runRepositoryGit,
   streamRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
@@ -39,24 +35,40 @@ export function historySearchFeature({
 }): EnvironmentFeature {
   return {
     routes: [
-      stream(HistorySearchApi.code, (input) =>
-        Stream.unwrap(
-          access.requireWorktree(input).pipe(
-            Effect.catchTag("EnvironmentStorageError", Effect.die),
-            Effect.andThen(listCommits(git, input)),
-            Effect.map((oids) => searchCommits(git, input, oids)),
-          ),
-        ).pipe(Stream.mapError(rejected)),
+      stream(HistorySearchApi.code, (input, { signal }) =>
+        searchCode(access, git, input, signal),
       ),
     ],
   };
 }
 
-function listCommits(
+async function* searchCode(
+  access: RepositoryAccess,
+  git: GitCommandRunner,
+  input: SearchCode,
+  signal: AbortSignal,
+) {
+  try {
+    await access.requireWorktree(input);
+    yield* searchCommits(
+      git,
+      input,
+      await listCommits(git, input, signal),
+      signal,
+    );
+  } catch (error) {
+    throw isGitFailed(error)
+      ? repositoryRejected("GitFailed", error.detail)
+      : error;
+  }
+}
+
+async function listCommits(
   git: GitCommandRunner,
   { worktreePath, roots, path }: SearchCode,
+  signal: AbortSignal,
 ) {
-  return runRepositoryGit(
+  const output = await runRepositoryGit(
     git,
     worktreePath,
     ["rev-list", "--stdin", "--", ...(path === undefined ? [] : [path])],
@@ -64,18 +76,24 @@ function listCommits(
       input: `${roots.join("\n")}\n`,
       maxOutputBytes: 64 * 1_048_576,
       timeoutMilliseconds: searchTimeoutMilliseconds,
+      signal,
     },
-  ).pipe(Effect.map((output) => output.split("\n").filter(Boolean)));
+  );
+  return output.split("\n").filter(Boolean);
 }
 
-function searchCommits(
+async function* searchCommits(
   git: GitCommandRunner,
   { worktreePath, text, path }: SearchCode,
   oids: readonly string[],
-): Stream.Stream<CodeSearchUpdate, GitFailed> {
-  if (oids.length === 0) return Stream.make(finished);
+  signal: AbortSignal,
+): AsyncGenerator<CodeSearchUpdate> {
+  if (oids.length === 0) {
+    yield finished;
+    return;
+  }
   const parser = createCodeMatchParser();
-  return streamRepositoryGit(
+  const chunks = streamRepositoryGit(
     git,
     worktreePath,
     [
@@ -96,13 +114,18 @@ function searchCommits(
     {
       input: withProgressMarkers(oids),
       timeoutMilliseconds: searchTimeoutMilliseconds,
+      signal,
     },
-  ).pipe(
-    Stream.map((chunk) => parser.accept(chunk)),
-    Stream.concat(Stream.sync(() => parser.finish())),
-    Stream.flattenIterable,
-    Stream.takeUntil((update) => update === finished),
   );
+  for await (const chunk of chunks)
+    for (const update of parser.accept(chunk)) {
+      yield update;
+      if (update === finished) return;
+    }
+  for (const update of parser.finish()) {
+    yield update;
+    if (update === finished) return;
+  }
 }
 
 function withProgressMarkers(oids: readonly string[]) {
@@ -166,10 +189,4 @@ function createCodeMatchParser() {
 
 function escapeRegularExpression(text: string) {
   return text.replace(/[\\^$.|?*+()[\]{}]/g, "\\$&");
-}
-
-function rejected(failure: RepositoryRejected | GitFailed) {
-  return failure._tag === "GitFailed"
-    ? repositoryRejected("GitFailed", failure.detail)
-    : failure;
 }

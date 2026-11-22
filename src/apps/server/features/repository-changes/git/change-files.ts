@@ -1,6 +1,5 @@
 import { lstat, readFile, readlink, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { Effect } from "effect";
 import { changeIo } from "#server/features/repository-changes/git/change-failures.ts";
 import {
   diffByteLimit,
@@ -39,36 +38,34 @@ export function safeChangePath(directory: string, path: string) {
   });
 }
 
-export function worktreeFile(directory: string, path: string) {
-  return Effect.gen(function* () {
-    const target = yield* safeChangePath(directory, path);
-    return yield* changeIo(async (): Promise<RepositoryFileContent> => {
-      const info = await lstat(target).catch((error) => {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-        throw error;
-      });
-      if (info === null)
-        return { content: null, bytes: 0, mode: "0", identity: "missing" };
-      const mode = info.isSymbolicLink()
-        ? "120000"
-        : info.isDirectory()
-          ? "160000"
-          : info.mode & 0o111
-            ? "100755"
-            : "100644";
-      const content =
-        mode === "160000" || info.size > diffByteLimit
-          ? null
-          : mode === "120000"
-            ? Buffer.from(await readlink(target))
-            : await readFile(target);
-      return {
-        content,
-        bytes: info.size,
-        mode,
-        identity: `${info.size}:${info.mtimeMs}:${info.ctimeMs}:${info.mode}`,
-      };
+export async function worktreeFile(directory: string, path: string) {
+  const target = await safeChangePath(directory, path);
+  return changeIo(async (): Promise<RepositoryFileContent> => {
+    const info = await lstat(target).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
     });
+    if (info === null)
+      return { content: null, bytes: 0, mode: "0", identity: "missing" };
+    const mode = info.isSymbolicLink()
+      ? "120000"
+      : info.isDirectory()
+        ? "160000"
+        : info.mode & 0o111
+          ? "100755"
+          : "100644";
+    const content =
+      mode === "160000" || info.size > diffByteLimit
+        ? null
+        : mode === "120000"
+          ? Buffer.from(await readlink(target))
+          : await readFile(target);
+    return {
+      content,
+      bytes: info.size,
+      mode,
+      identity: `${info.size}:${info.mtimeMs}:${info.ctimeMs}:${info.mode}`,
+    };
   });
 }
 
@@ -76,14 +73,11 @@ export function worktreeIdentities(
   directory: string,
   paths: readonly string[],
 ) {
-  return Effect.all(
-    paths.map((path) =>
-      changeIo(async () => {
-        const info = await lstat(join(directory, path)).catch(() => null);
-        return `${path}:${info?.size}:${info?.mtimeMs}:${info?.ctimeMs}:${info?.mode}`;
-      }),
-    ),
-    { concurrency: 16 },
+  return changeIo(() =>
+    mapConcurrently(paths, async (path) => {
+      const info = await lstat(join(directory, path)).catch(() => null);
+      return `${path}:${info?.size}:${info?.mtimeMs}:${info?.ctimeMs}:${info?.mode}`;
+    }),
   );
 }
 
@@ -91,24 +85,37 @@ export function worktreeLineCounts(
   directory: string,
   paths: readonly string[],
 ) {
-  return Effect.all(
-    paths.map((path) =>
-      changeIo(async () => {
-        const target = join(directory, path);
-        const info = await lstat(target).catch(() => null);
-        if (!info?.isFile() || info.size > previewByteLimit) return null;
-        const content = await readFile(target).catch(() => null);
-        if (content === null || content.includes(0)) return null;
-        let added = content.length > 0 && content.at(-1) !== 10 ? 1 : 0;
-        for (
-          let index = content.indexOf(10);
-          index >= 0;
-          index = content.indexOf(10, index + 1)
-        )
-          added++;
-        return { added, removed: 0 };
-      }),
-    ),
-    { concurrency: 16 },
+  return changeIo(() =>
+    mapConcurrently(paths, async (path) => {
+      const target = join(directory, path);
+      const info = await lstat(target).catch(() => null);
+      if (!info?.isFile() || info.size > previewByteLimit) return null;
+      const content = await readFile(target).catch(() => null);
+      if (content === null || content.includes(0)) return null;
+      let added = content.length > 0 && content.at(-1) !== 10 ? 1 : 0;
+      for (
+        let index = content.indexOf(10);
+        index >= 0;
+        index = content.indexOf(10, index + 1)
+      )
+        added++;
+      return { added, removed: 0 };
+    }),
   );
+}
+
+export async function mapConcurrently<Item, Value>(
+  items: readonly Item[],
+  read: (item: Item) => Promise<Value>,
+) {
+  const values: Value[] = new Array(items.length);
+  let next = 0;
+  const work = async () => {
+    while (next < items.length) {
+      const index = next++;
+      values[index] = await read(items[index] as Item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(16, items.length) }, work));
+  return values;
 }

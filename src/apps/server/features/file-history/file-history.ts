@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import {
   FileHistoryApi,
   type FileHistoryEntry,
@@ -11,6 +10,7 @@ import {
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
+  isGitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 
@@ -29,47 +29,59 @@ export function fileHistoryFeature(
   };
 }
 
-export function readFileHistory(
+export async function readFileHistory(
   git: GitCommandRunner,
   { worktreePath, path, limit }: ReadFileHistory,
 ) {
-  return runRepositoryGit(
-    git,
-    worktreePath,
-    [
-      "log",
-      "--follow",
-      "-M",
-      "-z",
-      "--raw",
-      "--numstat",
-      "--diff-merges=first-parent",
-      "--no-show-signature",
-      "--no-ext-diff",
-      "--no-textconv",
-      `--format=${recordSeparator}${headerFormat}`,
-      `--max-count=${limit + 1}`,
-      "HEAD",
-      "--",
-      path,
-    ],
-    {
-      globalArguments: ["--no-replace-objects"],
-      maxOutputBytes: 64 * 1_048_576,
-    },
-  ).pipe(
-    Effect.catchIf(
-      (error) => /does not have any commits yet/i.test(error.detail),
-      () => Effect.succeed(""),
-    ),
-    Effect.map((output) => {
-      const entries = parseFileHistory(output);
-      return {
-        entries: entries.slice(0, limit),
-        complete: entries.length <= limit,
-      };
-    }),
+  const entries = parseFileHistory(
+    await readFileLog(git, worktreePath, path, limit),
   );
+  return {
+    entries: entries.slice(0, limit),
+    complete: entries.length <= limit,
+  };
+}
+
+async function readFileLog(
+  git: GitCommandRunner,
+  worktreePath: string,
+  path: string,
+  limit: number,
+) {
+  try {
+    return await runRepositoryGit(
+      git,
+      worktreePath,
+      [
+        "log",
+        "--follow",
+        "-M",
+        "-z",
+        "--raw",
+        "--numstat",
+        "--diff-merges=first-parent",
+        "--no-show-signature",
+        "--no-ext-diff",
+        "--no-textconv",
+        `--format=${recordSeparator}${headerFormat}`,
+        `--max-count=${limit + 1}`,
+        "HEAD",
+        "--",
+        path,
+      ],
+      {
+        globalArguments: ["--no-replace-objects"],
+        maxOutputBytes: 64 * 1_048_576,
+      },
+    );
+  } catch (error) {
+    if (
+      isGitFailed(error) &&
+      /does not have any commits yet/i.test(error.detail)
+    )
+      return "";
+    throw error;
+  }
 }
 
 export function parseFileHistory(output: string): FileHistoryEntry[] {

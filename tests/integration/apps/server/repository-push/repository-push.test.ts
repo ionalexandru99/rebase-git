@@ -1,7 +1,7 @@
 import { chmod, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect, Fiber } from "effect";
 import { describe, expect, it } from "vite-plus/test";
+import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import {
   type PushBranch,
   type PushDestination,
@@ -12,7 +12,11 @@ import {
   gitFailed,
 } from "#server/adapters/local-git/git-commands.ts";
 import { cloneRepository, createRepository, git } from "#tests-support/git.ts";
-import { interruptGit, openTestEnvironment } from "#tests-support/server.ts";
+import {
+  interruptGit,
+  openTestEnvironment,
+  openTestServer,
+} from "#tests-support/server.ts";
 
 async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
   const environment = await openTestEnvironment({ git: wrap });
@@ -41,8 +45,8 @@ async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
       mode: { _tag: "FastForward" },
       ...options,
     });
-  const failure = <A, E>(effect: Effect.Effect<A, E>) =>
-    Effect.runPromise(Effect.flip(effect));
+  const failure = (pushed: Promise<unknown>) =>
+    pushed.catch((rejected: unknown) => rejected);
   const tip = (path: string, ref: string) => git(path, "rev-parse", ref);
   return { root, remote, local, other, service, scope, push, failure, tip };
 }
@@ -58,9 +62,7 @@ describe("pushing branches", () => {
     await git(f.local, "switch", "-c", "topic");
     const pushed = await commit(f.local, "topic work");
 
-    const result = await Effect.runPromise(
-      f.push("topic", undefined, { setUpstream: true }),
-    );
+    const result = await f.push("topic", undefined, { setUpstream: true });
 
     expect(result).toEqual({
       destination: { remote: "origin", branch: "topic" },
@@ -76,9 +78,7 @@ describe("pushing branches", () => {
     const f = await fixture();
     const pushed = await commit(f.local, "review copy");
 
-    await Effect.runPromise(
-      f.push("main", { remote: "origin", branch: "review/main" }),
-    );
+    await f.push("main", { remote: "origin", branch: "review/main" });
 
     expect(await f.tip(f.remote, "refs/heads/review/main")).toBe(pushed);
     expect(await f.tip(f.local, "refs/remotes/origin/review/main")).toBe(
@@ -109,11 +109,9 @@ describe("pushing branches", () => {
     const rewritten = await commit(f.local, "rewritten");
     const reviewed = await f.tip(f.local, "refs/remotes/origin/main");
 
-    await Effect.runPromise(
-      f.push("main", undefined, {
-        mode: { _tag: "ForceWithLease", expectedOid: reviewed },
-      }),
-    );
+    await f.push("main", undefined, {
+      mode: { _tag: "ForceWithLease", expectedOid: reviewed },
+    });
 
     expect(await f.tip(f.remote, "refs/heads/main")).toBe(rewritten);
   });
@@ -185,23 +183,18 @@ describe("pushing branches", () => {
   it("reports a push that reached the remote before Git stopped as pushed", async () => {
     const f = await fixture((runner) => ({
       ...runner,
-      run: (command) =>
-        command.arguments[0] === "push"
-          ? runner
-              .run({
-                ...command,
-                arguments: [
-                  "push",
-                  f.remote,
-                  "refs/heads/main:refs/heads/main",
-                ],
-              })
-              .pipe(Effect.andThen(Effect.fail(gitFailed("Timeout"))))
-          : runner.run(command),
+      run: async (command) => {
+        if (command.arguments[0] !== "push") return runner.run(command);
+        await runner.run({
+          ...command,
+          arguments: ["push", f.remote, "refs/heads/main:refs/heads/main"],
+        });
+        throw gitFailed("Timeout");
+      },
     }));
     const pushed = await commit(f.local, "arrived");
 
-    await expect(Effect.runPromise(f.push("main"))).resolves.toMatchObject({
+    await expect(f.push("main")).resolves.toMatchObject({
       target: pushed,
     });
     expect(await f.tip(f.local, "refs/remotes/origin/main")).toBe(pushed);
@@ -220,37 +213,58 @@ describe("pushing branches", () => {
   });
 
   it("reconciles the tracking branch after a cancelled push", async () => {
-    let arrived: () => void = () => undefined;
-    const pushStarted = new Promise<void>((resolve) => {
-      arrived = resolve;
+    const pushStarted = Promise.withResolvers<void>();
+    let remote = "";
+    const server = await openTestServer({
+      git: (runner) => ({
+        ...runner,
+        run: async (command) => {
+          if (command.arguments[0] !== "push") return runner.run(command);
+          await runner.run({
+            ...command,
+            arguments: ["push", remote, "refs/heads/main:refs/heads/main"],
+          });
+          pushStarted.resolve();
+          const { signal } = command;
+          return new Promise((_, reject) =>
+            signal?.addEventListener("abort", () => reject(signal.reason), {
+              once: true,
+            }),
+          );
+        },
+      }),
     });
-    const f = await fixture((runner) => ({
-      ...runner,
-      run: (command) =>
-        command.arguments[0] === "push"
-          ? runner
-              .run({
-                ...command,
-                arguments: [
-                  "push",
-                  f.remote,
-                  "refs/heads/main:refs/heads/main",
-                ],
-              })
-              .pipe(
-                Effect.tap(() => Effect.sync(arrived)),
-                Effect.andThen(Effect.never),
-              )
-          : runner.run(command),
-    }));
-    const pushed = await commit(f.local, "arrived");
+    remote = join(server.home, "remote.git");
+    const local = join(server.home, "local");
+    await git(server.home, "init", "--bare", "-b", "main", remote);
+    await createRepository(local);
+    await git(local, "remote", "add", "origin", remote);
+    await git(local, "push", "-u", "origin", "main");
+    const requests = server.requests(server.owner);
+    const { id: repositoryId } = await requests(RepositoryCatalogApi.remember, {
+      path: local,
+    });
+    const pushed = await commit(local, "arrived");
+    const cancel = new AbortController();
 
-    const fiber = Effect.runFork(f.push("main"));
-    await pushStarted;
-    await Effect.runPromise(Fiber.interrupt(fiber));
+    const pushing = requests(
+      RepositoryPushApi.push,
+      {
+        repositoryId,
+        worktreePath: local,
+        branch: "main",
+        destination: { remote: "origin", branch: "main" },
+        setUpstream: false,
+        mode: { _tag: "FastForward" },
+      },
+      { signal: cancel.signal },
+    );
+    await pushStarted.promise;
+    cancel.abort();
+    await pushing.catch(() => undefined);
 
     await expect
-      .poll(() => f.tip(f.local, "refs/remotes/origin/main"))
+      .poll(() => git(local, "rev-parse", "refs/remotes/origin/main"))
       .toBe(pushed);
   });
 });
@@ -262,9 +276,7 @@ describe("pushing tags", () => {
     await git(f.local, "tag", "--no-sign", "v1.1");
     await git(f.local, "tag", "--no-sign", "local-only");
     const pushTags = (tags: readonly string[]) =>
-      Effect.runPromise(
-        f.service.pushTags({ ...f.scope, remote: "origin", tags }),
-      );
+      f.service.pushTags({ ...f.scope, remote: "origin", tags });
 
     await expect(pushTags(["v1.0"])).resolves.toEqual({
       remote: "origin",
@@ -306,9 +318,11 @@ describe("pushing tags", () => {
     const pushTag = async (applied: boolean) => {
       const f = await fixture(interruptGit("push", applied));
       await git(f.local, "tag", "-a", "v3.0", "-m", "Release 3.0");
-      const pushed = Effect.runPromise(
-        f.service.pushTags({ ...f.scope, remote: "origin", tags: ["v3.0"] }),
-      );
+      const pushed = f.service.pushTags({
+        ...f.scope,
+        remote: "origin",
+        tags: ["v3.0"],
+      });
       return { f, pushed };
     };
 

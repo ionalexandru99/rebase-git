@@ -1,34 +1,27 @@
-import { Effect, Schema } from "effect";
-import type {
-  PullRequest,
-  PullRequestsUnavailable,
-} from "#contracts/pull-requests/pull-requests.contract.ts";
+import { z } from "zod";
+import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
   type AvatarAuthor,
   avatarUrl,
+  decodeHostJson,
   foundAvatar,
   type GitHost,
   gravatarHosts,
   type HostedPullRequest,
   hostCommandOutput,
+  mapConcurrently,
   pullRequest,
   sameEmail,
   signedInTool,
-  unavailable,
 } from "#server/features/source-control/git-host.ts";
 import { forgejoCloneable } from "#server/features/source-control/hosts/forgejo-repositories.ts";
 
 export interface TeaCli {
-  readonly version: Effect.Effect<string | undefined>;
-  readonly logins: Effect.Effect<string>;
-  readonly login: (
-    name: string,
-  ) => Effect.Effect<string, PullRequestsUnavailable>;
-  readonly api: (
-    login: string,
-    endpoint: string,
-  ) => Effect.Effect<string, PullRequestsUnavailable>;
+  readonly version: () => Promise<string | undefined>;
+  readonly logins: () => Promise<string>;
+  readonly login: (name: string) => Promise<string>;
+  readonly api: (login: string, endpoint: string) => Promise<string>;
 }
 
 export interface TeaLogin {
@@ -54,19 +47,17 @@ const checksAtOnce = 8;
 export function createTeaCli(): TeaCli {
   const tea = (args: readonly string[]) => hostCommandOutput("tea", args);
   return {
-    version: tea(["--version"]).pipe(
-      Effect.map((output) => /(\d+)\.(\d+)\.\d+/.exec(output)),
-      Effect.map((version) =>
-        version === null ||
+    version: async () => {
+      const version = await tea(["--version"]).then(
+        (output) => /(\d+)\.(\d+)\.\d+/.exec(output),
+        () => null,
+      );
+      return version === null ||
         (Number(version[1]) === 0 && Number(version[2]) < 12)
-          ? undefined
-          : `tea ${version[0]}`,
-      ),
-      Effect.orElseSucceed(() => undefined),
-    ),
-    logins: tea(["logins", "list", "--output", "json"]).pipe(
-      Effect.orElseSucceed(() => "[]"),
-    ),
+        ? undefined
+        : `tea ${version[0]}`;
+    },
+    logins: () => tea(["logins", "list", "--output", "json"]).catch(() => "[]"),
     login: (name) => tea(["logins", name]),
     api: (login, endpoint) => tea(["api", "--login", login, endpoint]),
   };
@@ -75,57 +66,47 @@ export function createTeaCli(): TeaCli {
 export function createForgejoHost(cli: TeaCli): GitHost {
   return {
     kind: "forgejo",
-    tool: signedInTool(
-      cli.version,
-      readLogins(cli).pipe(
-        Effect.map((logins) =>
-          logins.map(({ server, account }) => ({ host: server, account })),
-        ),
-      ),
+    tool: signedInTool(cli.version, async () =>
+      (await readLogins(cli)).map(({ server, account }) => ({
+        host: server,
+        account,
+      })),
     ),
     repositoryId: (remoteUrl) => forgejoRepository(remoteUrl)?.id,
-    cloneable: readLogins(cli).pipe(
-      Effect.flatMap((logins) => forgejoCloneable(cli, logins)),
-    ),
-    repository: (remoteUrl) => {
+    cloneable: async () => forgejoCloneable(cli, await readLogins(cli)),
+    repository: async (remoteUrl) => {
       const repository = forgejoRepository(remoteUrl);
-      if (repository === undefined) return Effect.succeed(undefined);
-      return readLogins(cli).pipe(
-        Effect.map((logins) => {
-          const login = loginFor(logins, repository);
-          return (
-            login && {
-              id: repository.id,
-              pullRequests: (heads: readonly string[]) =>
-                listPullRequests(cli, login, repository, heads),
-              pullRequest: (number: number) =>
-                readPullRequest(cli, login, repository, number),
-              avatar: (author: AvatarAuthor) =>
-                readAvatar(cli, login, repository, author),
-            }
-          );
-        }),
+      if (repository === undefined) return undefined;
+      const login = loginFor(await readLogins(cli), repository);
+      return (
+        login && {
+          id: repository.id,
+          pullRequests: (heads) =>
+            listPullRequests(cli, login, repository, heads),
+          pullRequest: (number) =>
+            readPullRequest(cli, login, repository, number),
+          avatar: (author) => readAvatar(cli, login, repository, author),
+        }
       );
     },
   };
 }
 
-const TeaLogins = Schema.fromJsonString(
-  Schema.Array(
-    Schema.Struct({
-      name: Schema.String,
-      url: Schema.String,
-      ssh_host: Schema.optionalKey(Schema.String),
-      user: Schema.optionalKey(Schema.String),
+const decodeTeaLogins = decodeHostJson(
+  z.array(
+    z.object({
+      name: z.string(),
+      url: z.string(),
+      ssh_host: z.string().optional(),
+      user: z.string().optional(),
     }),
   ),
 );
 
-function readLogins(cli: TeaCli): Effect.Effect<readonly TeaLogin[]> {
-  return cli.logins.pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(TeaLogins)),
-    Effect.map((logins) =>
-      logins.flatMap(({ name, url, ssh_host, user }) => {
+async function readLogins(cli: TeaCli): Promise<readonly TeaLogin[]> {
+  try {
+    return decodeTeaLogins(await cli.logins()).flatMap(
+      ({ name, url, ssh_host, user }) => {
         const server = URL.parse(url);
         return server === null || server.hostname === ""
           ? []
@@ -138,10 +119,11 @@ function readLogins(cli: TeaCli): Effect.Effect<readonly TeaLogin[]> {
                 account: user || name,
               },
             ];
-      }),
-    ),
-    Effect.orElseSucceed(() => []),
-  );
+      },
+    );
+  } catch {
+    return [];
+  }
 }
 
 function loginFor(
@@ -182,145 +164,126 @@ function fullName({ owner, name }: ForgejoRepository) {
   return `${owner}/${name}`.toLowerCase();
 }
 
-function listPullRequests(
+async function listPullRequests(
   cli: TeaCli,
   login: TeaLogin,
   repository: ForgejoRepository,
   heads: readonly string[],
 ) {
-  return Effect.gen(function* () {
-    const wanted = new Set(heads);
-    const read = yield* readPullRequests(cli, login.name, repository);
-    const nodes = read.nodes.filter(
-      (node) =>
-        wanted.has(node.head.ref) &&
-        node.head.repo?.full_name.toLowerCase() === fullName(repository) &&
-        isServerLink(node.html_url, login.server),
-    );
-    const found = yield* Effect.forEach(
-      nodes,
-      (node) =>
-        checksOf(cli, login.name, repository, node).pipe(
-          Effect.map((checks) => ({
-            head: node.head.ref,
-            pullRequest: forgejoPullRequest(node, checks),
-          })),
-        ),
-      { concurrency: checksAtOnce },
-    );
-    return new Map(
-      heads.flatMap((head) => {
-        const pullRequests = found
-          .filter((candidate) => candidate.head === head)
-          .map(({ pullRequest }) => pullRequest);
-        return read.complete || pullRequests.length > 0
-          ? [[head, pullRequests] as const]
-          : [];
-      }),
-    );
-  });
+  const wanted = new Set(heads);
+  const read = await readPullRequests(cli, login.name, repository);
+  const nodes = read.nodes.filter(
+    (node) =>
+      wanted.has(node.head.ref) &&
+      node.head.repo?.full_name.toLowerCase() === fullName(repository) &&
+      isServerLink(node.html_url, login.server),
+  );
+  const found = await mapConcurrently(nodes, checksAtOnce, async (node) => ({
+    head: node.head.ref,
+    pullRequest: forgejoPullRequest(
+      node,
+      await checksOf(cli, login.name, repository, node),
+    ),
+  }));
+  return new Map(
+    heads.flatMap((head) => {
+      const pullRequests = found
+        .filter((candidate) => candidate.head === head)
+        .map(({ pullRequest }) => pullRequest);
+      return read.complete || pullRequests.length > 0
+        ? [[head, pullRequests] as const]
+        : [];
+    }),
+  );
 }
 
-function readPullRequest(
+async function readPullRequest(
   cli: TeaCli,
   login: TeaLogin,
   repository: ForgejoRepository,
   number: number,
 ) {
-  return cli
-    .api(login.name, `${repositoryEndpoint(repository)}/pulls/${number}`)
-    .pipe(
-      Effect.flatMap(decodePullRequest),
-      Effect.flatMap((node) =>
-        isServerLink(node.html_url, login.server)
-          ? checksOf(cli, login.name, repository, node).pipe(
-              Effect.map((checks) => forgejoPullRequest(node, checks)),
-            )
-          : Effect.succeed(undefined),
+  try {
+    const node = decodePullRequest(
+      await cli.api(
+        login.name,
+        `${repositoryEndpoint(repository)}/pulls/${number}`,
       ),
-      Effect.orElseSucceed(() => undefined),
     );
+    return isServerLink(node.html_url, login.server)
+      ? forgejoPullRequest(
+          node,
+          await checksOf(cli, login.name, repository, node),
+        )
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
-function readAvatar(
+async function readAvatar(
   cli: TeaCli,
   login: TeaLogin,
   repository: ForgejoRepository,
   author: AvatarAuthor,
 ) {
-  return cli
-    .api(
+  const commit = decodeCommit(
+    await cli.api(
       login.name,
       `${repositoryEndpoint(repository)}/git/commits/${encodeURIComponent(author.commit)}?stat=false&verification=false&files=false`,
-    )
-    .pipe(
-      Effect.flatMap(decodeCommit),
-      Effect.mapError(() => unavailable),
-      Effect.map((commit) => {
-        const url = sameEmail(commit.commit.author?.email, author)
-          ? avatarUrl(
-              commit.author?.avatar_url,
-              [login.host, ...gravatarHosts],
-              { size: "40" },
-            )
-          : undefined;
-        return foundAvatar(url);
-      }),
-    );
+    ),
+  );
+  const url = sameEmail(commit.commit.author?.email, author)
+    ? avatarUrl(commit.author?.avatar_url, [login.host, ...gravatarHosts], {
+        size: "40",
+      })
+    : undefined;
+  return foundAvatar(url);
 }
 
-function readPullRequests(
+async function readPullRequests(
   cli: TeaCli,
   login: string,
   repository: ForgejoRepository,
-  page = 1,
-): Effect.Effect<
-  { readonly nodes: readonly PullRequestNode[]; readonly complete: boolean },
-  PullRequestsUnavailable
-> {
-  return cli
-    .api(
-      login,
-      `${repositoryEndpoint(repository)}/pulls?${new URLSearchParams({
-        state: "all",
-        sort: "recentupdate",
-        limit: String(pageSize),
-        page: String(page),
-      })}`,
-    )
-    .pipe(
-      Effect.flatMap(decodePullRequests),
-      Effect.mapError(() => unavailable),
-      Effect.flatMap((nodes) =>
-        nodes.length < pageSize || page === pagesRead
-          ? Effect.succeed({ nodes, complete: nodes.length < pageSize })
-          : readPullRequests(cli, login, repository, page + 1).pipe(
-              Effect.map((rest) => ({
-                ...rest,
-                nodes: [...nodes, ...rest.nodes],
-              })),
-            ),
+) {
+  const nodes: PullRequestNode[] = [];
+  for (let page = 1; ; page += 1) {
+    const read = decodePullRequests(
+      await cli.api(
+        login,
+        `${repositoryEndpoint(repository)}/pulls?${new URLSearchParams({
+          state: "all",
+          sort: "recentupdate",
+          limit: String(pageSize),
+          page: String(page),
+        })}`,
       ),
     );
+    nodes.push(...read);
+    if (read.length < pageSize || page === pagesRead)
+      return { nodes, complete: read.length < pageSize };
+  }
 }
 
-function checksOf(
+async function checksOf(
   cli: TeaCli,
   login: string,
   repository: ForgejoRepository,
   node: PullRequestNode,
-): Effect.Effect<PullRequest["checks"]> {
-  if (node.state !== "open") return Effect.succeed(undefined);
-  return cli
-    .api(
-      login,
-      `${repositoryEndpoint(repository)}/commits/${encodeURIComponent(node.head.sha)}/status`,
-    )
-    .pipe(
-      Effect.flatMap(decodeStatus),
-      Effect.map(checksState),
-      Effect.orElseSucceed(() => undefined),
+): Promise<PullRequest["checks"]> {
+  if (node.state !== "open") return undefined;
+  try {
+    return checksState(
+      decodeStatus(
+        await cli.api(
+          login,
+          `${repositoryEndpoint(repository)}/commits/${encodeURIComponent(node.head.sha)}/status`,
+        ),
+      ),
     );
+  } catch {
+    return undefined;
+  }
 }
 
 function repositoryEndpoint({ owner, name }: ForgejoRepository) {
@@ -332,48 +295,36 @@ function isServerLink(url: string, server: string) {
   return link?.protocol === "https:" && link.host === server;
 }
 
-const PullRequestNode = Schema.Struct({
-  number: Schema.Int,
-  html_url: Schema.String,
-  title: Schema.String,
-  state: Schema.String,
-  merged: Schema.Boolean,
-  draft: Schema.optionalKey(Schema.Boolean),
-  head: Schema.Struct({
-    ref: Schema.String,
-    sha: Schema.String,
-    repo: Schema.NullOr(Schema.Struct({ full_name: Schema.String })),
+const PullRequestNode = z.object({
+  number: z.number().int(),
+  html_url: z.string(),
+  title: z.string(),
+  state: z.string(),
+  merged: z.boolean(),
+  draft: z.boolean().optional(),
+  head: z.object({
+    ref: z.string(),
+    sha: z.string(),
+    repo: z.object({ full_name: z.string() }).nullable(),
   }),
 });
-type PullRequestNode = typeof PullRequestNode.Type;
+type PullRequestNode = z.infer<typeof PullRequestNode>;
 
-const decodePullRequests = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(Schema.Array(PullRequestNode)),
-);
+const decodePullRequests = decodeHostJson(z.array(PullRequestNode));
 
-const decodePullRequest = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(PullRequestNode),
-);
+const decodePullRequest = decodeHostJson(PullRequestNode);
 
-const decodeCommit = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(
-    Schema.Struct({
-      commit: Schema.Struct({
-        author: Schema.optionalKey(
-          Schema.NullOr(Schema.Struct({ email: Schema.String })),
-        ),
-      }),
-      author: Schema.optionalKey(
-        Schema.NullOr(Schema.Struct({ avatar_url: Schema.String })),
-      ),
+const decodeCommit = decodeHostJson(
+  z.object({
+    commit: z.object({
+      author: z.object({ email: z.string() }).nullable().optional(),
     }),
-  ),
+    author: z.object({ avatar_url: z.string() }).nullable().optional(),
+  }),
 );
 
-const decodeStatus = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(
-    Schema.Struct({ state: Schema.String, total_count: Schema.Int }),
-  ),
+const decodeStatus = decodeHostJson(
+  z.object({ state: z.string(), total_count: z.number().int() }),
 );
 
 function forgejoPullRequest(

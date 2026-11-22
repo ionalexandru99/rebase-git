@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import type {
   RepositoryStash,
   RepositoryStashes,
@@ -21,23 +20,21 @@ interface StashEntry {
   readonly recordedAt: number;
 }
 
-export function listStashes(git: GitCommandRunner, directory: string) {
-  return Effect.gen(function* () {
-    const entries = yield* readStashEntries(git, directory);
-    const kept = entries.slice(0, maximumStashes);
-    const staged = yield* readStagedFlags(git, directory, kept);
-    return {
-      stashes: kept.map(
-        (entry, index): RepositoryStash => ({
-          oid: entry.oid,
-          ...describeStash(entry.subject),
-          staged: staged[index] ?? false,
-          recordedAt: entry.recordedAt,
-        }),
-      ),
-      truncated: entries.length > maximumStashes,
-    } satisfies RepositoryStashes;
-  });
+export async function listStashes(git: GitCommandRunner, directory: string) {
+  const entries = await readStashEntries(git, directory);
+  const kept = entries.slice(0, maximumStashes);
+  const staged = await readStagedFlags(git, directory, kept);
+  return {
+    stashes: kept.map(
+      (entry, index): RepositoryStash => ({
+        oid: entry.oid,
+        ...describeStash(entry.subject),
+        staged: staged[index] ?? false,
+        recordedAt: entry.recordedAt,
+      }),
+    ),
+    truncated: entries.length > maximumStashes,
+  } satisfies RepositoryStashes;
 }
 
 export function describeStash(subject: string) {
@@ -66,33 +63,29 @@ export function describeStash(subject: string) {
   };
 }
 
-export function requireStashIndex(
+export async function requireStashIndex(
   git: GitCommandRunner,
   directory: string,
   oid: string,
 ) {
-  return readStashEntries(git, directory).pipe(
-    Effect.flatMap((entries) => {
-      const index = entries.findIndex((entry) => entry.oid === oid);
-      const entry = entries[index];
-      return entry === undefined
-        ? Effect.fail(stashMissing())
-        : Effect.succeed({ index, subject: entry.subject });
-    }),
-  );
+  const entries = await readStashEntries(git, directory);
+  const index = entries.findIndex((entry) => entry.oid === oid);
+  const entry = entries[index];
+  if (entry === undefined) throw stashMissing();
+  return { index, subject: entry.subject };
 }
 
-export function dropEntry(
+export async function dropEntry(
   git: GitCommandRunner,
   directory: string,
   { index }: { readonly index: number },
 ) {
-  return runRepositoryGit(git, directory, [
+  await runRepositoryGit(git, directory, [
     "stash",
     "drop",
     "--quiet",
     `stash@{${index}}`,
-  ]).pipe(Effect.asVoid);
+  ]);
 }
 
 export function stashMissing(): StashMissing {
@@ -103,8 +96,8 @@ export function stashRejected(reason: StashRejected["reason"]): StashRejected {
   return { _tag: "StashRejected", reason };
 }
 
-function readStashEntries(git: GitCommandRunner, directory: string) {
-  return runRepositoryGit(
+async function readStashEntries(git: GitCommandRunner, directory: string) {
+  const output = await runRepositoryGit(
     git,
     directory,
     [
@@ -115,31 +108,28 @@ function readStashEntries(git: GitCommandRunner, directory: string) {
       `--format=%H${separator}%gd${separator}%gs${separator}%s`,
     ],
     { maxOutputBytes: 16 * 1_048_576 },
-  ).pipe(
-    Effect.map((output) =>
-      output
-        .split("\n")
-        .filter((line) => line.length > 0)
-        .map((line): StashEntry => {
-          const [oid = "", selector = "", subject = "", message = ""] =
-            line.split(separator);
-          return {
-            oid,
-            subject: subject === gitAutoStash ? message : subject,
-            recordedAt: Number(/\{(\d+)\}$/.exec(selector)?.[1] ?? 0),
-          };
-        }),
-    ),
   );
+  return output
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line): StashEntry => {
+      const [oid = "", selector = "", subject = "", message = ""] =
+        line.split(separator);
+      return {
+        oid,
+        subject: subject === gitAutoStash ? message : subject,
+        recordedAt: Number(/\{(\d+)\}$/.exec(selector)?.[1] ?? 0),
+      };
+    });
 }
 
-function readStagedFlags(
+async function readStagedFlags(
   git: GitCommandRunner,
   directory: string,
   entries: readonly StashEntry[],
 ) {
-  if (entries.length === 0) return Effect.succeed([]);
-  return runRepositoryGit(
+  if (entries.length === 0) return [];
+  const output = await runRepositoryGit(
     git,
     directory,
     ["cat-file", "--batch-check=%(objectname)"],
@@ -149,14 +139,9 @@ function readStagedFlags(
         .join(""),
       maxOutputBytes: 16 * 1_048_576,
     },
-  ).pipe(
-    Effect.map((output) => {
-      const trees = output.split("\n");
-      return entries.map(
-        (_, index) => trees[index * 2] !== trees[index * 2 + 1],
-      );
-    }),
   );
+  const trees = output.split("\n");
+  return entries.map((_, index) => trees[index * 2] !== trees[index * 2 + 1]);
 }
 
 function branchOf(name: string) {

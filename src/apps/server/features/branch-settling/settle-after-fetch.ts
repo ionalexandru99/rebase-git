@@ -1,4 +1,3 @@
-import { Cause, Effect } from "effect";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
 import {
@@ -21,7 +20,10 @@ import {
 import { listPullRequests } from "#server/features/pull-requests/pull-requests.ts";
 import type { AfterFetch } from "#server/features/repository-pull/repository-fetch.ts";
 import { branchSettlements } from "#server/features/repository-refs/git/read-repository-refs.ts";
-import type { HostedPullRequest } from "#server/features/source-control/git-host.ts";
+import {
+  type HostedPullRequest,
+  mapConcurrently,
+} from "#server/features/source-control/git-host.ts";
 import type { SourceControl } from "#server/features/source-control/source-control.ts";
 import {
   type RepositoryAccess,
@@ -45,15 +47,15 @@ export function settleBranchesAfterFetch({
   readonly git: GitCommandRunner;
   readonly sourceControl: SourceControl;
 }): AfterFetch {
-  return (directory, repositoryIds) =>
-    Effect.gen(function* () {
-      const config = yield* readSettlingConfig(git, directory);
+  return async (directory, repositoryIds) => {
+    try {
+      const config = await readSettlingConfig(git, directory);
       const { autoSettle, deleteSettledAfter } = branchSettings(config);
       const marked = branchSettlements(config);
-      const main = (yield* readWorktrees(git, directory)).find(
+      const main = (await readWorktrees(git, directory)).find(
         (worktree) => worktree.main,
       );
-      const kept = yield* operationBranches(git, directory);
+      const kept = await operationBranches(git, directory);
       if (main?.head.branch !== undefined) kept.add(main.head.branch);
       const today = settledToday();
       const expired = new Set(
@@ -66,15 +68,17 @@ export function settleBranchesAfterFetch({
       );
       if (!autoSettle && expired.size === 0) return;
       const pullRequests = new Map(
-        (yield* listPullRequests(
-          git,
-          sourceControl,
-          directory,
-          ({ branch, default: isDefault }) =>
-            !isDefault &&
-            (expired.has(branch) ||
-              (autoSettle && !kept.has(branch) && !marked.has(branch))),
-        ))?.branches.map(
+        (
+          await listPullRequests(
+            git,
+            sourceControl,
+            directory,
+            ({ branch, default: isDefault }) =>
+              !isDefault &&
+              (expired.has(branch) ||
+                (autoSettle && !kept.has(branch) && !marked.has(branch))),
+          )
+        )?.branches.map(
           ({ branch, pullRequests }) => [branch, pullRequests] as const,
         ) ?? [],
       );
@@ -82,9 +86,9 @@ export function settleBranchesAfterFetch({
         isMerged(found) && !marked.has(branch) ? [branch] : [],
       );
       if (merged.length > 0)
-        yield* writeSettlements(git, coordination, directory, merged, today);
-      const locals = yield* readLocalBranches(git, directory);
-      const tips = yield* mergedTips(
+        await writeSettlements(git, coordination, directory, merged, today);
+      const locals = await readLocalBranches(git, directory);
+      const tips = await mergedTips(
         git,
         directory,
         locals,
@@ -100,7 +104,7 @@ export function settleBranchesAfterFetch({
       );
       const deleted =
         candidates.length > 0 &&
-        (yield* deleteSettledBranches(
+        (await deleteSettledBranches(
           git,
           access,
           coordination,
@@ -109,13 +113,8 @@ export function settleBranchesAfterFetch({
         ));
       if (merged.length > 0 || deleted)
         events.publishChanged(repositoryIds, "Refs");
-    }).pipe(
-      Effect.catchCause((cause) =>
-        Cause.hasInterrupts(cause)
-          ? Effect.failCause(Cause.interrupt())
-          : Effect.void,
-      ),
-    );
+    } catch {}
+  };
 }
 
 function deletionCandidate(
@@ -131,40 +130,34 @@ function deletionCandidate(
   return mergedHeads(pullRequests).length > 0 ? [] : [{ name }];
 }
 
-function mergedTips(
+async function mergedTips(
   git: GitCommandRunner,
   directory: string,
   locals: ReadonlyMap<string, LocalBranchHead>,
   branches: ReadonlyMap<string, readonly HostedPullRequest[]>,
 ) {
-  return Effect.gen(function* () {
-    const merged = yield* Effect.forEach(
-      [...branches],
-      ([name, pullRequests]) => {
-        const tip = locals.get(name)?.tip;
-        const heads = mergedHeads(pullRequests);
-        if (tip === undefined || heads.length === 0) return Effect.succeed([]);
-        if (heads.some((head) => tip.startsWith(head)))
-          return Effect.succeed([[name, tip] as const]);
-        return Effect.forEach(heads, (head) =>
-          runRepositoryGitOutput(
-            git,
-            directory,
-            ["merge-base", "--is-ancestor", tip, head],
-            { exitCodes: [0, 1, 128] },
-          ),
-        ).pipe(
-          Effect.map((checks) =>
-            checks.some(({ exitCode }) => exitCode === 0)
-              ? [[name, tip] as const]
-              : [],
-          ),
+  const merged = await mapConcurrently(
+    branches,
+    ancestryChecks,
+    async ([name, pullRequests]) => {
+      const tip = locals.get(name)?.tip;
+      const heads = mergedHeads(pullRequests);
+      if (tip === undefined || heads.length === 0) return [];
+      if (heads.some((head) => tip.startsWith(head)))
+        return [[name, tip] as const];
+      for (const head of heads) {
+        const { exitCode } = await runRepositoryGitOutput(
+          git,
+          directory,
+          ["merge-base", "--is-ancestor", tip, head],
+          { exitCodes: [0, 1, 128] },
         );
-      },
-      { concurrency: ancestryChecks },
-    );
-    return new Map(merged.flat());
-  });
+        if (exitCode === 0) return [[name, tip] as const];
+      }
+      return [];
+    },
+  );
+  return new Map(merged.flat());
 }
 
 function mergedHeads(pullRequests: readonly HostedPullRequest[]) {
@@ -188,8 +181,8 @@ interface LocalBranchHead {
   readonly pushed: boolean;
 }
 
-function readLocalBranches(git: GitCommandRunner, directory: string) {
-  return runRepositoryGit(
+async function readLocalBranches(git: GitCommandRunner, directory: string) {
+  const output = await runRepositoryGit(
     git,
     directory,
     [
@@ -199,28 +192,23 @@ function readLocalBranches(git: GitCommandRunner, directory: string) {
       "refs/remotes",
     ],
     { maxOutputBytes: 16 * 1_048_576 },
-  ).pipe(
-    Effect.map((output) => {
-      const refs = output
-        .split("\n")
-        .filter((line) => line.length > 0)
-        .map((line) => {
-          const [ref = "", tip = "", upstream = ""] = line.split("\0");
-          return { ref, tip, upstream };
-        });
-      const remote = remoteBranchNames(
-        refs.flatMap(({ ref }) =>
-          ref.startsWith("refs/remotes/") ? [ref] : [],
-        ),
-      );
-      return new Map(
-        refs.flatMap(({ ref, tip, upstream }): [string, LocalBranchHead][] => {
-          const name = ref.slice("refs/heads/".length);
-          return ref.startsWith("refs/heads/")
-            ? [[name, { tip, pushed: upstream !== "" || remote.has(name) }]]
-            : [];
-        }),
-      );
+  );
+  const refs = output
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const [ref = "", tip = "", upstream = ""] = line.split("\0");
+      return { ref, tip, upstream };
+    });
+  const remote = remoteBranchNames(
+    refs.flatMap(({ ref }) => (ref.startsWith("refs/remotes/") ? [ref] : [])),
+  );
+  return new Map(
+    refs.flatMap(({ ref, tip, upstream }): [string, LocalBranchHead][] => {
+      const name = ref.slice("refs/heads/".length);
+      return ref.startsWith("refs/heads/")
+        ? [[name, { tip, pushed: upstream !== "" || remote.has(name) }]]
+        : [];
     }),
   );
 }

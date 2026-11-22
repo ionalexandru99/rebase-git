@@ -1,4 +1,3 @@
-import { Effect, Stream } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { createRepositoryAccess } from "#server/repository/repository-access.ts";
@@ -15,15 +14,13 @@ describe("repository access", () => {
       "/missing/rebase/linked": ["/missing/rebase/linked", commonDirectory],
     });
 
-    await Effect.runPromise(
-      Effect.all([
-        access.requireWorktree({ repositoryId, worktreePath: repositoryPath }),
-        access.requireWorktree({
-          repositoryId,
-          worktreePath: "/missing/rebase/linked",
-        }),
-      ]),
-    );
+    await Promise.all([
+      access.requireWorktree({ repositoryId, worktreePath: repositoryPath }),
+      access.requireWorktree({
+        repositoryId,
+        worktreePath: "/missing/rebase/linked",
+      }),
+    ]);
   });
 
   it.each([
@@ -44,31 +41,25 @@ describe("repository access", () => {
       ...(location === undefined ? {} : { [worktreePath]: location }),
     });
 
-    const failure = await Effect.runPromise(
-      Effect.flip(access.requireWorktree({ repositoryId, worktreePath })),
-    );
-
-    expect(failure).toMatchObject({
-      _tag: "RepositoryRejected",
-      reason: "Missing",
-    });
+    await expect(
+      access.requireWorktree({ repositoryId, worktreePath }),
+    ).rejects.toMatchObject({ _tag: "RepositoryRejected", reason: "Missing" });
   });
 });
 
 function fakeAccess(locations: Record<string, readonly string[]>) {
   const git: GitCommandRunner = {
-    stream: () => Stream.empty,
-    run: (command) =>
-      Effect.sync(() => {
-        const location = locations[command.directory];
-        return location === undefined
-          ? { exitCode: 128, stderr: "not a git repository", stdout: "" }
-          : { exitCode: 0, stderr: "", stdout: `${location.join("\n")}\n` };
-      }),
+    stream: async function* () {},
+    run: async (command) => {
+      const location = locations[command.directory];
+      return location === undefined
+        ? { exitCode: 128, stderr: "not a git repository", stdout: "" }
+        : { exitCode: 0, stderr: "", stdout: `${location.join("\n")}\n` };
+    },
   };
   return createRepositoryAccess(
     {
-      find: (id) => Effect.succeed(catalogEntry({ id, path: repositoryPath })),
+      find: async (id) => catalogEntry({ id, path: repositoryPath }),
     },
     git,
   );

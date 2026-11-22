@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import type { InspectCommitDiff } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import {
   type GitCommandRunner,
@@ -24,7 +23,7 @@ type RawChange = Omit<CommitChange, "patch">;
 
 const changeStatuses = new Set(["A", "M", "D", "T", "R"]);
 
-export function readCommitChange(
+export async function readCommitChange(
   git: GitCommandRunner,
   command: InspectCommitDiff,
   parentOid: string | null,
@@ -33,8 +32,8 @@ export function readCommitChange(
     command.previousPath === undefined || command.previousPath === command.path
       ? [command.path]
       : [command.previousPath, command.path];
-  if (!paths.every(isTreePath)) return Effect.succeed(undefined);
-  return runRepositoryGit(
+  if (!paths.every(isTreePath)) return undefined;
+  const output = await runRepositoryGit(
     git,
     command.worktreePath,
     [
@@ -64,7 +63,8 @@ export function readCommitChange(
         "diff.suppressBlankEmpty=false",
       ],
     },
-  ).pipe(Effect.map((output) => findChange(output, command.path)));
+  );
+  return findChange(output, command.path);
 }
 
 function isTreePath(path: string) {

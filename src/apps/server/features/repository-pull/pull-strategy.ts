@@ -1,5 +1,4 @@
 import { eq, sql } from "drizzle-orm";
-import { Effect } from "effect";
 import type {
   PullStrategy,
   RepositoryPullStrategy,
@@ -18,44 +17,45 @@ export function createPullStrategies(
   context: EnvironmentContext,
   access: RepositoryAccess,
 ) {
-  const server = context
-    .read("Could not read the pull setting", (database) =>
-      database
-        .select({ strategy: serverSettingTable.pullStrategy })
-        .from(serverSettingTable)
-        .get(),
-    )
-    .pipe(Effect.map((row): PullStrategy => row?.strategy ?? "ask"));
+  const server = async (): Promise<PullStrategy> => {
+    const row = await context.read(
+      "Could not read the pull setting",
+      (database) =>
+        database
+          .select({ strategy: serverSettingTable.pullStrategy })
+          .from(serverSettingTable)
+          .get(),
+    );
+    return row?.strategy ?? "ask";
+  };
 
-  const logicalRepositoryId = (repositoryId: string) =>
-    access
-      .repository(repositoryId)
-      .pipe(Effect.map((entry) => entry.logicalRepositoryId ?? entry.id));
+  const logicalRepositoryId = async (repositoryId: string) => {
+    const entry = await access.repository(repositoryId);
+    return entry.logicalRepositoryId ?? entry.id;
+  };
 
-  const repository = (repositoryId: string) =>
-    Effect.gen(function* () {
-      const logicalId = yield* logicalRepositoryId(repositoryId);
-      const row = yield* context.read(
-        "Could not read the repository pull setting",
-        (database) =>
-          database
-            .select({ strategy: repositorySettingTable.pullStrategy })
-            .from(repositorySettingTable)
-            .where(eq(repositorySettingTable.repositoryId, logicalId))
-            .get(),
-      );
-      return {
-        repository: row?.strategy ?? null,
-        server: yield* server,
-      } satisfies RepositoryPullStrategy;
-    });
+  const repository = async (
+    repositoryId: string,
+  ): Promise<RepositoryPullStrategy> => {
+    const logicalId = await logicalRepositoryId(repositoryId);
+    const row = await context.read(
+      "Could not read the repository pull setting",
+      (database) =>
+        database
+          .select({ strategy: repositorySettingTable.pullStrategy })
+          .from(repositorySettingTable)
+          .where(eq(repositorySettingTable.repositoryId, logicalId))
+          .get(),
+    );
+    return { repository: row?.strategy ?? null, server: await server() };
+  };
 
   return {
     server,
-    effective: (repositoryId: string) =>
-      repository(repositoryId).pipe(
-        Effect.map(({ repository, server }) => repository ?? server),
-      ),
+    effective: async (repositoryId: string) => {
+      const strategies = await repository(repositoryId);
+      return strategies.repository ?? strategies.server;
+    },
     saveServer: (strategy: PullStrategy) =>
       context.write("Could not save the pull setting", (database) =>
         database
@@ -67,37 +67,39 @@ export function createPullStrategies(
           }),
       ),
     repository,
-    saveRepository: (repositoryId: string, strategy: PullStrategy | null) =>
-      Effect.gen(function* () {
-        const logicalId = yield* logicalRepositoryId(repositoryId);
-        return yield* context.write(
-          "Could not save the repository pull setting",
-          async (database) => {
-            if (strategy === null) {
-              await database
-                .delete(repositorySettingTable)
-                .where(eq(repositorySettingTable.repositoryId, logicalId));
-            } else {
-              await database
-                .insert(repositorySettingTable)
-                .values({ repositoryId: logicalId, pullStrategy: strategy })
-                .onConflictDoUpdate({
-                  target: repositorySettingTable.repositoryId,
-                  set: { pullStrategy: strategy },
-                });
-            }
-            const repositories = await database
-              .select({ id: repositoryCatalogTable.id })
-              .from(repositoryCatalogTable)
-              .where(
-                eq(
-                  sql`coalesce(${repositoryCatalogTable.logicalRepositoryId}, ${repositoryCatalogTable.id})`,
-                  logicalId,
-                ),
-              );
-            return repositories.map(({ id }) => id);
-          },
-        );
-      }),
+    saveRepository: async (
+      repositoryId: string,
+      strategy: PullStrategy | null,
+    ) => {
+      const logicalId = await logicalRepositoryId(repositoryId);
+      return context.write(
+        "Could not save the repository pull setting",
+        async (database) => {
+          if (strategy === null) {
+            await database
+              .delete(repositorySettingTable)
+              .where(eq(repositorySettingTable.repositoryId, logicalId));
+          } else {
+            await database
+              .insert(repositorySettingTable)
+              .values({ repositoryId: logicalId, pullStrategy: strategy })
+              .onConflictDoUpdate({
+                target: repositorySettingTable.repositoryId,
+                set: { pullStrategy: strategy },
+              });
+          }
+          const repositories = await database
+            .select({ id: repositoryCatalogTable.id })
+            .from(repositoryCatalogTable)
+            .where(
+              eq(
+                sql`coalesce(${repositoryCatalogTable.logicalRepositoryId}, ${repositoryCatalogTable.id})`,
+                logicalId,
+              ),
+            );
+          return repositories.map(({ id }) => id);
+        },
+      );
+    },
   };
 }

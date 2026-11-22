@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
@@ -490,15 +489,12 @@ async function fixture({
     bitbucketRequests: bitbucket.requests,
     saveToken: (
       token: Parameters<typeof sourceControl.saveBitbucketToken>[0],
-    ) => Effect.runPromise(sourceControl.saveBitbucketToken(token)),
-    removeToken: () =>
-      Effect.runPromise(sourceControl.removeBitbucketToken(undefined)),
-    discover: () => Effect.runPromise(sourceControl.discover(undefined)),
-    cloneable: () => Effect.runPromise(sourceControl.cloneable(undefined)),
+    ) => sourceControl.saveBitbucketToken(token),
+    removeToken: () => sourceControl.removeBitbucketToken(undefined),
+    discover: () => sourceControl.discover(undefined),
+    cloneable: () => sourceControl.cloneable(undefined),
     setEnabled: (enabled: boolean) =>
-      Effect.runPromise(
-        sourceControl.setHostEnabled({ kind: "github", enabled }),
-      ),
-    pullRequests: () => Effect.runPromise(pullRequests.list({ repositoryId })),
+      sourceControl.setHostEnabled({ kind: "github", enabled }),
+    pullRequests: () => pullRequests.list({ repositoryId }),
   };
 }

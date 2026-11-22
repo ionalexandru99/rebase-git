@@ -1,5 +1,3 @@
-import { Effect } from "effect";
-import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   BranchUpstreamTarget,
   RepositoryBranchesOperationFailure,
@@ -10,6 +8,7 @@ import type {
 } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   type GitCommandRunner,
+  isGitFailed,
   isGitRejection,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
@@ -29,7 +28,7 @@ export function branchRef(name: string) {
   return `refs/heads/${name}`;
 }
 
-export function requireValidBranchName(
+export async function requireValidBranchName(
   git: GitCommandRunner,
   directory: string,
   name: string,
@@ -38,8 +37,8 @@ export function requireValidBranchName(
     _tag: "InvalidBranchName",
     name,
   };
-  if (name.startsWith("-") || name === "HEAD") return Effect.fail(invalid);
-  return requireValidRefName(git, directory, branchRef(name), invalid);
+  if (name.startsWith("-") || name === "HEAD") throw invalid;
+  await requireValidRefName(git, directory, branchRef(name), invalid);
 }
 
 export function readBranchTarget(
@@ -57,31 +56,28 @@ export function worktreeHolding(
   return worktrees.find((worktree) => worktree.head.branch === name);
 }
 
-export function readLocalBranch(
+export async function readLocalBranch(
   git: GitCommandRunner,
   directory: string,
   worktrees: readonly RepositoryWorktree[],
   name: string,
-) {
-  return runRepositoryGit(
+): Promise<LocalBranch> {
+  const output = await runRepositoryGit(
     git,
     directory,
     ["for-each-ref", `--format=${forEachRefFormat}`, branchRef(name)],
     refCommand,
-  ).pipe(
-    Effect.map((output): LocalBranch => {
-      const record = parseForEachRef(output).find(
-        (candidate) => candidate.name === branchRef(name),
-      );
-      const { worktreePath: _raw, ...branch } = (record === undefined
-        ? undefined
-        : localBranchFromRecord(record)) ?? { name };
-      const holder = worktreeHolding(worktrees, name);
-      return holder === undefined
-        ? branch
-        : { ...branch, worktreePath: holder.path };
-    }),
   );
+  const record = parseForEachRef(output).find(
+    (candidate) => candidate.name === branchRef(name),
+  );
+  const { worktreePath: _raw, ...branch } = (record === undefined
+    ? undefined
+    : localBranchFromRecord(record)) ?? { name };
+  const holder = worktreeHolding(worktrees, name);
+  return holder === undefined
+    ? branch
+    : { ...branch, worktreePath: holder.path };
 }
 
 export function setUpstreamArguments(
@@ -95,24 +91,26 @@ export function setUpstreamArguments(
   ];
 }
 
-export function requireRemoteBranch(
+export async function requireRemoteBranch(
   git: GitCommandRunner,
   directory: string,
   upstream: BranchUpstreamTarget,
 ) {
   const name = `${upstream.remote}/${upstream.name}`;
-  return runRepositoryGit(
-    git,
-    directory,
-    ["rev-parse", "--verify", "--quiet", `refs/remotes/${name}`],
-    refCommand,
-  ).pipe(
-    Effect.mapError(
-      (error): RepositoryBranchesOperationFailure | RepositoryRejected =>
-        isGitRejection(error)
-          ? { _tag: "RefMissing", name }
-          : branchWriteFailed(error, name),
-    ),
-    Effect.asVoid,
-  );
+  try {
+    await runRepositoryGit(
+      git,
+      directory,
+      ["rev-parse", "--verify", "--quiet", `refs/remotes/${name}`],
+      refCommand,
+    );
+  } catch (error) {
+    if (!isGitFailed(error)) throw error;
+    throw isGitRejection(error)
+      ? ({
+          _tag: "RefMissing",
+          name,
+        } satisfies RepositoryBranchesOperationFailure)
+      : branchWriteFailed(error, name);
+  }
 }

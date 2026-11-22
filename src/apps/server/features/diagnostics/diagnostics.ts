@@ -1,6 +1,5 @@
 import { homedir } from "node:os";
 import { basename } from "node:path";
-import { Effect, PubSub, Queue, Stream } from "effect";
 import {
   DiagnosticsApi,
   type DiagnosticsErrors,
@@ -49,162 +48,203 @@ export function acquireDiagnosticsFeature({
   dataFolder,
   git,
 }: DiagnosticsDependencies) {
-  return Effect.gen(function* () {
-    const startedAt = Date.now() - process.uptime() * 1_000;
-    const scope = yield* Effect.scope;
-    const footprints: Footprint[] = [];
-    let latest: ProcessSnapshot | undefined;
-    let gitVersion: string | null = null;
-    let watching = 0;
-    const wake = yield* Queue.sliding<void>(1);
-    const sampled = yield* PubSub.sliding<void>(1);
-    const readGitVersion = yield* Effect.cached(
-      git.run({ directory: homedir(), arguments: ["--version"] }).pipe(
-        Effect.map(
-          ({ stdout }) => /git version (\S+)/.exec(stdout)?.[1] ?? "Unknown",
-        ),
-        Effect.orElseSucceed(() => "Unknown"),
-        Effect.flatMap((version) => {
-          gitVersion = version;
-          return PubSub.publish(sampled, undefined);
-        }),
-      ),
-    );
+  const startedAt = Date.now() - process.uptime() * 1_000;
+  const stopped = new AbortController();
+  const footprints: Footprint[] = [];
+  const sampledListeners = new Set<() => void>();
+  let latest: ProcessSnapshot | undefined;
+  let gitVersion: string | null = null;
+  let gitVersionRead: Promise<void> | undefined;
+  let watching = 0;
+  let wakePending = false;
+  let wakeTick: (() => void) | undefined;
 
-    const sample = Effect.gen(function* () {
-      latest = yield* monitor.sample;
-      if (latest !== undefined) {
-        const at = Date.now();
-        footprints.push({ at, ...totals(latest) });
-        while ((footprints[0]?.at ?? at) < at - footprintRetention)
-          footprints.shift();
+  const publishSampled = () => {
+    for (const listener of sampledListeners) listener();
+  };
+
+  const readGitVersion = () => {
+    gitVersionRead ??= git
+      .run({
+        directory: homedir(),
+        arguments: ["--version"],
+        signal: stopped.signal,
+      })
+      .then(
+        ({ stdout }) => /git version (\S+)/.exec(stdout)?.[1] ?? "Unknown",
+        () => "Unknown",
+      )
+      .then((version) => {
+        gitVersion = version;
+        publishSampled();
+      });
+    return gitVersionRead;
+  };
+
+  const sample = async () => {
+    latest = await monitor.sample();
+    if (latest !== undefined) {
+      const at = Date.now();
+      footprints.push({ at, ...totals(latest) });
+      while ((footprints[0]?.at ?? at) < at - footprintRetention)
+        footprints.shift();
+    }
+    publishSampled();
+  };
+
+  const wake = () => {
+    if (wakeTick === undefined) wakePending = true;
+    else wakeTick();
+  };
+
+  const nextTick = () =>
+    new Promise<void>((resolve) => {
+      if (wakePending) {
+        wakePending = false;
+        resolve();
+        return;
       }
-      yield* PubSub.publish(sampled, undefined);
-    });
-
-    yield* Effect.forkScoped(
-      Effect.forever(
-        Effect.raceFirst(
-          Effect.suspend(() =>
-            Effect.sleep(watching > 0 ? watchedInterval : backgroundInterval),
-          ),
-          Queue.take(wake),
-        ).pipe(Effect.andThen(sample)),
-      ),
-    );
-
-    const describe = (period: DiagnosticsPeriod): DiagnosticsSample => {
-      const now = Date.now();
-      const { window, bucket } = periods[period];
-      const recent = footprints.filter(({ at }) => at >= now - window);
-      const git = activity.gitSummary(period);
-      const current = latest === undefined ? undefined : totals(latest);
-      return {
-        _tag: "Sample",
-        sampledAt: now,
-        monitor: monitor.status(),
-        footprint: {
-          cpu: current?.cpu ?? null,
-          cpuPeak: peak(recent.map(({ cpu }) => cpu)),
-          memory: current?.memory ?? null,
-          memoryPeak: peak(recent.map(({ memory }) => memory)),
-          processes: latest?.processes.length ?? 0,
-          gitRuns: git.runs,
-          gitFailures: git.failures,
-        },
-        timeline: {
-          bucketMilliseconds: bucket,
-          cpu: git.runsPerBucket.map((_, index) => {
-            const start = now - window + index * bucket;
-            return peak(
-              recent
-                .filter(({ at }) => at >= start && at < start + bucket)
-                .map(({ cpu }) => cpu),
-            );
-          }),
-          gitRuns: git.runsPerBucket,
-          gitFailures: git.failuresPerBucket,
-        },
-        processes:
-          latest === undefined ? [] : describeProcesses(latest, activity),
-        slowestGit: activity.slowestGit(),
-        slowestRequests: activity.slowestRequests(),
-        watchers: changes.watchers(),
-        server: {
-          platform: process.platform,
-          architecture: process.arch,
-          startedAt,
-          gitVersion,
-          dataFolder,
-        },
+      const timer = setTimeout(
+        () => wakeTick?.(),
+        watching > 0 ? watchedInterval : backgroundInterval,
+      );
+      wakeTick = () => {
+        clearTimeout(timer);
+        wakeTick = undefined;
+        resolve();
       };
-    };
-
-    const errors = (): DiagnosticsErrors => ({
-      _tag: "Errors",
-      errors: activity.errors(),
     });
 
+  void (async () => {
+    while (true) {
+      await nextTick();
+      if (stopped.signal.aborted) return;
+      await sample();
+    }
+  })();
+
+  const describe = (period: DiagnosticsPeriod): DiagnosticsSample => {
+    const now = Date.now();
+    const { window, bucket } = periods[period];
+    const recent = footprints.filter(({ at }) => at >= now - window);
+    const git = activity.gitSummary(period);
+    const current = latest === undefined ? undefined : totals(latest);
     return {
-      routes: [
-        route(DiagnosticsApi.stop, ({ pid }) =>
-          Effect.sync(() => {
-            const run = activity.running().get(pid);
-            if (run === undefined) return {};
-            for (const descendant of descendantsOf(
-              latest,
-              pid,
-              run.startedAt,
-            )) {
-              try {
-                process.kill(descendant);
-              } catch {}
-            }
-            activity.stop(pid);
-            return {};
-          }),
-        ),
-        route(DiagnosticsApi.watchAgain, ({ repositoryId }) =>
-          changes.restart(repositoryId).pipe(Effect.as({})),
-        ),
-        stream(DiagnosticsApi.watch, ({ period }) =>
-          Stream.unwrap(
-            Effect.gen(function* () {
-              watching += 1;
-              monitor.retry();
-              yield* Effect.addFinalizer(() =>
-                Effect.sync(() => {
-                  watching -= 1;
-                }),
-              );
-              const samples = yield* PubSub.subscribe(sampled);
-              yield* Effect.forkIn(readGitVersion, scope);
-              yield* Queue.offer(wake, undefined);
-              const errorsChanged = yield* Queue.sliding<void>(1);
-              yield* Effect.acquireRelease(
-                Effect.sync(() =>
-                  activity.onErrorsChanged(() =>
-                    Queue.offerUnsafe(errorsChanged, undefined),
-                  ),
-                ),
-                (release) => Effect.sync(release),
-              );
-              return Stream.merge(
-                Stream.concat(
-                  Stream.succeed(undefined),
-                  Stream.fromQueue(errorsChanged),
-                ).pipe(Stream.map(errors)),
-                Stream.concat(
-                  Stream.succeed(undefined),
-                  Stream.fromSubscription(samples),
-                ).pipe(Stream.map(() => describe(period))),
-              );
-            }),
-          ),
-        ),
-      ],
-    } satisfies EnvironmentFeature;
+      _tag: "Sample",
+      sampledAt: now,
+      monitor: monitor.status(),
+      footprint: {
+        cpu: current?.cpu ?? null,
+        cpuPeak: peak(recent.map(({ cpu }) => cpu)),
+        memory: current?.memory ?? null,
+        memoryPeak: peak(recent.map(({ memory }) => memory)),
+        processes: latest?.processes.length ?? 0,
+        gitRuns: git.runs,
+        gitFailures: git.failures,
+      },
+      timeline: {
+        bucketMilliseconds: bucket,
+        cpu: git.runsPerBucket.map((_, index) => {
+          const start = now - window + index * bucket;
+          return peak(
+            recent
+              .filter(({ at }) => at >= start && at < start + bucket)
+              .map(({ cpu }) => cpu),
+          );
+        }),
+        gitRuns: git.runsPerBucket,
+        gitFailures: git.failuresPerBucket,
+      },
+      processes:
+        latest === undefined ? [] : describeProcesses(latest, activity),
+      slowestGit: activity.slowestGit(),
+      slowestRequests: activity.slowestRequests(),
+      watchers: changes.watchers(),
+      server: {
+        platform: process.platform,
+        architecture: process.arch,
+        startedAt,
+        gitVersion,
+        dataFolder,
+      },
+    };
+  };
+
+  const errors = (): DiagnosticsErrors => ({
+    _tag: "Errors",
+    errors: activity.errors(),
   });
+
+  async function* watch(period: DiagnosticsPeriod, signal: AbortSignal) {
+    let errorsChanged = true;
+    let sampled = true;
+    let notify: (() => void) | undefined;
+    watching += 1;
+    monitor.retry();
+    const onSampled = () => {
+      sampled = true;
+      notify?.();
+    };
+    sampledListeners.add(onSampled);
+    const releaseErrors = activity.onErrorsChanged(() => {
+      errorsChanged = true;
+      notify?.();
+    });
+    const abort = () => notify?.();
+    signal.addEventListener("abort", abort);
+    void readGitVersion();
+    wake();
+    try {
+      while (!signal.aborted) {
+        if (errorsChanged) {
+          errorsChanged = false;
+          yield errors();
+        } else if (sampled) {
+          sampled = false;
+          yield describe(period);
+        } else
+          await new Promise<void>((resolve) => {
+            notify = resolve;
+          });
+      }
+    } finally {
+      watching -= 1;
+      sampledListeners.delete(onSampled);
+      releaseErrors();
+      signal.removeEventListener("abort", abort);
+    }
+  }
+
+  const feature: EnvironmentFeature = {
+    routes: [
+      route(DiagnosticsApi.stop, async ({ pid }) => {
+        const run = activity.running().get(pid);
+        if (run === undefined) return {};
+        for (const descendant of descendantsOf(latest, pid, run.startedAt)) {
+          try {
+            process.kill(descendant);
+          } catch {}
+        }
+        activity.stop(pid);
+        return {};
+      }),
+      route(DiagnosticsApi.watchAgain, async ({ repositoryId }) => {
+        await changes.restart(repositoryId);
+        return {};
+      }),
+      stream(DiagnosticsApi.watch, ({ period }, { signal }) =>
+        watch(period, signal),
+      ),
+    ],
+  };
+
+  return {
+    feature,
+    close: () => {
+      stopped.abort();
+      wakeTick?.();
+    },
+  };
 }
 
 function descendantsOf(

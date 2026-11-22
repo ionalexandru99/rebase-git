@@ -1,8 +1,10 @@
 import { lstat, readFile, readlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
-import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
+import {
+  CommitInspectionApi,
+  type RestoreOverwrites,
+} from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { createRepository, fastImport, git } from "#tests-support/git.ts";
 import { openTestEnvironment } from "#tests-support/server.ts";
 
@@ -55,22 +57,18 @@ describe("restoring files from a commit", () => {
   it("writes the selected files from before the commit into the working tree only", async () => {
     const f = await fixture();
     expect(
-      await Effect.runPromise(
-        f.service.previewRestore({
-          ...f.scope,
-          source: "parent",
-          path: "gone.txt",
-        }),
-      ),
-    ).toMatchObject({ kind: "text", before: null, after: "gone\n" });
-
-    await Effect.runPromise(
-      f.service.restore({
+      await f.service.previewRestore({
         ...f.scope,
         source: "parent",
-        paths: ["gone.txt", spaced, "added.txt", "binary.bin", "link"],
+        path: "gone.txt",
       }),
-    );
+    ).toMatchObject({ kind: "text", before: null, after: "gone\n" });
+
+    await f.service.restore({
+      ...f.scope,
+      source: "parent",
+      paths: ["gone.txt", spaced, "added.txt", "binary.bin", "link"],
+    });
 
     expect(await f.read("gone.txt")).toBe("gone\n");
     expect(await f.read(spaced)).toBe("old\n");
@@ -83,16 +81,14 @@ describe("restoring files from a commit", () => {
       expect(await readlink(join(f.directory, "link"))).toBe("keep.txt");
     expect(await git(f.directory, "rev-parse", "HEAD")).toBe(f.head);
     expect(await git(f.directory, "diff", "--cached", "--name-only")).toBe("");
-    const root = await Effect.runPromise(
-      Effect.flip(
-        f.service.restore({
-          ...f.scope,
-          oid: await git(f.directory, "rev-parse", "HEAD~1"),
-          source: "parent",
-          paths: ["keep.txt"],
-        }),
-      ),
-    );
+    const root = await f.service
+      .restore({
+        ...f.scope,
+        oid: await git(f.directory, "rev-parse", "HEAD~1"),
+        source: "parent",
+        paths: ["keep.txt"],
+      })
+      .catch((failure: unknown) => failure);
     expect(root).toMatchObject({
       _tag: "ChangesFailed",
       reason: "Unsupported",
@@ -114,7 +110,10 @@ describe("restoring files from a commit", () => {
         ...(overwrite === undefined ? {} : { overwrite }),
       });
 
-    const first = await Effect.runPromise(Effect.flip(restore()));
+    const first = await restore().then(
+      () => undefined,
+      (failure: RestoreOverwrites) => failure,
+    );
     expect(first).toMatchObject({
       _tag: "RestoreOverwrites",
       paths: [spaced],
@@ -122,17 +121,14 @@ describe("restoring files from a commit", () => {
     });
     expect(await f.read(spaced)).toBe("mine\n");
     await writeFile(join(f.directory, spaced), "mine, edited again\n");
-    const second = await Effect.runPromise(
-      Effect.flip(
-        restore(first._tag === "RestoreOverwrites" ? first.fingerprint : ""),
-      ),
+    const second = await restore(first?.fingerprint ?? "").then(
+      () => undefined,
+      (failure: RestoreOverwrites) => failure,
     );
     expect(second).toMatchObject({ _tag: "RestoreOverwrites", count: 1 });
     expect(second).not.toEqual(first);
 
-    await Effect.runPromise(
-      restore(second._tag === "RestoreOverwrites" ? second.fingerprint : ""),
-    );
+    await restore(second?.fingerprint ?? "");
 
     expect(await f.read(spaced)).toBe("old\n");
     expect(await f.read("keep.txt")).toBe("keep\n");
@@ -145,15 +141,13 @@ describe("restoring files from a commit", () => {
     await writeFile(join(f.directory, "keep.txt"), "local override\n");
     await writeFile(join(f.directory, "nested"), "a file where a folder was\n");
 
-    const failure = await Effect.runPromise(
-      Effect.flip(
-        f.service.restore({
-          ...f.scope,
-          source: "parent",
-          paths: ["keep.txt", "nested/inner.txt"],
-        }),
-      ),
-    );
+    const failure = await f.service
+      .restore({
+        ...f.scope,
+        source: "parent",
+        paths: ["keep.txt", "nested/inner.txt"],
+      })
+      .catch((failure: unknown) => failure);
 
     expect(failure).toMatchObject({
       _tag: "RestoreOverwrites",

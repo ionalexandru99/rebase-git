@@ -1,15 +1,16 @@
-import { Effect, Result } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   OperationFailure,
   OperationStarted,
   RepositoryOperation,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
+import { uninterruptible } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommand,
   type GitCommandOutput,
   type GitCommandRunner,
   type GitFailed,
+  isGitFailed,
   isIdentityMissing,
   runRepositoryGit,
   runRepositoryGitOutput,
@@ -23,17 +24,25 @@ export function started(
   return { outcome, operation };
 }
 
-export function readCommit(
+export async function readCommit(
   git: GitCommandRunner,
   directory: string,
   rev: string,
 ) {
-  return runRepositoryGit(
-    git,
-    directory,
-    ["rev-parse", "--verify", "--quiet", "--end-of-options", `${rev}^{commit}`],
-    { exitCodes: [0, 1] },
-  ).pipe(Effect.map((output) => output.trim()));
+  return (
+    await runRepositoryGit(
+      git,
+      directory,
+      [
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "--end-of-options",
+        `${rev}^{commit}`,
+      ],
+      { exitCodes: [0, 1] },
+    )
+  ).trim();
 }
 
 export function isGitLocked(detail: string) {
@@ -41,34 +50,29 @@ export function isGitLocked(detail: string) {
 }
 
 export function requireGitSuccess(output: GitCommandOutput) {
-  if (output.exitCode === 0) return Effect.void;
+  if (output.exitCode === 0) return;
   const detail =
     output.stderr ||
     output.stdout ||
     "Git rejected the action. Check the worktree and configured hooks.";
-  if (isGitLocked(detail))
-    return Effect.fail(repositoryRejected("Busy", detail));
+  if (isGitLocked(detail)) throw repositoryRejected("Busy", detail);
   if (isIdentityMissing(detail))
-    return Effect.fail(
-      repositoryRejected(
-        "IdentityMissing",
-        "Add your name and email to commit.",
-      ),
+    throw repositoryRejected(
+      "IdentityMissing",
+      "Add your name and email to commit.",
     );
   const signing = signingRejection(detail);
-  if (signing !== undefined) return Effect.fail(signing);
+  if (signing !== undefined) throw signing;
   if (/would be overwritten by (?:merge|checkout)/i.test(detail))
-    return Effect.fail({
+    throw {
       ...operationError("WouldOverwrite", detail),
       paths: overwrittenPaths(detail),
-    });
-  return Effect.fail(
-    operationError(
-      /hook|pre-commit|commit-msg|pre-rebase|not committing merge/i.test(detail)
-        ? "HookFailed"
-        : "GitRejected",
-      detail,
-    ),
+    };
+  throw operationError(
+    /hook|pre-commit|commit-msg|pre-rebase|not committing merge/i.test(detail)
+      ? "HookFailed"
+      : "GitRejected",
+    detail,
   );
 }
 
@@ -81,46 +85,56 @@ export function overwrittenPaths(detail: string) {
     .slice(0, 100);
 }
 
-export type GitExit = Result.Result<GitCommandOutput, GitFailed>;
+export type GitExit =
+  | { readonly _tag: "Success"; readonly output: GitCommandOutput }
+  | { readonly _tag: "Failure"; readonly failure: GitFailed };
 
-export function runChange(git: GitCommandRunner, command: GitCommand) {
-  return Effect.result(git.run(command)).pipe(Effect.uninterruptible);
+export async function runChange(
+  git: GitCommandRunner,
+  command: GitCommand,
+): Promise<GitExit> {
+  try {
+    return {
+      _tag: "Success",
+      output: await uninterruptible(() => git.run(command)),
+    };
+  } catch (error) {
+    if (!isGitFailed(error)) throw error;
+    return { _tag: "Failure", failure: error };
+  }
 }
 
-export function requireLanded<E>(
+export function exitCodeOf(exit: GitExit) {
+  return exit._tag === "Success" ? exit.output.exitCode : undefined;
+}
+
+export async function requireLanded(
   exit: GitExit,
-  landed: Effect.Effect<boolean, E>,
+  landed: () => Promise<boolean>,
 ) {
-  if (Result.isSuccess(exit)) return requireGitSuccess(exit.success);
-  return Effect.flatMap(landed, (yes) =>
-    yes ? Effect.void : Effect.fail(exit.failure),
-  );
+  if (exit._tag === "Success") return requireGitSuccess(exit.output);
+  if (!(await landed())) throw exit.failure;
 }
 
-export function headMoved(
+export async function headMoved(
   git: GitCommandRunner,
   directory: string,
   from: string,
 ) {
-  return readCommit(git, directory, "HEAD").pipe(
-    Effect.map((head) => head !== from),
-  );
+  return (await readCommit(git, directory, "HEAD")) !== from;
 }
 
-export function hasStagedChanges(git: GitCommandRunner, directory: string) {
-  return runRepositoryGitOutput(
+export async function hasStagedChanges(
+  git: GitCommandRunner,
+  directory: string,
+) {
+  const { exitCode } = await runRepositoryGitOutput(
     git,
     directory,
     ["diff", "--cached", "--quiet"],
     { exitCodes: [0, 1] },
-  ).pipe(Effect.map(({ exitCode }) => exitCode === 1));
-}
-
-export function operationFailure(
-  reason: OperationFailure["reason"],
-  detail: string,
-) {
-  return Effect.fail(operationError(reason, detail));
+  );
+  return exitCode === 1;
 }
 
 export function operationError(

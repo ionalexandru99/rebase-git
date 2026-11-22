@@ -2,20 +2,16 @@ import { realpath } from "node:fs";
 import { lstat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { Effect } from "effect";
-import {
-  type RepositoryRejected,
-  repositoryRejected,
-} from "#contracts/git/git-failures.contract.ts";
+import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import type { RepositoryWorktree } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   cacheByGitEntry,
   type GitCommandRunner,
+  isGitFailed,
   isGitRejection,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
-import type { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
 
 const realpathNative = promisify(realpath.native);
 const branchPrefix = "refs/heads/";
@@ -23,148 +19,126 @@ const branchPrefix = "refs/heads/";
 export interface RepositoryAccess {
   readonly repository: (
     repositoryId: string,
-  ) => Effect.Effect<
-    RepositoryCatalogEntry,
-    RepositoryRejected | EnvironmentStorageError
-  >;
+  ) => Promise<RepositoryCatalogEntry>;
   readonly worktrees: (
     repositoryPath: string,
-  ) => Effect.Effect<readonly RepositoryWorktree[], RepositoryRejected>;
+  ) => Promise<readonly RepositoryWorktree[]>;
   readonly requireWorktree: (scope: {
     readonly repositoryId: string;
     readonly worktreePath: string;
-  }) => Effect.Effect<void, RepositoryRejected | EnvironmentStorageError>;
+  }) => Promise<void>;
 }
 
 export function createRepositoryAccess(
   catalog: {
     readonly find: (
       repositoryId: string,
-    ) => Effect.Effect<
-      RepositoryCatalogEntry | undefined,
-      EnvironmentStorageError
-    >;
+    ) => Promise<RepositoryCatalogEntry | undefined>;
   },
   git: GitCommandRunner,
 ): RepositoryAccess {
   const locations = cacheByGitEntry((directory) =>
     readWorktreeLocation(git, directory),
   );
-  const repository = (repositoryId: string) =>
-    catalog
-      .find(repositoryId)
-      .pipe(
-        Effect.flatMap((entry) =>
-          entry === undefined
-            ? Effect.fail(
-                repositoryRejected(
-                  "Missing",
-                  "This repository is no longer available.",
-                ),
-              )
-            : Effect.succeed(entry),
-        ),
+  const repository = async (repositoryId: string) => {
+    const entry = await catalog.find(repositoryId);
+    if (entry === undefined)
+      throw repositoryRejected(
+        "Missing",
+        "This repository is no longer available.",
       );
+    return entry;
+  };
+  const worktreeLocation = async (worktreePath: string) => {
+    try {
+      return await locations.read(worktreePath);
+    } catch (failure) {
+      if (!isGitFailed(failure) || !isGitRejection(failure))
+        throw worktreesUnreadable();
+      if (await hasGitEntry(worktreePath))
+        throw repositoryRejected("GitFailed", failure.detail);
+      return undefined;
+    }
+  };
   return {
     repository,
-    worktrees: (repositoryPath) =>
-      readWorktrees(git, repositoryPath).pipe(
-        Effect.flatMap(canonicalizeWorktrees),
-        Effect.mapError(worktreesUnreadable),
-      ),
-    requireWorktree: (scope) =>
-      Effect.gen(function* () {
-        const entry = yield* repository(scope.repositoryId);
-        const owner = yield* locations
-          .read(entry.path)
-          .pipe(Effect.mapError(worktreesUnreadable));
-        const worktree = yield* locations
-          .read(scope.worktreePath)
-          .pipe(
-            Effect.catch((failure) =>
-              !isGitRejection(failure)
-                ? Effect.fail(worktreesUnreadable())
-                : hasGitEntry(scope.worktreePath).pipe(
-                    Effect.flatMap((present) =>
-                      present
-                        ? Effect.fail(
-                            repositoryRejected("GitFailed", failure.detail),
-                          )
-                        : Effect.succeed(undefined),
-                    ),
-                  ),
-            ),
-          );
-        if (
-          worktree?.root !== scope.worktreePath ||
-          worktree.commonDirectory !== owner.commonDirectory
-        )
-          return yield* Effect.fail(
-            repositoryRejected(
-              "Missing",
-              "This worktree does not belong to the repository.",
-            ),
-          );
-      }),
+    worktrees: async (repositoryPath) => {
+      try {
+        return await canonicalizeWorktrees(
+          await readWorktrees(git, repositoryPath),
+        );
+      } catch {
+        throw worktreesUnreadable();
+      }
+    },
+    requireWorktree: async (scope) => {
+      const entry = await repository(scope.repositoryId);
+      const owner = await locations
+        .read(entry.path)
+        .catch(() => Promise.reject(worktreesUnreadable()));
+      const worktree = await worktreeLocation(scope.worktreePath);
+      if (
+        worktree?.root !== scope.worktreePath ||
+        worktree.commonDirectory !== owner.commonDirectory
+      )
+        throw repositoryRejected(
+          "Missing",
+          "This worktree does not belong to the repository.",
+        );
+    },
   };
 }
 
-function readWorktreeLocation(git: GitCommandRunner, directory: string) {
-  return runRepositoryGit(git, directory, [
+async function readWorktreeLocation(git: GitCommandRunner, directory: string) {
+  const output = await runRepositoryGit(git, directory, [
     "rev-parse",
     "--path-format=absolute",
     "--show-toplevel",
     "--git-common-dir",
-  ]).pipe(
-    Effect.flatMap((output) => {
-      const [root = "", commonDirectory = ""] = output.trimEnd().split("\n");
-      return Effect.all({
-        root: canonicalizePath(root),
-        commonDirectory: canonicalizePath(commonDirectory),
-      });
-    }),
-  );
+  ]);
+  const [root = "", commonDirectory = ""] = output.trimEnd().split("\n");
+  return {
+    root: await canonicalizePath(root),
+    commonDirectory: await canonicalizePath(commonDirectory),
+  };
 }
 
 function hasGitEntry(directory: string) {
-  return Effect.promise(() =>
-    lstat(join(directory, ".git")).then(
-      () => true,
-      () => false,
-    ),
+  return lstat(join(directory, ".git")).then(
+    () => true,
+    () => false,
   );
 }
 
 function canonicalizePath(path: string) {
-  return Effect.promise(() => realpathNative(path).catch(() => resolve(path)));
+  return realpathNative(path).catch(() => resolve(path));
 }
 
-export function readWorktrees(git: GitCommandRunner, directory: string) {
-  return runRepositoryGit(
-    git,
-    directory,
-    ["worktree", "list", "--porcelain", "-z"],
-    { timeoutMilliseconds: 15_000 },
-  ).pipe(Effect.map(parseWorktreeList));
+export async function readWorktrees(git: GitCommandRunner, directory: string) {
+  return parseWorktreeList(
+    await runRepositoryGit(
+      git,
+      directory,
+      ["worktree", "list", "--porcelain", "-z"],
+      { timeoutMilliseconds: 15_000 },
+    ),
+  );
 }
 
 export function canonicalizeWorktrees(
   worktrees: readonly RepositoryWorktree[],
 ) {
-  return Effect.all(
+  return Promise.all(
     worktrees.map((worktree) =>
-      Effect.promise(() =>
-        realpathNative(worktree.path).then(
-          (path) => ({ ...worktree, path }),
-          (error: NodeJS.ErrnoException) => ({
-            ...worktree,
-            path: resolve(worktree.path),
-            ...(error.code === "ENOENT" ? { missing: true } : {}),
-          }),
-        ),
+      realpathNative(worktree.path).then(
+        (path) => ({ ...worktree, path }),
+        (error: NodeJS.ErrnoException) => ({
+          ...worktree,
+          path: resolve(worktree.path),
+          ...(error.code === "ENOENT" ? { missing: true } : {}),
+        }),
       ),
     ),
-    { concurrency: "unbounded" },
   );
 }
 

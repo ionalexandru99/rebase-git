@@ -1,5 +1,4 @@
 import { homedir } from "node:os";
-import { Effect } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   GitSigningApi,
@@ -19,9 +18,9 @@ import {
   type EnvironmentFeature,
   route,
 } from "#server/adapters/environment-transport/environment-routes.ts";
-import type {
-  GitCommandRunner,
-  GitFailed,
+import {
+  type GitCommandRunner,
+  isGitFailed,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
   type ConfigScope,
@@ -54,55 +53,47 @@ export function gitSigningFeature({
   readonly events: EnvironmentEventPublisher;
   readonly git: GitCommandRunner;
 }) {
-  const repositoryFailed = ({ detail }: GitFailed) =>
-    Effect.fail(repositoryRejected("GitFailed", detail));
   return {
     routes: [
       route(GitSigningApi.read, () =>
-        readScopedConfig(git, homedir(), configKeys).pipe(
-          Effect.map(globalSigning),
-          Effect.mapError(signingFailed),
+        failingAsSigning(async () =>
+          globalSigning(await readScopedConfig(git, homedir(), configKeys)),
         ),
       ),
       route(GitSigningApi.save, (choice) =>
-        saveScopedConfig(
-          git,
-          homedir(),
-          "--global",
-          configKeys,
-          writesFor(choice),
-        ).pipe(
-          Effect.tap(() => Effect.sync(() => events.publishChanged())),
-          Effect.map(globalSigning),
-          Effect.mapError(signingFailed),
-        ),
+        failingAsSigning(async () => {
+          const values = await saveScopedConfig(
+            git,
+            homedir(),
+            "--global",
+            configKeys,
+            writesFor(choice),
+          );
+          events.publishChanged();
+          return globalSigning(values);
+        }),
       ),
       route(GitSigningApi.keys, () => listSigningKeys(git, homedir())),
-      route(GitSigningApi.readRepository, ({ repositoryId }) =>
-        access.repository(repositoryId).pipe(
-          Effect.flatMap(({ path }) => readScopedConfig(git, path, configKeys)),
-          Effect.map(repositorySigning),
-          Effect.catchTag("GitFailed", repositoryFailed),
-        ),
-      ),
-      route(GitSigningApi.saveRepository, ({ repositoryId, signing }) =>
-        access.repository(repositoryId).pipe(
-          Effect.flatMap(({ path }) =>
-            saveScopedConfig(
-              git,
-              path,
-              "--local",
-              configKeys,
-              writesFor(signing),
-            ),
-          ),
-          Effect.tap(() =>
-            Effect.sync(() => events.publishChanged([repositoryId])),
-          ),
-          Effect.map(repositorySigning),
-          Effect.catchTag("GitFailed", repositoryFailed),
-        ),
-      ),
+      route(GitSigningApi.readRepository, async ({ repositoryId }) => {
+        const { path } = await access.repository(repositoryId);
+        return rejectingGitFailures(async () =>
+          repositorySigning(await readScopedConfig(git, path, configKeys)),
+        );
+      }),
+      route(GitSigningApi.saveRepository, async ({ repositoryId, signing }) => {
+        const { path } = await access.repository(repositoryId);
+        return rejectingGitFailures(async () => {
+          const values = await saveScopedConfig(
+            git,
+            path,
+            "--local",
+            configKeys,
+            writesFor(signing),
+          );
+          events.publishChanged([repositoryId]);
+          return repositorySigning(values);
+        });
+      }),
     ],
   } satisfies EnvironmentFeature;
 }
@@ -162,6 +153,24 @@ function signingKey(format: SigningFormat, value: string): SigningKey {
   return { format, key: value, label: id === undefined ? value : id.slice(-8) };
 }
 
-function signingFailed({ detail }: GitFailed): SigningFailed {
-  return { _tag: "SigningFailed", detail: detail.slice(0, 2_048) };
+async function failingAsSigning<Value>(run: () => Promise<Value>) {
+  try {
+    return await run();
+  } catch (error) {
+    if (!isGitFailed(error)) throw error;
+    throw {
+      _tag: "SigningFailed",
+      detail: error.detail.slice(0, 2_048),
+    } satisfies SigningFailed;
+  }
+}
+
+async function rejectingGitFailures<Value>(run: () => Promise<Value>) {
+  try {
+    return await run();
+  } catch (error) {
+    throw isGitFailed(error)
+      ? repositoryRejected("GitFailed", error.detail)
+      : error;
+  }
 }

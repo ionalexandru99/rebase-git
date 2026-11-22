@@ -1,25 +1,15 @@
 import { createServer, type Server } from "node:http";
-import { Cause, Data, Effect, FiberSet } from "effect";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
-import {
-  createEnvironmentHttpHandler,
-  type RunEnvironmentEffect,
-} from "#server/adapters/environment-transport/environment-http-handler.ts";
+import { createEnvironmentHttpHandler } from "#server/adapters/environment-transport/environment-http-handler.ts";
 import { formatHostAddress } from "#server/adapters/environment-transport/environment-request-authorization.ts";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   attachEnvironmentSocket,
   environmentRouter,
 } from "#server/adapters/environment-transport/environment-socket.ts";
+import { acquireScoped } from "#server/app/server/resource-scope.ts";
 import { errorMessage, isFileSystemError } from "#server/error-inspection.ts";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
-
-export class EnvironmentServerStartError extends Data.TaggedError(
-  "EnvironmentServerStartError",
-)<{
-  readonly cause: unknown;
-  readonly message: string;
-}> {}
 
 export interface EnvironmentListener {
   readonly host: string;
@@ -36,7 +26,7 @@ interface EnvironmentListenerOptions {
   readonly features: EnvironmentFeature;
   readonly host?: string;
   readonly port?: number;
-  readonly reportDefect?: (where: string, cause: Cause.Cause<unknown>) => void;
+  readonly reportDefect?: (where: string, error: unknown) => void;
 }
 
 const loopbackHost = "127.0.0.1";
@@ -44,111 +34,72 @@ const loopbackHost = "127.0.0.1";
 export function acquireEnvironmentListener(
   options: EnvironmentListenerOptions,
 ) {
-  return Effect.gen(function* () {
-    const host = options.host ?? loopbackHost;
-    const port = options.port ?? 0;
-    const runFork = yield* FiberSet.makeRuntime<never, void, never>();
-    const reportDefect = (where: string, error: unknown) =>
-      options.reportDefect?.(where, Cause.die(error));
-    const runEnvironmentEffect: RunEnvironmentEffect = (effect, signal) => {
-      runFork(effect, signal === undefined ? undefined : { signal });
-    };
-    const server = yield* Effect.acquireRelease(
-      createHttpServer(options, host, port, runEnvironmentEffect),
-      (acquiredServer) =>
-        Effect.promise(() => closeServer(acquiredServer)).pipe(Effect.orDie),
-    );
-    yield* Effect.acquireRelease(
-      Effect.try({
-        try: () =>
-          attachEnvironmentSocket(
-            server,
-            environmentRouter({ ...options, reportDefect }),
-            options.authorization,
-            runEnvironmentEffect,
-            reportDefect,
-          ),
-        catch: (cause) => environmentServerError(cause, host, port),
-      }),
-      (webSockets) => Effect.promise(webSockets.close).pipe(Effect.orDie),
-    );
-    yield* listen(server, host, port);
-    const listeningPort = yield* readListeningPort(server, host, port);
-
-    return {
-      host,
-      origin: `http://${formatHostAddress(host)}:${listeningPort}`,
-      port: listeningPort,
-      server,
-    };
-  });
-}
-
-function createHttpServer(
-  options: EnvironmentListenerOptions,
-  host: string,
-  port: number,
-  runEnvironmentEffect: RunEnvironmentEffect,
-) {
-  return Effect.try({
-    try: () =>
-      createServer(
+  const host = options.host ?? loopbackHost;
+  const port = options.port ?? 0;
+  return acquireScoped(async (scope) => {
+    try {
+      const server = createServer(
         { maxHeaderSize: 16_384 },
         createEnvironmentHttpHandler(
           options.authorization,
-          runEnvironmentEffect,
           options.browserAssetsRoot,
           options.reportDefect,
         ),
-      ),
-    catch: (cause) => environmentServerError(cause, host, port),
+      );
+      scope.defer(() => closeServer(server));
+      scope.use(
+        attachEnvironmentSocket(
+          server,
+          environmentRouter(options),
+          options.authorization,
+          options.reportDefect ?? (() => undefined),
+        ),
+      );
+      await listen(server, host, port);
+      const listeningPort = readListeningPort(server);
+      return {
+        host,
+        origin: `http://${formatHostAddress(host)}:${listeningPort}`,
+        port: listeningPort,
+        server,
+      } satisfies EnvironmentListener;
+    } catch (cause) {
+      throw new Error(listenerErrorMessage(cause, host, port), { cause });
+    }
   });
 }
 
-function readListeningPort(
-  server: Server,
-  host: string,
-  requestedPort: number,
-) {
-  return Effect.try({
-    try: () => {
-      const address = server.address();
-      if (address === null || typeof address === "string") {
-        throw new Error("The HTTP listener has no TCP address.");
-      }
-      return address.port;
-    },
-    catch: (cause) => environmentServerError(cause, host, requestedPort),
-  });
+function readListeningPort(server: Server) {
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("The HTTP listener has no TCP address.");
+  }
+  return address.port;
 }
 
 function listen(server: Server, host: string, port: number) {
-  return Effect.callback<void, EnvironmentServerStartError>(
-    (resume, signal) => {
-      const failed = (cause: unknown) => {
-        detach();
-        resume(Effect.fail(environmentServerError(cause, host, port)));
-      };
-      const listening = () => {
-        detach();
-        resume(Effect.void);
-      };
-      const detach = () => {
-        server.off("error", failed);
-        server.off("listening", listening);
-      };
+  return new Promise<void>((resolve, reject) => {
+    const failed = (cause: unknown) => {
+      detach();
+      reject(cause);
+    };
+    const listening = () => {
+      detach();
+      resolve();
+    };
+    const detach = () => {
+      server.off("error", failed);
+      server.off("listening", listening);
+    };
 
-      server.once("error", failed);
-      server.once("listening", listening);
-      try {
-        server.listen({ exclusive: true, host, port, signal });
-      } catch (cause) {
-        failed(cause);
-      }
-
-      return Effect.sync(detach);
-    },
-  );
+    server.once("error", failed);
+    server.once("listening", listening);
+    try {
+      server.listen({ exclusive: true, host, port });
+    } catch (cause) {
+      failed(cause);
+    }
+  });
 }
 
 function closeServer(server: Server) {
@@ -166,13 +117,6 @@ function closeServer(server: Server) {
 
 function isServerNotRunning(error: unknown) {
   return isFileSystemError(error) && error.code === "ERR_SERVER_NOT_RUNNING";
-}
-
-function environmentServerError(cause: unknown, host: string, port: number) {
-  return new EnvironmentServerStartError({
-    cause,
-    message: listenerErrorMessage(cause, host, port),
-  });
 }
 
 function listenerErrorMessage(cause: unknown, host: string, port: number) {

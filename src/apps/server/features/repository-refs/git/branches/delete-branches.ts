@@ -1,4 +1,3 @@
-import { Array as Arrays, Effect, Result } from "effect";
 import {
   type RepositoryRejected,
   repositoryRejected,
@@ -15,8 +14,7 @@ import type {
 import type { RepositoryWorktree } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   type GitCommandRunner,
-  type GitFailed,
-  isGitRejection,
+  isGitFailed,
   runRepositoryGit,
   runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
@@ -25,7 +23,10 @@ import {
   branchRef,
   worktreeHolding,
 } from "#server/features/repository-refs/git/branches/branch-git.ts";
-import { refCommand } from "#server/features/repository-refs/git/ref-git.ts";
+import {
+  isGitRejected,
+  refCommand,
+} from "#server/features/repository-refs/git/ref-git.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
 const listedCommits = 20;
@@ -48,59 +49,61 @@ interface PushResult {
   readonly stderr: string;
 }
 
-export function deleteBranches(
+type DeletionFailure = RepositoryBranchesOperationFailure | RepositoryRejected;
+
+interface PushedDeletes {
+  readonly deleted: readonly RemoteTarget[];
+  readonly failure?: DeletionFailure;
+}
+
+export async function deleteBranches(
   git: GitCommandRunner,
   access: RepositoryAccess,
   { branches, force, worktreePath }: DeleteRepositoryBranches,
-): Effect.Effect<
-  RepositoryBranchesDeleted,
-  RepositoryBranchesOperationFailure | RepositoryRejected | GitFailed
-> {
-  return Effect.gen(function* () {
-    const refs = yield* readRefTargets(git, worktreePath);
-    const worktrees = yield* access.worktrees(worktreePath);
-    const problem = branches
-      .map((branch) => deletionProblem(branch, refs, worktrees))
-      .find(isDefined);
-    if (problem !== undefined) return yield* Effect.fail(problem);
-    const unmerged = force
-      ? []
-      : yield* unmergedBranches(git, worktreePath, branches, refs);
-    const deleting = branches.filter(
-      (branch) => !unmerged.some((entry) => entry.branch === branch),
-    );
-    const remotes = yield* deleteRemotes(
-      git,
-      worktreePath,
-      deleting.flatMap(({ remote }) => (remote === undefined ? [] : [remote])),
-    );
-    const deleted = deleting.filter(
-      ({ remote }) => remote === undefined || remotes.deleted.includes(remote),
-    );
-    yield* deleteLocals(
-      git,
-      worktreePath,
-      deleted.flatMap(({ local }) => (local === undefined ? [] : [local])),
-    );
-    if (remotes.failure === undefined) return { deleted, unmerged };
-    if (deleted.length === 0) return yield* Effect.fail(remotes.failure);
-    return { deleted, unmerged, failure: remotes.failure };
-  });
+): Promise<RepositoryBranchesDeleted> {
+  const refs = await readRefTargets(git, worktreePath);
+  const worktrees = await access.worktrees(worktreePath);
+  const problem = branches
+    .map((branch) => deletionProblem(branch, refs, worktrees))
+    .find(isDefined);
+  if (problem !== undefined) throw problem;
+  const unmerged = force
+    ? []
+    : await unmergedBranches(git, worktreePath, branches, refs);
+  const deleting = branches.filter(
+    (branch) => !unmerged.some((entry) => entry.branch === branch),
+  );
+  const remotes = await deleteRemotes(
+    git,
+    worktreePath,
+    deleting.flatMap(({ remote }) => (remote === undefined ? [] : [remote])),
+  );
+  const deleted = deleting.filter(
+    ({ remote }) => remote === undefined || remotes.deleted.includes(remote),
+  );
+  await deleteLocals(
+    git,
+    worktreePath,
+    deleted.flatMap(({ local }) => (local === undefined ? [] : [local])),
+  );
+  if (remotes.failure === undefined) return { deleted, unmerged };
+  if (deleted.length === 0) throw remotes.failure;
+  return { deleted, unmerged, failure: remotes.failure };
 }
 
-export function readUnmergedBranches(
+export async function readUnmergedBranches(
   git: GitCommandRunner,
   { branches, worktreePath }: ReadUnmergedBranches,
 ) {
-  return readRefTargets(git, worktreePath).pipe(
-    Effect.flatMap((refs) =>
-      unmergedBranches(git, worktreePath, branches, refs),
-    ),
-  );
+  const refs = await readRefTargets(git, worktreePath);
+  return unmergedBranches(git, worktreePath, branches, refs);
 }
 
-export function readRefTargets(git: GitCommandRunner, directory: string) {
-  return runRepositoryGit(
+export async function readRefTargets(
+  git: GitCommandRunner,
+  directory: string,
+): Promise<RefTargets> {
+  const output = await runRepositoryGit(
     git,
     directory,
     [
@@ -111,17 +114,13 @@ export function readRefTargets(git: GitCommandRunner, directory: string) {
       "refs/tags",
     ],
     refCommand,
-  ).pipe(
-    Effect.map(
-      (output): RefTargets =>
-        new Map(
-          output
-            .split("\n")
-            .map((line) => line.split("\0"))
-            .filter(([ref = "", , symref = ""]) => ref !== "" && symref === "")
-            .map(([ref = "", target = ""]) => [ref, target]),
-        ),
-    ),
+  );
+  return new Map(
+    output
+      .split("\n")
+      .map((line) => line.split("\0"))
+      .filter(([ref = "", , symref = ""]) => ref !== "" && symref === "")
+      .map(([ref = "", target = ""]) => [ref, target]),
   );
 }
 
@@ -164,7 +163,7 @@ function targetProblem(
   return target === expected ? undefined : { _tag: "BranchMoved", name };
 }
 
-export function unmergedBranches(
+export async function unmergedBranches(
   git: GitCommandRunner,
   directory: string,
   branches: readonly BranchDeletion[],
@@ -180,158 +179,139 @@ export function unmergedBranches(
   ];
   const onlyOn = (targets: readonly string[]) =>
     [...new Set(targets), ...kept, ""].join("\n");
-  return Effect.gen(function* () {
-    const lost = yield* countCommits(
-      git,
-      directory,
-      onlyOn(branches.flatMap(targets)),
+  const lost = await countCommits(
+    git,
+    directory,
+    onlyOn(branches.flatMap(targets)),
+  );
+  if (lost === 0) return [];
+  const entries: (UnmergedBranch | undefined)[] = [];
+  for (let start = 0; start < branches.length; start += unmergedChecks)
+    entries.push(
+      ...(await Promise.all(
+        branches
+          .slice(start, start + unmergedChecks)
+          .map((branch) =>
+            unmergedBranch(git, directory, branch, onlyOn(targets(branch))),
+          ),
+      )),
     );
-    if (lost === 0) return [];
-    const entries = yield* Effect.forEach(
-      branches,
-      (branch) =>
-        unmergedBranch(git, directory, branch, onlyOn(targets(branch))),
-      { concurrency: unmergedChecks },
-    );
-    return entries.filter(isDefined);
-  });
+  return entries.filter(isDefined);
 }
 
-function unmergedBranch(
+async function unmergedBranch(
   git: GitCommandRunner,
   directory: string,
   branch: BranchDeletion,
   revisions: string,
-) {
-  return Effect.all(
-    {
-      count: countCommits(git, directory, revisions),
-      log: runRepositoryGit(
-        git,
-        directory,
-        ["log", "--format=%H%x00%s", `--max-count=${listedCommits}`, "--stdin"],
-        { ...refCommand, input: revisions },
-      ),
-    },
-    { concurrency: "unbounded" },
-  ).pipe(
-    Effect.map(({ count, log }): UnmergedBranch | undefined =>
-      count === 0 ? undefined : { branch, commits: parseCommits(log), count },
+): Promise<UnmergedBranch | undefined> {
+  const [count, log] = await Promise.all([
+    countCommits(git, directory, revisions),
+    runRepositoryGit(
+      git,
+      directory,
+      ["log", "--format=%H%x00%s", `--max-count=${listedCommits}`, "--stdin"],
+      { ...refCommand, input: revisions },
     ),
-  );
+  ]);
+  return count === 0
+    ? undefined
+    : { branch, commits: parseCommits(log), count };
 }
 
-function countCommits(
+async function countCommits(
   git: GitCommandRunner,
   directory: string,
   revisions: string,
 ) {
-  return runRepositoryGit(git, directory, ["rev-list", "--count", "--stdin"], {
-    ...refCommand,
-    input: revisions,
-  }).pipe(Effect.map((output) => Number.parseInt(output.trim(), 10)));
+  const output = await runRepositoryGit(
+    git,
+    directory,
+    ["rev-list", "--count", "--stdin"],
+    { ...refCommand, input: revisions },
+  );
+  return Number.parseInt(output.trim(), 10);
 }
 
-function deleteRemotes(
+async function deleteRemotes(
   git: GitCommandRunner,
   directory: string,
   remotes: readonly RemoteTarget[],
-) {
-  return Effect.gen(function* () {
-    const deleted: RemoteTarget[] = [];
-    for (const [remote, batch] of remoteBatches(remotes)) {
-      const pushed = yield* Effect.result(
-        pushDeletes(git, directory, remote, batch),
-      );
-      if (Result.isFailure(pushed)) return { deleted, failure: pushed.failure };
-      deleted.push(...pushed.success.deleted);
-      if (pushed.success.failure !== undefined)
-        return { deleted, failure: pushed.success.failure };
-    }
-    return { deleted };
-  });
+): Promise<PushedDeletes> {
+  const deleted: RemoteTarget[] = [];
+  for (const [remote, batch] of remoteBatches(remotes)) {
+    const pushed = await pushDeletes(git, directory, remote, batch);
+    deleted.push(...pushed.deleted);
+    if (pushed.failure !== undefined)
+      return { deleted, failure: pushed.failure };
+  }
+  return { deleted };
 }
 
 function remoteBatches(remotes: readonly RemoteTarget[]) {
-  return [...Map.groupBy(remotes, ({ remote }) => remote)].flatMap(
-    ([remote, group]) =>
-      Arrays.chunksOf(group, pushedPerCommand).map(
-        (batch) => [remote, batch] as const,
-      ),
-  );
+  const batches: (readonly [string, readonly RemoteTarget[]])[] = [];
+  for (const [remote, group] of Map.groupBy(remotes, ({ remote }) => remote))
+    for (let start = 0; start < group.length; start += pushedPerCommand)
+      batches.push([remote, group.slice(start, start + pushedPerCommand)]);
+  return batches;
 }
 
-function pushDeletes(
+async function pushDeletes(
   git: GitCommandRunner,
   directory: string,
   remote: string,
   batch: readonly RemoteTarget[],
-) {
-  return Effect.gen(function* () {
-    const leased = yield* pushDelete(
-      git,
-      directory,
-      remote,
-      batch,
-      leaseTarget,
-    );
-    const stale = batch.filter(({ name }) =>
-      isStale(rejection(leased.pushed, name)?.summary),
-    );
-    if (stale.length === 0) return pushedDeletes(batch, leased);
-    const absent = yield* pushDelete(
-      git,
-      directory,
-      remote,
-      stale,
-      leaseAbsent,
-    );
-    return pushedDeletes(batch, {
-      pushed: [
-        ...leased.pushed.filter(
-          ({ ref }) => !stale.some(({ name }) => ref === branchRef(name)),
-        ),
-        ...absent.pushed,
-      ],
-      stderr: absent.stderr,
-    });
+): Promise<PushedDeletes> {
+  const leased = await pushDelete(git, directory, remote, batch, leaseTarget);
+  if ("failure" in leased) return { deleted: [], failure: leased.failure };
+  const stale = batch.filter(({ name }) =>
+    isStale(rejection(leased.pushed, name)?.summary),
+  );
+  if (stale.length === 0) return pushedDeletes(batch, leased);
+  const absent = await pushDelete(git, directory, remote, stale, leaseAbsent);
+  if ("failure" in absent) return { deleted: [], failure: absent.failure };
+  return pushedDeletes(batch, {
+    pushed: [
+      ...leased.pushed.filter(
+        ({ ref }) => !stale.some(({ name }) => ref === branchRef(name)),
+      ),
+      ...absent.pushed,
+    ],
+    stderr: absent.stderr,
   });
 }
 
-function pushDelete(
+async function pushDelete(
   git: GitCommandRunner,
   directory: string,
   remote: string,
   pending: readonly RemoteTarget[],
   lease: (target: RemoteTarget) => string,
-): Effect.Effect<
-  PushResult,
-  RepositoryBranchesOperationFailure | RepositoryRejected
-> {
-  return runRepositoryGitOutput(
-    git,
-    directory,
-    [
-      "push",
-      "--porcelain",
-      ...pending.map(
-        (target) =>
-          `--force-with-lease=${branchRef(target.name)}:${lease(target)}`,
-      ),
-      remote,
-      "--delete",
-      ...pending.map(({ name }) => branchRef(name)),
-    ],
-    { ...pushCommand, exitCodes: [0, 1] },
-  ).pipe(
-    Effect.mapError((error) =>
-      branchWriteFailed(error, `${remote}/${pending[0]?.name ?? ""}`),
-    ),
-    Effect.map(({ stderr, stdout }) => ({
-      pushed: pushedRefs(stdout),
-      stderr,
-    })),
-  );
+): Promise<PushResult | { readonly failure: DeletionFailure }> {
+  try {
+    const { stderr, stdout } = await runRepositoryGitOutput(
+      git,
+      directory,
+      [
+        "push",
+        "--porcelain",
+        ...pending.map(
+          (target) =>
+            `--force-with-lease=${branchRef(target.name)}:${lease(target)}`,
+        ),
+        remote,
+        "--delete",
+        ...pending.map(({ name }) => branchRef(name)),
+      ],
+      { ...pushCommand, exitCodes: [0, 1] },
+    );
+    return { pushed: pushedRefs(stdout), stderr };
+  } catch (error) {
+    if (!isGitFailed(error)) throw error;
+    return {
+      failure: branchWriteFailed(error, `${remote}/${pending[0]?.name ?? ""}`),
+    };
+  }
 }
 
 function pushedRefs(stdout: string): readonly PushedRef[] {
@@ -346,10 +326,7 @@ function pushedRefs(stdout: string): readonly PushedRef[] {
 function pushedDeletes(
   batch: readonly RemoteTarget[],
   { pushed, stderr }: PushResult,
-): {
-  readonly deleted: readonly RemoteTarget[];
-  readonly failure?: RepositoryBranchesOperationFailure | RepositoryRejected;
-} {
+): PushedDeletes {
   const isDeleted = ({ name }: RemoteTarget) =>
     pushed.some(({ ref }) => ref === branchRef(name)) &&
     rejection(pushed, name) === undefined;
@@ -387,41 +364,36 @@ function isStale(summary: string | undefined) {
   return summary?.endsWith("(stale info)") === true;
 }
 
-export function deleteLocals(
+export async function deleteLocals(
   git: GitCommandRunner,
   directory: string,
   locals: readonly LocalTarget[],
 ) {
-  if (locals.length === 0) return Effect.void;
-  return runRepositoryGit(git, directory, ["update-ref", "--stdin"], {
-    ...refCommand,
-    input: locals
-      .map(({ name, target }) => `delete ${branchRef(name)} ${target}\n`)
-      .join(""),
-  }).pipe(
-    Effect.catchIf(isGitRejection, (error) =>
-      Effect.fail<RepositoryBranchesOperationFailure>({
-        _tag: "BranchMoved",
-        name:
-          /'refs\/heads\/([^']+)'/.exec(error.detail)?.[1] ??
-          locals[0]?.name ??
-          "",
-      }),
-    ),
-    Effect.andThen(
-      Effect.forEach(
-        locals,
-        ({ name }) =>
-          runRepositoryGit(
-            git,
-            directory,
-            ["config", "--remove-section", `branch.${name}`],
-            { ...refCommand, exitCodes: [0, 1, 128] },
-          ),
-        { discard: true },
-      ),
-    ),
-  );
+  if (locals.length === 0) return;
+  try {
+    await runRepositoryGit(git, directory, ["update-ref", "--stdin"], {
+      ...refCommand,
+      input: locals
+        .map(({ name, target }) => `delete ${branchRef(name)} ${target}\n`)
+        .join(""),
+    });
+  } catch (error) {
+    if (!isGitRejected(error)) throw error;
+    throw {
+      _tag: "BranchMoved",
+      name:
+        /'refs\/heads\/([^']+)'/.exec(error.detail)?.[1] ??
+        locals[0]?.name ??
+        "",
+    } satisfies RepositoryBranchesOperationFailure;
+  }
+  for (const { name } of locals)
+    await runRepositoryGit(
+      git,
+      directory,
+      ["config", "--remove-section", `branch.${name}`],
+      { ...refCommand, exitCodes: [0, 1, 128] },
+    );
 }
 
 function deletedRefs({ local, remote }: BranchDeletion) {

@@ -1,7 +1,5 @@
-import { type Cause, Effect, Queue, Stream } from "effect";
 import {
   RepositoryHistoryApi,
-  type RepositoryHistoryFailure,
   type RepositoryHistoryUpdate,
   type SynchronizeRepositoryHistory,
 } from "#contracts/repository-history/repository-history.contract.ts";
@@ -9,7 +7,10 @@ import {
   type EnvironmentFeature,
   stream,
 } from "#server/adapters/environment-transport/environment-routes.ts";
-import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
+import {
+  type GitCommandRunner,
+  isGitFailed,
+} from "#server/adapters/local-git/git-commands.ts";
 import {
   findHistoryRepository,
   historyWireFailure,
@@ -22,81 +23,49 @@ import { readHistoryTips } from "#server/features/repository-history/git/read-hi
 import { streamRepositoryHistory } from "#server/features/repository-history/git/stream-repository-history.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
-export function repositoryHistoryFeature(dependencies: {
+export function repositoryHistoryFeature({
+  access,
+  git,
+}: {
   readonly access: RepositoryAccess;
   readonly git: GitCommandRunner;
-}) {
-  const layout = createHistoryLayoutCache(dependencies.git);
-  const synchronize = (
-    request: SynchronizeRepositoryHistory,
-    emit: (
-      update: RepositoryHistoryUpdate,
-    ) => Effect.Effect<void, RepositoryHistoryFailure>,
-  ) =>
-    findHistoryRepository(dependencies.access, request.repositoryId).pipe(
-      Effect.flatMap((repository) =>
-        synchronizeRepositoryHistory(
-          dependencies.git,
-          repository.path,
-          request,
-          layout(repository.path),
-          emit,
-        ),
-      ),
-      Effect.mapError(historyWireFailure),
-    );
+}): EnvironmentFeature {
+  const layout = createHistoryLayoutCache(git);
   return {
     routes: [
       stream(RepositoryHistoryApi.synchronize, (request) =>
-        Stream.unwrap(
-          Effect.gen(function* () {
-            const queue = yield* Queue.bounded<
-              RepositoryHistoryUpdate,
-              RepositoryHistoryFailure | Cause.Done
-            >(1);
-            yield* Effect.addFinalizer(() => Queue.shutdown(queue));
-            yield* Effect.forkScoped(
-              synchronize(request, (update) =>
-                Queue.offer(queue, update).pipe(Effect.asVoid),
-              ).pipe(
-                Effect.andThen(Queue.end(queue)),
-                Effect.catchCause((cause) => Queue.failCause(queue, cause)),
-              ),
-            );
-            return Stream.fromQueue(queue);
-          }),
-        ),
+        synchronizeRepositoryHistory(access, git, layout, request),
       ),
     ],
-  } satisfies EnvironmentFeature;
+  };
 }
 
-function synchronizeRepositoryHistory(
+async function* synchronizeRepositoryHistory(
+  access: RepositoryAccess,
   git: GitCommandRunner,
-  repositoryPath: string,
-  request: SynchronizeRepositoryHistory,
   readLayout: HistoryLayoutRead,
-  emit: (
-    update: RepositoryHistoryUpdate,
-  ) => Effect.Effect<void, RepositoryHistoryFailure>,
-) {
-  return Effect.gen(function* () {
-    const tips = yield* readHistoryTips(git, repositoryPath, readLayout);
-    yield* emit(tips);
-    yield* streamRepositoryHistory(
-      git,
-      repositoryPath,
-      {
-        roots: tips.rootOids,
-        knownTips: sameOids(request.shallowOids, tips.shallowOids)
-          ? request.knownTips
-          : [],
-        objectFormat: tips.objectFormat,
-        shallowOids: tips.shallowOids,
-      },
-      (commits) => emit({ _tag: "RepositoryHistoryCommits", commits }),
+  request: SynchronizeRepositoryHistory,
+): AsyncIterable<RepositoryHistoryUpdate> {
+  try {
+    const repository = await findHistoryRepository(
+      access,
+      request.repositoryId,
     );
-  });
+    const tips = await readHistoryTips(git, repository.path, readLayout);
+    yield tips;
+    const commits = streamRepositoryHistory(git, repository.path, {
+      roots: tips.rootOids,
+      knownTips: sameOids(request.shallowOids, tips.shallowOids)
+        ? request.knownTips
+        : [],
+      objectFormat: tips.objectFormat,
+      shallowOids: tips.shallowOids,
+    });
+    for await (const batch of commits)
+      yield { _tag: "RepositoryHistoryCommits", commits: batch };
+  } catch (error) {
+    throw isGitFailed(error) ? historyWireFailure(error) : error;
+  }
 }
 
 function sameOids(left: readonly string[], right: readonly string[]) {

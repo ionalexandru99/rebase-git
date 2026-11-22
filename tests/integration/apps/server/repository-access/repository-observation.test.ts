@@ -4,8 +4,7 @@ import { mkdtemp, realpath, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Effect, Exit, Scope } from "effect";
-import { expect, it, vi } from "vite-plus/test";
+import { expect, it, onTestFinished, vi } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher.ts";
@@ -40,70 +39,61 @@ it("observes linked worktrees through one watch until the change publisher close
   const mainEntry = await environment.remember(main);
   const linkedEntry = await environment.remember(linked);
   const { access, git: runner, watcher } = environment;
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const events = createEnvironmentEventPublisher();
-      const changed = vi.fn();
-      events.subscribe(changed);
-      const refsScope = yield* Scope.fork(yield* Effect.scope);
-      const changes = yield* acquireRepositoryChangePublisher(
-        runner,
-        watcher,
-        events,
-      ).pipe(Effect.provideService(Scope.Scope, refsScope));
-      vi.mocked(watch).mockClear();
-      run.mockClear();
-      for (const entry of [mainEntry, linkedEntry]) {
-        const repository = yield* access.repository(entry.id);
-        yield* changes.watch(repository);
-        yield* readRepositoryRefs(runner, repository);
-      }
-      const roots = vi.mocked(watch).mock.calls.flatMap((args, index) => {
-        if (args[0] !== join(main, ".git")) return [];
-        const result = vi.mocked(watch).mock.results[index];
-        return result?.type === "return" ? [result.value] : [];
-      });
-      expect(roots).toHaveLength(1);
-      expect(
-        run.mock.calls.filter(([command]) =>
-          command.arguments.includes("--git-common-dir"),
-        ),
-      ).toHaveLength(2);
-      const closed = vi.fn();
-      for (const handle of roots) handle.on("close", closed);
-      yield* Effect.promise(() => git("-C", linked, "checkout", "--detach"));
-      yield* Effect.promise(() =>
-        waitForObservation(() =>
-          expect(changed).toHaveBeenCalledWith(
-            expect.any(Number),
-            expect.arrayContaining([mainEntry.id, linkedEntry.id]),
-            "Refs",
-          ),
-        ),
-      );
-      yield* Scope.close(refsScope, Exit.void);
-      yield* Effect.promise(() =>
-        waitForObservation(() => expect(closed).toHaveBeenCalledOnce()),
-      );
-      changed.mockClear();
-      const control = createEnvironmentEventPublisher();
-      const controlChanged = vi.fn();
-      control.subscribe(controlChanged);
-      const controlChanges = yield* acquireRepositoryChangePublisher(
-        runner,
-        createLocalRepositoryWatcher(),
-        control,
-      );
-      yield* controlChanges.watch(mainEntry);
-      yield* Effect.promise(() =>
-        waitForObservation(
-          () => expect(controlChanged).toHaveBeenCalled(),
-          () => git("-C", main, "branch", "-f", "after-close"),
-        ),
-      );
-      expect(changed).not.toHaveBeenCalled();
-    }).pipe(Effect.scoped),
+  const events = createEnvironmentEventPublisher();
+  const changed = vi.fn();
+  events.subscribe(changed);
+  const changes = await acquireRepositoryChangePublisher(
+    runner,
+    watcher,
+    events,
   );
+  onTestFinished(changes.close);
+  vi.mocked(watch).mockClear();
+  run.mockClear();
+  for (const entry of [mainEntry, linkedEntry]) {
+    const repository = await access.repository(entry.id);
+    await changes.watch(repository);
+    await readRepositoryRefs(runner, repository);
+  }
+  const roots = vi.mocked(watch).mock.calls.flatMap((args, index) => {
+    if (args[0] !== join(main, ".git")) return [];
+    const result = vi.mocked(watch).mock.results[index];
+    return result?.type === "return" ? [result.value] : [];
+  });
+  expect(roots).toHaveLength(1);
+  expect(
+    run.mock.calls.filter(([command]) =>
+      command.arguments.includes("--git-common-dir"),
+    ),
+  ).toHaveLength(2);
+  const closed = vi.fn();
+  for (const handle of roots) handle.on("close", closed);
+  await git("-C", linked, "checkout", "--detach");
+  await waitForObservation(() =>
+    expect(changed).toHaveBeenCalledWith(
+      expect.any(Number),
+      expect.arrayContaining([mainEntry.id, linkedEntry.id]),
+      "Refs",
+    ),
+  );
+  changes.close();
+  await waitForObservation(() => expect(closed).toHaveBeenCalledOnce());
+  changed.mockClear();
+  const control = createEnvironmentEventPublisher();
+  const controlChanged = vi.fn();
+  control.subscribe(controlChanged);
+  const controlChanges = await acquireRepositoryChangePublisher(
+    runner,
+    createLocalRepositoryWatcher(),
+    control,
+  );
+  onTestFinished(controlChanges.close);
+  await controlChanges.watch(mainEntry);
+  await waitForObservation(
+    () => expect(controlChanged).toHaveBeenCalled(),
+    () => git("-C", main, "branch", "-f", "after-close"),
+  );
+  expect(changed).not.toHaveBeenCalled();
 });
 
 it("shares canonical directory aliases and makes release idempotent", async () => {
@@ -124,10 +114,8 @@ it("shares canonical directory aliases and makes release idempotent", async () =
     const changed = vi.fn();
     vi.mocked(watch).mockClear();
     const listener = { changed, failed: () => {} };
-    const first = await Effect.runPromise(watcher.watch(common, listener));
-    const second = await Effect.runPromise(
-      watcher.watch(alias.replaceAll("\\", "/"), listener),
-    );
+    const first = watcher.watch(common, listener);
+    const second = watcher.watch(alias.replaceAll("\\", "/"), listener);
     try {
       expect(
         vi.mocked(watch).mock.calls.filter(([path]) => path === common),
@@ -173,18 +161,14 @@ it("tells every listener when the system runs out of file watchers", async () =>
     const second = vi.fn();
 
     const handles = [
-      await Effect.runPromise(
-        watcher.watch(join(directory, ".git"), {
-          changed: () => {},
-          failed: first,
-        }),
-      ),
-      await Effect.runPromise(
-        watcher.watch(join(directory, ".git"), {
-          changed: () => {},
-          failed: second,
-        }),
-      ),
+      watcher.watch(join(directory, ".git"), {
+        changed: () => {},
+        failed: first,
+      }),
+      watcher.watch(join(directory, ".git"), {
+        changed: () => {},
+        failed: second,
+      }),
     ];
 
     expect(first).toHaveBeenCalledWith(limit.message);

@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Deferred, Effect, Fiber } from "effect";
 import { expect, it } from "vite-plus/test";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
@@ -37,15 +36,13 @@ async function fixture() {
   const reflog = environment.routes(RepositoryReflogApi);
   const scope = { repositoryId, worktreePath: directory };
   const continueOperation = async () =>
-    Effect.runPromise(
-      operations.execute({
-        ...scope,
-        revision: (await Effect.runPromise(operations.read(scope))).revision,
-        action: "continue",
-      }),
-    );
+    operations.execute({
+      ...scope,
+      revision: (await operations.read(scope)).revision,
+      action: "continue",
+    });
   const checkout = (target: CheckoutRepositoryRef["target"]) =>
-    Effect.runPromise(refs.checkout({ ...scope, target }));
+    refs.checkout({ ...scope, target });
   return {
     directory,
     git,
@@ -54,7 +51,7 @@ async function fixture() {
     reflog,
     checkout,
     scope,
-    readOperation: () => Effect.runPromise(operations.read(scope)),
+    readOperation: () => operations.read(scope),
     continueOperation,
   };
 }
@@ -80,40 +77,34 @@ it("rejects incompatible writes during a merge and stages its resolution", async
   await startConflict(f.git, "merge");
   await writeFile(join(f.directory, "file.txt"), "resolved\n");
   const scope = { ...f.scope, amend: false };
-  const snapshot = await Effect.runPromise(f.changes.read(scope));
+  const snapshot = await f.changes.read(scope);
   const incompatible = { _tag: "RepositoryRejected", reason: "Incompatible" };
   await expect(
-    Effect.runPromise(
-      f.changes.commit({
-        ...scope,
-        revision: snapshot.revision,
-        message: "during merge",
-      }),
-    ),
+    f.changes.commit({
+      ...scope,
+      revision: snapshot.revision,
+      message: "during merge",
+    }),
   ).rejects.toMatchObject(incompatible);
   await expect(
-    Effect.runPromise(
-      f.changes.mutate({
-        ...scope,
-        revision: snapshot.revision,
-        action: "discard",
-        section: "unstaged",
-        selection: { _tag: "All" },
-      }),
-    ),
+    f.changes.mutate({
+      ...scope,
+      revision: snapshot.revision,
+      action: "discard",
+      section: "unstaged",
+      selection: { _tag: "All" },
+    }),
   ).rejects.toMatchObject(incompatible);
   await expect(
     f.checkout({ _tag: "LocalBranch", name: "topic" }),
   ).rejects.toMatchObject(incompatible);
-  await Effect.runPromise(
-    f.changes.mutate({
-      ...scope,
-      revision: snapshot.revision,
-      action: "stage",
-      section: "unstaged",
-      selection: { _tag: "Files", paths: ["file.txt"] },
-    }),
-  );
+  await f.changes.mutate({
+    ...scope,
+    revision: snapshot.revision,
+    action: "stage",
+    section: "unstaged",
+    selection: { _tag: "Files", paths: ["file.txt"] },
+  });
   expect((await f.continueOperation()).kind).toBe("idle");
   expect((await f.git("show", "HEAD:file.txt")).stdout).toBe("resolved\n");
 });
@@ -125,14 +116,12 @@ it("amends the commit at a rebase edit stop before continuing", async () => {
   await writeFile(join(f.directory, "file.txt"), "amended\n");
   await f.git("add", "file.txt");
   const amendment = { ...f.scope, amend: true };
-  const snapshot = await Effect.runPromise(f.changes.read(amendment));
-  await Effect.runPromise(
-    f.changes.commit({
-      ...amendment,
-      revision: snapshot.revision,
-      message: "amended topic",
-    }),
-  );
+  const snapshot = await f.changes.read(amendment);
+  await f.changes.commit({
+    ...amendment,
+    revision: snapshot.revision,
+    message: "amended topic",
+  });
   expect((await f.continueOperation()).kind).toBe("idle");
   expect((await f.git("show", "HEAD:file.txt")).stdout).toBe("amended\n");
 });
@@ -150,14 +139,12 @@ it("splits the commit at a rebase edit stop with a reset and plain commits", asy
   ).stdout
     .trim()
     .split("\n");
-  await Effect.runPromise(
-    f.reflog.reset({
-      ...f.scope,
-      target: parent,
-      mode: "mixed",
-      expectedHead: head,
-    }),
-  );
+  await f.reflog.reset({
+    ...f.scope,
+    target: parent,
+    mode: "mixed",
+    expectedHead: head,
+  });
   const continueAction = async () =>
     (await f.readOperation()).actions.find((a) => a.action === "continue");
   const blocked = {
@@ -168,22 +155,18 @@ it("splits the commit at a rebase edit stop with a reset and plain commits", asy
   const changes = { ...f.scope, amend: false };
   for (const part of ["a", "b"]) {
     expect(await continueAction()).toEqual(blocked);
-    const written = await Effect.runPromise(
-      f.changes.mutate({
-        ...changes,
-        revision: (await Effect.runPromise(f.changes.read(changes))).revision,
-        section: "unstaged",
-        action: "stage",
-        selection: { _tag: "Files", paths: [`${part}.txt`] },
-      }),
-    );
-    await Effect.runPromise(
-      f.changes.commit({
-        ...changes,
-        revision: written.changes.revision,
-        message: `part ${part}`,
-      }),
-    );
+    const written = await f.changes.mutate({
+      ...changes,
+      revision: (await f.changes.read(changes)).revision,
+      section: "unstaged",
+      action: "stage",
+      selection: { _tag: "Files", paths: [`${part}.txt`] },
+    });
+    await f.changes.commit({
+      ...changes,
+      revision: written.changes.revision,
+      message: `part ${part}`,
+    });
   }
 
   expect((await f.continueOperation()).kind).toBe("idle");
@@ -196,37 +179,27 @@ it("queues ref writers across worktrees", async () => {
   const f = await fixture();
   const linked = `${f.directory}-linked`;
   await f.git("worktree", "add", linked, "topic");
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const entered = yield* Deferred.make<void>();
-        const release = yield* Deferred.make<void>();
-        const order: string[] = [];
-        const record = (step: string) =>
-          Effect.sync(() => {
-            order.push(step);
-          });
-        const first = yield* f.coordination
-          .run(
-            f.directory,
-            refsAndWorktreeWrite,
-            Deferred.succeed(entered, undefined).pipe(
-              Effect.andThen(Deferred.await(release)),
-              Effect.andThen(record("first")),
-            ),
-          )
-          .pipe(Effect.forkScoped);
-        yield* Deferred.await(entered);
-        const second = yield* f.coordination
-          .run(linked, refsAndWorktreeWrite, record("second"))
-          .pipe(Effect.forkScoped);
-        yield* f.coordination.run(linked, worktreeWrite, record("stage"));
-        expect(order).toEqual(["stage"]);
-        yield* Deferred.succeed(release, undefined);
-        yield* Fiber.join(first);
-        yield* Fiber.join(second);
-        expect(order).toEqual(["stage", "first", "second"]);
-      }),
-    ),
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const order: string[] = [];
+  const first = f.coordination.run(
+    f.directory,
+    refsAndWorktreeWrite,
+    async () => {
+      entered.resolve();
+      await release.promise;
+      order.push("first");
+    },
   );
+  await entered.promise;
+  const second = f.coordination.run(linked, refsAndWorktreeWrite, async () => {
+    order.push("second");
+  });
+  await f.coordination.run(linked, worktreeWrite, async () => {
+    order.push("stage");
+  });
+  expect(order).toEqual(["stage"]);
+  release.resolve();
+  await Promise.all([first, second]);
+  expect(order).toEqual(["stage", "first", "second"]);
 });

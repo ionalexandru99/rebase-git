@@ -1,7 +1,6 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { afterAll, beforeAll, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { createRepository } from "#tests-support/git.ts";
@@ -25,62 +24,48 @@ afterAll(async () => {
 });
 
 it("returns a rejected command's exit code and error output", async () => {
-  const output = await Effect.runPromise(
-    git.run({
-      arguments: ["rev-parse", "--verify", "refs/heads/missing"],
-      directory,
-    }),
-  );
+  const output = await git.run({
+    arguments: ["rev-parse", "--verify", "refs/heads/missing"],
+    directory,
+  });
 
   expect(output.exitCode).toBe(128);
   expect(output.stderr).toContain("Needed a single revision");
 });
 
 it("fails instead of returning cut-off output when Git prints more than allowed", async () => {
-  const error = await Effect.runPromise(
-    Effect.flip(
-      git.run({
-        arguments: ["log", "--format=%H %s"],
-        directory,
-        maxOutputBytes: 8,
-      }),
-    ),
-  );
-
-  expect(error.reason).toBe("OutputTooLarge");
+  await expect(
+    git.run({
+      arguments: ["log", "--format=%H %s"],
+      directory,
+      maxOutputBytes: 8,
+    }),
+  ).rejects.toMatchObject({ reason: "OutputTooLarge" });
 });
 
 it("stops Git and everything it started when the deadline passes", async () => {
-  const error = await Effect.runPromise(
-    Effect.flip(
-      git.run({
-        arguments: waitForever,
-        directory,
-        timeoutMilliseconds: 1_000,
-      }),
-    ),
-  );
-
-  expect(error.reason).toBe("Timeout");
+  await expect(
+    git.run({
+      arguments: waitForever,
+      directory,
+      timeoutMilliseconds: 1_000,
+    }),
+  ).rejects.toMatchObject({ reason: "Timeout" });
 });
 
 it("reports a run stopped from Diagnostics", async () => {
   let stop = () => {};
-  const error = await Effect.runPromise(
-    Effect.flip(
-      git.run({
-        arguments: waitForever,
-        directory,
-        onSpawn: (_pid, stopRun) => {
-          stop = stopRun;
-        },
-        progressStream: "stdout",
-        progress: () => stop(),
-      }),
-    ),
-  );
-
-  expect(error).toMatchObject({
+  await expect(
+    git.run({
+      arguments: waitForever,
+      directory,
+      onSpawn: (_pid, stopRun) => {
+        stop = stopRun;
+      },
+      progressStream: "stdout",
+      progress: () => stop(),
+    }),
+  ).rejects.toMatchObject({
     reason: "Failed",
     detail: "Stopped from Diagnostics.",
   });

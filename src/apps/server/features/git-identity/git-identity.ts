@@ -1,5 +1,4 @@
 import { homedir } from "node:os";
-import { Effect } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   type GitIdentity,
@@ -12,9 +11,9 @@ import {
   type EnvironmentFeature,
   route,
 } from "#server/adapters/environment-transport/environment-routes.ts";
-import type {
-  GitCommandRunner,
-  GitFailed,
+import {
+  type GitCommandRunner,
+  isGitFailed,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
   type ConfigScope,
@@ -47,40 +46,38 @@ export function gitIdentityFeature({
   return {
     routes: [
       route(GitIdentityApi.read, () =>
-        readScopedConfig(git, homedir(), configKeys).pipe(
-          Effect.map((values) => pick(values, "--global")),
-          Effect.mapError(identityFailed),
+        failingAsIdentity(async () =>
+          pick(await readScopedConfig(git, homedir(), configKeys), "--global"),
         ),
       ),
       route(GitIdentityApi.save, (identity) =>
-        saveIdentity(git, homedir(), "--global", identity).pipe(
-          Effect.tap(() => Effect.sync(() => events.publishChanged())),
-          Effect.map((values) => pick(values, "--global")),
-          Effect.mapError(identityFailed),
-        ),
+        failingAsIdentity(async () => {
+          const values = await saveIdentity(
+            git,
+            homedir(),
+            "--global",
+            identity,
+          );
+          events.publishChanged();
+          return pick(values, "--global");
+        }),
       ),
-      route(GitIdentityApi.readRepository, ({ repositoryId }) =>
-        access.repository(repositoryId).pipe(
-          Effect.flatMap(({ path }) => readScopedConfig(git, path, configKeys)),
-          Effect.map(repositoryIdentity),
-          Effect.catchTag("GitFailed", ({ detail }) =>
-            Effect.fail(repositoryRejected("GitFailed", detail)),
-          ),
-        ),
-      ),
-      route(GitIdentityApi.saveRepository, ({ repositoryId, identity }) =>
-        access.repository(repositoryId).pipe(
-          Effect.flatMap(({ path }) =>
-            saveIdentity(git, path, "--local", identity),
-          ),
-          Effect.tap(() =>
-            Effect.sync(() => events.publishChanged([repositoryId])),
-          ),
-          Effect.map(repositoryIdentity),
-          Effect.catchTag("GitFailed", ({ detail }) =>
-            Effect.fail(repositoryRejected("GitFailed", detail)),
-          ),
-        ),
+      route(GitIdentityApi.readRepository, async ({ repositoryId }) => {
+        const { path } = await access.repository(repositoryId);
+        return rejectingGitFailures(async () =>
+          repositoryIdentity(await readScopedConfig(git, path, configKeys)),
+        );
+      }),
+      route(
+        GitIdentityApi.saveRepository,
+        async ({ repositoryId, identity }) => {
+          const { path } = await access.repository(repositoryId);
+          return rejectingGitFailures(async () => {
+            const values = await saveIdentity(git, path, "--local", identity);
+            events.publishChanged([repositoryId]);
+            return repositoryIdentity(values);
+          });
+        },
       ),
     ],
   } satisfies EnvironmentFeature;
@@ -107,6 +104,24 @@ function pick(values: IdentityConfig, scope: ConfigScope): GitIdentity {
   };
 }
 
-function identityFailed({ detail }: GitFailed): IdentityFailed {
-  return { _tag: "IdentityFailed", detail: detail.slice(0, 2_048) };
+async function failingAsIdentity<Value>(run: () => Promise<Value>) {
+  try {
+    return await run();
+  } catch (error) {
+    if (!isGitFailed(error)) throw error;
+    throw {
+      _tag: "IdentityFailed",
+      detail: error.detail.slice(0, 2_048),
+    } satisfies IdentityFailed;
+  }
+}
+
+async function rejectingGitFailures<Value>(run: () => Promise<Value>) {
+  try {
+    return await run();
+  } catch (error) {
+    throw isGitFailed(error)
+      ? repositoryRejected("GitFailed", error.detail)
+      : error;
+  }
 }

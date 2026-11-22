@@ -1,53 +1,42 @@
 import { homedir } from "node:os";
-import { Deferred, Effect } from "effect";
 import type {
   EnvironmentProcessCommand,
   EnvironmentProcessMessage,
 } from "#desktop/platform/environment/environment-supervisor.ts";
 import { startEnvironmentServer } from "#server/app/server/start-environment-server.ts";
 
-const acquireStopRequest = Effect.gen(function* () {
-  const stop = yield* Deferred.make<void>();
-  yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const requestStop = () => {
-        Deferred.doneUnsafe(stop, Effect.void);
-      };
-      const receive = ({ data }: Electron.MessageEvent) => {
-        if ((data as EnvironmentProcessCommand).type === "stop") requestStop();
-      };
-      process.parentPort.on("message", receive);
-      process.once("SIGINT", requestStop);
-      process.once("SIGTERM", requestStop);
-      return { receive, requestStop };
-    }),
-    ({ receive, requestStop }) =>
-      Effect.sync(() => {
-        process.parentPort.off("message", receive);
-        process.off("SIGINT", requestStop);
-        process.off("SIGTERM", requestStop);
-      }),
-  );
-  return stop;
-});
-
-const serveUntilStopped = Effect.scoped(
-  Effect.gen(function* () {
-    const stop = yield* acquireStopRequest;
-    const server = yield* startEnvironmentServer({
+async function serveUntilStopped() {
+  const stop = Promise.withResolvers<void>();
+  const requestStop = () => stop.resolve();
+  const receive = ({ data }: Electron.MessageEvent) => {
+    if ((data as EnvironmentProcessCommand).type === "stop") requestStop();
+  };
+  process.parentPort.on("message", receive);
+  process.once("SIGINT", requestStop);
+  process.once("SIGTERM", requestStop);
+  try {
+    const { close, ...server } = await startEnvironmentServer({
       home: homedir(),
       pairingReplacesGrantsWithSameLabel: true,
     });
-    yield* Effect.sync(() => post({ type: "ready", server }));
-    yield* Deferred.await(stop);
-  }),
-);
+    try {
+      post({ type: "ready", server });
+      await stop.promise;
+    } finally {
+      await close();
+    }
+  } finally {
+    process.parentPort.off("message", receive);
+    process.off("SIGINT", requestStop);
+    process.off("SIGTERM", requestStop);
+  }
+}
 
 function post(message: EnvironmentProcessMessage) {
   process.parentPort.postMessage(message);
 }
 
-Effect.runPromise(serveUntilStopped).then(
+serveUntilStopped().then(
   () => process.exit(0),
   (error: unknown) =>
     post({

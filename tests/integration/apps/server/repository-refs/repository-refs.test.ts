@@ -7,9 +7,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it, onTestFinished, vi } from "vite-plus/test";
-import type { RouteFailure } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   type CheckoutRepositoryRef,
   type RepositoryCheckedOut,
@@ -178,21 +176,18 @@ describe("repository refs", () => {
     await git(fixture.repositoryPath, "branch", "spare-topic");
 
     const results = await withRefsService(fixture, ({ refs, repositoryId }) =>
-      Effect.all(
-        [
-          refs.checkout({
-            repositoryId,
-            target: { _tag: "LocalBranch", name: "spare-main" },
-            worktreePath: fixture.repositoryPath,
-          }),
-          refs.checkout({
-            repositoryId,
-            target: { _tag: "LocalBranch", name: "spare-topic" },
-            worktreePath: fixture.worktreePath,
-          }),
-        ],
-        { concurrency: "unbounded" },
-      ),
+      Promise.all([
+        refs.checkout({
+          repositoryId,
+          target: { _tag: "LocalBranch", name: "spare-main" },
+          worktreePath: fixture.repositoryPath,
+        }),
+        refs.checkout({
+          repositoryId,
+          target: { _tag: "LocalBranch", name: "spare-topic" },
+          worktreePath: fixture.worktreePath,
+        }),
+      ]),
     );
 
     expect(results.map((result) => result.stash)).toEqual([
@@ -215,27 +210,24 @@ describe("repository refs", () => {
     await writeFile(join(fixture.repositoryPath, "README.md"), "mine");
     const racing = (local: GitCommandRunner): GitCommandRunner => ({
       ...local,
-      run: (command) =>
-        local.run(command).pipe(
-          Effect.tap(() =>
-            command.arguments[0] === "stash" && command.arguments[1] === "push"
-              ? Effect.promise(async () => {
-                  await writeFile(
-                    join(fixture.repositoryPath, "notes.md"),
-                    "theirs",
-                  );
-                  await git(
-                    fixture.repositoryPath,
-                    "stash",
-                    "push",
-                    "-u",
-                    "-m",
-                    "foreign",
-                  );
-                })
-              : Effect.void,
-          ),
-        ),
+      run: async (command) => {
+        const output = await local.run(command);
+        if (
+          command.arguments[0] === "stash" &&
+          command.arguments[1] === "push"
+        ) {
+          await writeFile(join(fixture.repositoryPath, "notes.md"), "theirs");
+          await git(
+            fixture.repositoryPath,
+            "stash",
+            "push",
+            "-u",
+            "-m",
+            "foreign",
+          );
+        }
+        return output;
+      },
     });
 
     const result = await withRefsService(
@@ -283,8 +275,8 @@ describe("repository refs", () => {
     const fixture = await createFixture();
 
     const results = await withRefsService(fixture, ({ refs, repositoryId }) =>
-      Effect.gen(function* () {
-        const tracked = yield* refs.checkout({
+      (async () => {
+        const tracked = await refs.checkout({
           repositoryId,
           target: {
             _tag: "RemoteBranch",
@@ -293,13 +285,13 @@ describe("repository refs", () => {
           },
           worktreePath: fixture.repositoryPath,
         });
-        const detached = yield* refs.checkout({
+        const detached = await refs.checkout({
           repositoryId,
           target: { _tag: "Tag", name: "v1.0.0" },
           worktreePath: fixture.repositoryPath,
         });
-        return { detached, refs: yield* refs.read(), tracked };
-      }),
+        return { detached, refs: await refs.read(), tracked };
+      })(),
     );
 
     expect(results.tracked).toMatchObject({
@@ -375,49 +367,41 @@ describe("repository refs", () => {
     const fixture = await createFixture();
     const changed = vi.fn();
 
-    await withRefsService(fixture, ({ events, refs }) =>
-      Effect.gen(function* () {
-        events.subscribe(changed);
-        yield* refs.read();
-        yield* Effect.promise(() =>
-          waitForObservation(
-            () => expect(changed).toHaveBeenCalled(),
-            () => git(fixture.repositoryPath, "branch", "-f", "watched-branch"),
-          ),
-        );
-      }),
-    );
+    await withRefsService(fixture, async ({ events, refs }) => {
+      events.subscribe(changed);
+      await refs.read();
+      await waitForObservation(
+        () => expect(changed).toHaveBeenCalled(),
+        () => git(fixture.repositoryPath, "branch", "-f", "watched-branch"),
+      );
+    });
   });
 
   it("publishes an index change without a ref change when files are staged", async () => {
     const fixture = await createFixture();
     const changed = vi.fn();
 
-    await withRefsService(fixture, ({ events, refs, repositoryId }) =>
-      Effect.gen(function* () {
-        events.subscribe(changed);
-        yield* refs.read();
-        let stages = 0;
-        yield* Effect.promise(() =>
-          waitForObservation(
-            () =>
-              expect(changed).toHaveBeenCalledWith(
-                expect.any(Number),
-                [repositoryId],
-                "Index",
-              ),
-            async () => {
-              stages += 1;
-              await writeFile(
-                join(fixture.repositoryPath, "staged.txt"),
-                `staged ${stages}\n`,
-              );
-              await git(fixture.repositoryPath, "add", "staged.txt");
-            },
+    await withRefsService(fixture, async ({ events, refs, repositoryId }) => {
+      events.subscribe(changed);
+      await refs.read();
+      let stages = 0;
+      await waitForObservation(
+        () =>
+          expect(changed).toHaveBeenCalledWith(
+            expect.any(Number),
+            [repositoryId],
+            "Index",
           ),
-        );
-      }),
-    );
+        async () => {
+          stages += 1;
+          await writeFile(
+            join(fixture.repositoryPath, "staged.txt"),
+            `staged ${stages}\n`,
+          );
+          await git(fixture.repositoryPath, "add", "staged.txt");
+        },
+      );
+    });
 
     expect(changed).not.toHaveBeenCalledWith(
       expect.any(Number),
@@ -427,52 +411,43 @@ describe("repository refs", () => {
   });
 });
 
-async function withRefsService<Value, Failure>(
+async function withRefsService<Value>(
   fixture: Fixture,
   use: (dependencies: {
     readonly events: EnvironmentEventPublisher;
     readonly refs: {
       readonly checkout: (
         command: CheckoutRepositoryRef,
-      ) => Effect.Effect<
-        RepositoryCheckedOut,
-        RouteFailure<typeof RepositoryRefsApi.checkout>
-      >;
+      ) => Promise<RepositoryCheckedOut>;
       readonly read: () => ReturnType<typeof readRepositoryRefs>;
     };
     readonly repositoryId: string;
-  }) => Effect.Effect<Value, Failure>,
+  }) => Promise<Value>,
   git?: (git: GitCommandRunner) => GitCommandRunner,
 ) {
   const environment = await openTestEnvironment({ git });
   const repository = await environment.remember(fixture.repositoryPath);
   const { checkout } = environment.routes(RepositoryRefsApi);
-  return Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const changes = yield* acquireRepositoryChangePublisher(
-          environment.git,
-          environment.watcher,
-          environment.events,
-        );
-        return yield* use({
-          events: environment.events,
-          refs: {
-            checkout,
-            read: () =>
-              changes
-                .watch(repository)
-                .pipe(
-                  Effect.andThen(
-                    readRepositoryRefs(environment.git, repository),
-                  ),
-                ),
-          },
-          repositoryId: repository.id,
-        });
-      }),
-    ),
+  const changes = await acquireRepositoryChangePublisher(
+    environment.git,
+    environment.watcher,
+    environment.events,
   );
+  try {
+    return await use({
+      events: environment.events,
+      refs: {
+        checkout,
+        read: async () => {
+          await changes.watch(repository);
+          return readRepositoryRefs(environment.git, repository);
+        },
+      },
+      repositoryId: repository.id,
+    });
+  } finally {
+    changes.close();
+  }
 }
 
 async function createFixture(): Promise<Fixture> {

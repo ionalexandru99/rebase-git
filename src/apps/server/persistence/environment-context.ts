@@ -2,16 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { eq } from "drizzle-orm";
 import { drizzle, type NodeSQLiteDatabase } from "drizzle-orm/node-sqlite";
-import { Effect, type Scope, Semaphore } from "effect";
 import { environmentTable } from "#server/persistence/environment-state.schema.ts";
+import { openEnvironmentDatabase } from "#server/persistence/sqlite/database.ts";
 import {
-  closeEnvironmentDatabase,
-  openEnvironmentDatabase,
-} from "#server/persistence/sqlite/database.ts";
-import {
-  type EnvironmentStorageError,
-  serializedPromise,
-  storagePromise,
+  storageOperation,
   storageSync,
 } from "#server/persistence/sqlite/storage-operation.ts";
 import {
@@ -20,36 +14,36 @@ import {
 } from "#server/persistence/storage/environment-paths.ts";
 import { ensureServerSecret } from "#server/persistence/storage/server-secret.ts";
 
+type StorageAccess = <Value>(
+  message: string,
+  operation: (database: NodeSQLiteDatabase) => PromiseLike<Value> | Value,
+) => Promise<Value>;
+
 export interface EnvironmentContext {
   readonly database: NodeSQLiteDatabase;
   readonly serverSecret: string;
-  readonly read: <Value>(
-    message: string,
-    operation: (database: NodeSQLiteDatabase) => PromiseLike<Value> | Value,
-  ) => Effect.Effect<Value, EnvironmentStorageError>;
-  readonly write: <Value>(
-    message: string,
-    operation: (database: NodeSQLiteDatabase) => PromiseLike<Value> | Value,
-  ) => Effect.Effect<Value, EnvironmentStorageError>;
+  readonly read: StorageAccess;
+  readonly write: StorageAccess;
+  readonly close: () => void;
 }
 
-export function acquireEnvironmentContext(
+export async function acquireEnvironmentContext(
   paths: EnvironmentPaths,
-): Effect.Effect<EnvironmentContext, EnvironmentStorageError, Scope.Scope> {
-  return Effect.gen(function* () {
-    yield* prepareEnvironmentDirectories(paths);
-    const serverSecret = yield* ensureServerSecret(paths);
-    const database = yield* Effect.acquireRelease(
-      openEnvironmentDatabase(paths),
-      closeEnvironmentDatabase,
-    );
-    const context = yield* storageSync(
+): Promise<EnvironmentContext> {
+  await prepareEnvironmentDirectories(paths);
+  const serverSecret = await ensureServerSecret(paths);
+  const database = await openEnvironmentDatabase(paths);
+  try {
+    const context = storageSync(
       "Could not read Environment state settings",
       () => createEnvironmentContext(database, serverSecret),
     );
-    yield* initializeEnvironment(context);
+    await initializeEnvironment(context);
     return context;
-  });
+  } catch (error) {
+    database.close();
+    throw error;
+  }
 }
 
 function createEnvironmentContext(
@@ -57,15 +51,21 @@ function createEnvironmentContext(
   serverSecret: string,
 ): EnvironmentContext {
   const drizzleDatabase = drizzle({ client: database });
-  const writer = Semaphore.makeUnsafe(1);
+  let writes: Promise<unknown> = Promise.resolve();
 
   return {
     database: drizzleDatabase,
     serverSecret,
     read: (message, operation) =>
-      storagePromise(message, () => operation(drizzleDatabase)),
-    write: (message, operation) =>
-      serializedPromise(writer, message, () => operation(drizzleDatabase)),
+      storageOperation(message, () => operation(drizzleDatabase)),
+    write: (message, operation) => {
+      const written = writes.then(() =>
+        storageOperation(message, () => operation(drizzleDatabase)),
+      );
+      writes = written.catch(() => undefined);
+      return written;
+    },
+    close: () => database.close(),
   };
 }
 

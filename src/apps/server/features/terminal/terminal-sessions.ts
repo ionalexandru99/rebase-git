@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { Effect, Queue, Stream } from "effect";
 import type {
   CloseTerminal,
   OpenTerminal,
@@ -41,10 +40,7 @@ export type TerminalSessions = ReturnType<typeof createTerminalSessions>;
 export function acquireTerminalSessions(
   changed: (repositoryId: string) => void,
 ) {
-  return Effect.acquireRelease(
-    Effect.sync(() => createTerminalSessions(spawnShell, changed)),
-    (sessions) => Effect.sync(sessions.closeAll),
-  );
+  return createTerminalSessions(spawnShell, changed);
 }
 
 export function createTerminalSessions(
@@ -93,24 +89,27 @@ export function createTerminalSessions(
     list: (worktree: TerminalWorktree): Terminals => ({
       terminals: inWorktree(worktree).map(({ id, number }) => ({ id, number })),
     }),
-    open: (input: OpenTerminal) =>
-      Effect.tryPromise({
-        try: () =>
-          spawn({
-            cwd: input.worktreePath,
-            cols: input.cols,
-            rows: input.rows,
-          }),
-        catch: (error): TerminalUnavailable => ({
+    open: async (input: OpenTerminal) => {
+      let process: TerminalProcess;
+      try {
+        process = await spawn({
+          cwd: input.worktreePath,
+          cols: input.cols,
+          rows: input.rows,
+        });
+      } catch (error) {
+        throw {
           _tag: "TerminalUnavailable",
           detail: error instanceof Error ? error.message : String(error),
-        }),
-      }).pipe(Effect.map((process) => start(input, process))),
+        } satisfies TerminalUnavailable;
+      }
+      return start(input, process);
+    },
     write: (id: string, data: string) =>
       ignoreClosed(() => sessions.get(id)?.process.write(data)),
     resize: (id: string, cols: number, rows: number) =>
       ignoreClosed(() => sessions.get(id)?.process.resize(cols, rows)),
-    close: ({ id, repositoryId, worktreePath }: CloseTerminal) => {
+    closeTerminal: ({ id, repositoryId, worktreePath }: CloseTerminal) => {
       const session = sessions.get(id);
       if (
         session === undefined ||
@@ -121,39 +120,50 @@ export function createTerminalSessions(
       finish(session);
       ignoreClosed(session.process.kill);
     },
-    attach: (id: string, since: number): Stream.Stream<TerminalOutput> => {
+    attach: async function* (
+      id: string,
+      since: number,
+      signal: AbortSignal,
+    ): AsyncGenerator<TerminalOutput> {
       const session = sessions.get(id);
-      if (session === undefined) return Stream.make(exited);
-      return Stream.unwrap(
-        Effect.gen(function* () {
-          const wake = yield* Queue.sliding<void>(1);
-          yield* Effect.acquireRelease(
-            Effect.sync(() => {
-              const listener = () => Queue.offerUnsafe(wake, undefined);
-              session.listeners.add(listener);
-              return listener;
-            }),
-            (listener) => Effect.sync(() => session.listeners.delete(listener)),
-          );
-          Queue.offerUnsafe(wake, undefined);
-          let cursor = since;
-          return Stream.fromQueue(wake).pipe(
-            Stream.flatMap(() => {
-              const pending: TerminalOutput[] = [];
-              if (cursor !== session.history.end) {
-                const output = session.history.read(cursor);
-                cursor = output.end;
-                pending.push(output);
-              }
-              if (session.exited) pending.push(exited);
-              return Stream.fromIterable(pending);
-            }),
-            Stream.takeUntil((output) => output._tag === "Exited"),
-          );
-        }),
-      );
+      if (session === undefined) {
+        yield exited;
+        return;
+      }
+      let woken = true;
+      let wake: (() => void) | undefined;
+      const listener = () => {
+        woken = true;
+        wake?.();
+      };
+      session.listeners.add(listener);
+      signal.addEventListener("abort", listener);
+      let cursor = since;
+      try {
+        while (!signal.aborted) {
+          if (!woken) {
+            await new Promise<void>((resolve) => {
+              wake = resolve;
+            });
+            continue;
+          }
+          woken = false;
+          if (cursor !== session.history.end) {
+            const output = session.history.read(cursor);
+            cursor = output.end;
+            yield output;
+          }
+          if (session.exited) {
+            yield exited;
+            return;
+          }
+        }
+      } finally {
+        session.listeners.delete(listener);
+        signal.removeEventListener("abort", listener);
+      }
     },
-    closeAll: () => {
+    close: () => {
       for (const session of [...sessions.values()]) {
         sessions.delete(session.id);
         ignoreClosed(session.process.kill);

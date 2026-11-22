@@ -1,6 +1,5 @@
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import {
   type MergeMode,
@@ -23,25 +22,21 @@ async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
     mode: MergeMode,
     overrides: { expectedHead?: string; commit?: string } = {},
   ) =>
-    Effect.runPromise(
-      service.start({
-        ...scope,
-        expectedHead: overrides.expectedHead ?? (await revParse("HEAD")),
-        operation: {
-          _tag: "Merge",
-          source: { ref, commit: overrides.commit ?? (await revParse(ref)) },
-          mode,
-        },
-      }),
-    );
+    service.start({
+      ...scope,
+      expectedHead: overrides.expectedHead ?? (await revParse("HEAD")),
+      operation: {
+        _tag: "Merge",
+        source: { ref, commit: overrides.commit ?? (await revParse(ref)) },
+        mode,
+      },
+    });
   const abort = async () =>
-    Effect.runPromise(
-      service.execute({
-        ...scope,
-        revision: (await Effect.runPromise(service.read(scope))).revision,
-        action: "abort",
-      }),
-    );
+    service.execute({
+      ...scope,
+      revision: (await service.read(scope)).revision,
+      action: "abort",
+    });
   const parents = async () =>
     (await git("rev-list", "--parents", "-n", "1", "HEAD")).stdout
       .trim()

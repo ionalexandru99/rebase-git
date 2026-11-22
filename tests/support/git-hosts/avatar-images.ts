@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import type { AvatarImages } from "#server/features/author-avatars/author-avatars.ts";
 import type { AvatarSource } from "#server/features/source-control/git-host.ts";
 
@@ -11,8 +10,8 @@ export function fakeAvatarImages(
       downloads.push(source);
       const image = images[source.url];
       return image === "unavailable"
-        ? Effect.fail({ _tag: "AuthorAvatarUnavailable" })
-        : Effect.succeed(image);
+        ? Promise.reject({ _tag: "AuthorAvatarUnavailable" })
+        : Promise.resolve(image);
     },
   };
   return { avatarImages, downloads };

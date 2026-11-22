@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   OperationKind,
@@ -11,10 +10,12 @@ import type {
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
   type GitCommandRunner,
+  isGitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 
 const maximumMetadataBytes = 2 * 1024 * 1024;
+const stampConcurrency = 16;
 
 export interface GitDirectories {
   readonly gitDirectory: string;
@@ -59,116 +60,103 @@ const idleWorktree = {
   worktree: [],
 };
 
-export function readRepositoryOperation(
+export async function readRepositoryOperation(
   git: GitCommandRunner,
   worktreePath: string,
   directories: GitDirectories,
 ) {
-  return Effect.gen(function* () {
-    const { values, metadata, stamps } = yield* readOperationMetadata(
-      directories.gitDirectory,
-    );
-    const lock = yield* readGitLock(directories);
-    const candidate = identifyOperation(metadata, stamps);
-    const worktree =
-      candidate === "idle"
-        ? idleWorktree
-        : yield* inspectWorktree(git, worktreePath, directories.gitDirectory);
-    const unresolvedPaths = [
-      ...new Set(worktree.unresolved.split("\0").filter(Boolean)),
-    ].sort();
-    const kind =
-      candidate === "squash" && unresolvedPaths.length === 0
-        ? "idle"
-        : candidate;
-    const stopped = metadata["rebase-merge/amend"]?.trim() ?? null;
-    const edit =
-      kind === "rebase" && stopped !== null && unresolvedPaths.length === 0;
-    const leftovers =
-      edit && worktree.head !== stopped
-        ? yield* newFilesLeftOut(git, worktreePath, stopped)
-        : [];
-    const empty =
-      unresolvedPaths.length === 0 &&
-      (metadata.CHERRY_PICK_HEAD ?? metadata.REVERT_HEAD) !== null &&
-      !hasStagedChanges(worktree.status);
-    const reason = empty
-      ? (lockedReason(lock) ?? "Nothing to commit. Skip this commit.")
-      : blockedReason(
-          kind,
-          lock,
-          unresolvedPaths.length,
-          edit,
-          worktree.status,
-          leftovers.length,
-        );
-    const steps = kind === "rebase" ? rebaseSteps(metadata) : null;
-    const progress =
-      stepProgress(steps) ??
-      operationProgress(metadata) ??
-      (yield* sequenceProgress(git, worktreePath, metadata, worktree.head));
-    return {
-      kind,
-      phase: empty
-        ? "empty"
-        : operationPhase(kind, unresolvedPaths.length, edit),
-      actions: availableActions(kind, metadata, stamps, edit, lock, reason),
-      unresolvedPaths,
-      lock,
-      revision: createHash("sha256")
-        .update(JSON.stringify({ values, stamps, lock, worktree, leftovers }))
-        .digest("hex"),
-      branch: branchName(
-        metadata["rebase-merge/head-name"] ??
-          metadata["rebase-apply/head-name"] ??
-          metadata.HEAD,
-      ),
-      commit:
-        (kind === "merge"
-          ? metadata.MERGE_HEAD?.split("\n")[0]
-          : kind === "squash"
-            ? /^commit ([0-9a-f]+)$/m.exec(metadata.SQUASH_MSG ?? "")?.[1]
-            : (metadata["rebase-merge/stopped-sha"] ??
-              metadata["rebase-apply/original-commit"] ??
-              metadata.CHERRY_PICK_HEAD ??
-              metadata.REVERT_HEAD)
-        )?.trim() ?? null,
-      mergedBranch:
-        kind === "merge" ? mergedBranchName(metadata.MERGE_MSG) : null,
-      progress,
-      steps,
-    } satisfies RepositoryOperation;
-  });
+  const { values, metadata, stamps } = await readOperationMetadata(
+    directories.gitDirectory,
+  );
+  const lock = await readGitLock(directories);
+  const candidate = identifyOperation(metadata, stamps);
+  const worktree =
+    candidate === "idle"
+      ? idleWorktree
+      : await inspectWorktree(git, worktreePath, directories.gitDirectory);
+  const unresolvedPaths = [
+    ...new Set(worktree.unresolved.split("\0").filter(Boolean)),
+  ].sort();
+  const kind =
+    candidate === "squash" && unresolvedPaths.length === 0 ? "idle" : candidate;
+  const stopped = metadata["rebase-merge/amend"]?.trim() ?? null;
+  const edit =
+    kind === "rebase" && stopped !== null && unresolvedPaths.length === 0;
+  const leftovers =
+    edit && worktree.head !== stopped
+      ? await newFilesLeftOut(git, worktreePath, stopped)
+      : [];
+  const empty =
+    unresolvedPaths.length === 0 &&
+    (metadata.CHERRY_PICK_HEAD ?? metadata.REVERT_HEAD) !== null &&
+    !hasStagedChanges(worktree.status);
+  const reason = empty
+    ? (lockedReason(lock) ?? "Nothing to commit. Skip this commit.")
+    : blockedReason(
+        kind,
+        lock,
+        unresolvedPaths.length,
+        edit,
+        worktree.status,
+        leftovers.length,
+      );
+  const steps = kind === "rebase" ? rebaseSteps(metadata) : null;
+  const progress =
+    stepProgress(steps) ??
+    operationProgress(metadata) ??
+    (await sequenceProgress(git, worktreePath, metadata, worktree.head));
+  return {
+    kind,
+    phase: empty ? "empty" : operationPhase(kind, unresolvedPaths.length, edit),
+    actions: availableActions(kind, metadata, stamps, edit, lock, reason),
+    unresolvedPaths,
+    lock,
+    revision: createHash("sha256")
+      .update(JSON.stringify({ values, stamps, lock, worktree, leftovers }))
+      .digest("hex"),
+    branch: branchName(
+      metadata["rebase-merge/head-name"] ??
+        metadata["rebase-apply/head-name"] ??
+        metadata.HEAD,
+    ),
+    commit:
+      (kind === "merge"
+        ? metadata.MERGE_HEAD?.split("\n")[0]
+        : kind === "squash"
+          ? /^commit ([0-9a-f]+)$/m.exec(metadata.SQUASH_MSG ?? "")?.[1]
+          : (metadata["rebase-merge/stopped-sha"] ??
+            metadata["rebase-apply/original-commit"] ??
+            metadata.CHERRY_PICK_HEAD ??
+            metadata.REVERT_HEAD)
+      )?.trim() ?? null,
+    mergedBranch:
+      kind === "merge" ? mergedBranchName(metadata.MERGE_MSG) : null,
+    progress,
+    steps,
+  } satisfies RepositoryOperation;
 }
 
-function readOperationMetadata(gitDirectory: string) {
-  return Effect.gen(function* () {
-    const values = yield* Effect.forEach(
-      metadataNames,
-      (name) => readOperationFile(gitDirectory, name),
-      { concurrency: 8 },
-    );
-    const metadata = Object.fromEntries(
-      metadataNames.map((name, index) => [name, values[index] ?? null]),
-    ) as Metadata;
-    const stamps = yield* Effect.forEach(
-      ["rebase-merge", "rebase-apply", "sequencer"],
-      (name) => operationFileStamp(gitDirectory, name),
-    );
-    return { values, metadata, stamps };
-  });
+async function readOperationMetadata(gitDirectory: string) {
+  const values = await Promise.all(
+    metadataNames.map((name) => readOperationFile(gitDirectory, name)),
+  );
+  const metadata = Object.fromEntries(
+    metadataNames.map((name, index) => [name, values[index] ?? null]),
+  ) as Metadata;
+  const stamps = await Promise.all(
+    ["rebase-merge", "rebase-apply", "sequencer"].map((name) =>
+      operationFileStamp(gitDirectory, name),
+    ),
+  );
+  return { values, metadata, stamps };
 }
 
-function readGitLock({ gitDirectory, commonDirectory }: GitDirectories) {
-  return Effect.gen(function* () {
-    if ((yield* operationFileStamp(gitDirectory, "index.lock")) !== null)
-      return "index.lock";
-    if (
-      (yield* operationFileStamp(commonDirectory, "packed-refs.lock")) !== null
-    )
-      return "packed-refs.lock";
-    return null;
-  });
+async function readGitLock({ gitDirectory, commonDirectory }: GitDirectories) {
+  if ((await operationFileStamp(gitDirectory, "index.lock")) !== null)
+    return "index.lock";
+  if ((await operationFileStamp(commonDirectory, "packed-refs.lock")) !== null)
+    return "packed-refs.lock";
+  return null;
 }
 
 function operationPhase(
@@ -182,31 +170,31 @@ function operationPhase(
   return edit ? "edit" : "ready";
 }
 
-function inspectWorktree(
+async function inspectWorktree(
   git: GitCommandRunner,
   worktreePath: string,
   gitDirectory: string,
 ) {
-  return Effect.gen(function* () {
-    const { head, unresolved, status } = parseWorktreeStatus(
-      yield* inspect(git, worktreePath, [
-        "status",
-        "--porcelain=v2",
-        "--branch",
-        "--no-ahead-behind",
-        "--no-renames",
-        "-z",
-        "--untracked-files=no",
-      ]),
-    );
-    const index = yield* operationFileStamp(gitDirectory, "index");
-    const worktree = yield* Effect.forEach(
-      status.split("\0").filter(Boolean),
-      (record) => operationFileStamp(worktreePath, record.slice(3)),
-      { concurrency: 16 },
-    );
-    return { head, index, unresolved, status, worktree };
-  });
+  const { head, unresolved, status } = parseWorktreeStatus(
+    await inspect(git, worktreePath, [
+      "status",
+      "--porcelain=v2",
+      "--branch",
+      "--no-ahead-behind",
+      "--no-renames",
+      "-z",
+      "--untracked-files=no",
+    ]),
+  );
+  const index = await operationFileStamp(gitDirectory, "index");
+  const worktree = await stampFiles(
+    worktreePath,
+    status
+      .split("\0")
+      .filter(Boolean)
+      .map((record) => record.slice(3)),
+  );
+  return { head, index, unresolved, status, worktree };
 }
 
 function parseWorktreeStatus(output: string) {
@@ -233,13 +221,13 @@ function parseWorktreeStatus(output: string) {
   };
 }
 
-function newFilesLeftOut(
+async function newFilesLeftOut(
   git: GitCommandRunner,
   worktreePath: string,
   commit: string,
 ) {
-  return Effect.gen(function* () {
-    const added = (yield* inspect(git, worktreePath, [
+  const added = (
+    await inspect(git, worktreePath, [
       "diff",
       "--name-only",
       "--no-renames",
@@ -247,26 +235,37 @@ function newFilesLeftOut(
       "-z",
       "HEAD",
       commit,
-    ]))
-      .split("\0")
-      .filter(Boolean);
-    const stamps = yield* Effect.forEach(
-      added,
-      (path) => operationFileStamp(worktreePath, path),
-      { concurrency: 16 },
-    );
-    return added.filter((_, index) => stamps[index] !== null);
-  });
+    ])
+  )
+    .split("\0")
+    .filter(Boolean);
+  const stamps = await stampFiles(worktreePath, added);
+  return added.filter((_, index) => stamps[index] !== null);
 }
 
-function inspect(
+async function stampFiles(directory: string, paths: readonly string[]) {
+  const stamps: (string | null)[] = [];
+  for (let start = 0; start < paths.length; start += stampConcurrency)
+    stamps.push(
+      ...(await Promise.all(
+        paths
+          .slice(start, start + stampConcurrency)
+          .map((path) => operationFileStamp(directory, path)),
+      )),
+    );
+  return stamps;
+}
+
+async function inspect(
   git: GitCommandRunner,
   worktreePath: string,
   args: readonly string[],
 ) {
-  return runRepositoryGit(git, worktreePath, args).pipe(
-    Effect.mapError((error) => inspectionFailed(error.detail)),
-  );
+  try {
+    return await runRepositoryGit(git, worktreePath, args);
+  } catch (error) {
+    throw isGitFailed(error) ? inspectionFailed(error.detail) : error;
+  }
 }
 
 function identifyOperation(
@@ -427,7 +426,7 @@ function hasStagedChanges(status: string) {
     .some((line) => line.length > 2 && line[0] !== " " && line[0] !== "?");
 }
 
-function sequenceProgress(
+async function sequenceProgress(
   git: GitCommandRunner,
   worktreePath: string,
   metadata: Metadata,
@@ -443,51 +442,37 @@ function sequenceProgress(
     remaining === 0 ||
     /no-commit\s*=\s*true/.test(metadata["sequencer/opts"] ?? "")
   )
-    return Effect.succeed(null);
-  return inspect(git, worktreePath, [
+    return null;
+  const output = await inspect(git, worktreePath, [
     "rev-list",
     "--count",
     `${start}..${head}`,
-  ]).pipe(
-    Effect.map((output) => {
-      const done = Number(output.trim());
-      return Number.isSafeInteger(done)
-        ? { current: done + 1, total: done + remaining }
-        : null;
-    }),
-  );
+  ]);
+  const done = Number(output.trim());
+  return Number.isSafeInteger(done)
+    ? { current: done + 1, total: done + remaining }
+    : null;
 }
 
-function readOperationFile(directory: string, name: string) {
-  return Effect.tryPromise({
-    try: async () => {
-      try {
-        const path = join(directory, name);
-        if ((await stat(path)).size > maximumMetadataBytes)
-          throw new Error("Operation metadata is too large.");
-        return await readFile(path, "utf8");
-      } catch (error) {
-        if (isMissing(error)) return null;
-        throw error;
-      }
-    },
-    catch: () => inspectionFailed(`Could not read Git metadata: ${name}.`),
-  });
+async function readOperationFile(directory: string, name: string) {
+  const path = join(directory, name);
+  try {
+    if ((await stat(path)).size <= maximumMetadataBytes)
+      return await readFile(path, "utf8");
+  } catch (error) {
+    if (isMissing(error)) return null;
+  }
+  throw inspectionFailed(`Could not read Git metadata: ${name}.`);
 }
 
-function operationFileStamp(directory: string, name: string) {
-  return Effect.tryPromise({
-    try: async () => {
-      try {
-        const info = await lstat(join(directory, name), { bigint: true });
-        return `${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
-      } catch (error) {
-        if (isMissing(error)) return null;
-        throw error;
-      }
-    },
-    catch: () => inspectionFailed(`Could not inspect Git metadata: ${name}.`),
-  });
+async function operationFileStamp(directory: string, name: string) {
+  try {
+    const info = await lstat(join(directory, name), { bigint: true });
+    return `${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
+  } catch (error) {
+    if (isMissing(error)) return null;
+    throw inspectionFailed(`Could not inspect Git metadata: ${name}.`);
+  }
 }
 
 function inspectionFailed(detail: string) {

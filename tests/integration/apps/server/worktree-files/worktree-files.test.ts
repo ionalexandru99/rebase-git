@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, realpath, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import {
   maximumFileBytes,
@@ -162,14 +161,10 @@ async function filesClient(path: string) {
   const routes = environment.routes(WorktreeFilesApi);
   const scope = { repositoryId, worktreePath: path };
   return {
-    list: (folder: string) =>
-      Effect.runPromise(routes.list({ ...scope, folder })),
-    read: (file: string) =>
-      Effect.runPromise(routes.read({ ...scope, path: file })),
-    searchNames: (query: string) =>
-      Effect.runPromise(routes.searchNames({ ...scope, query })),
-    searchText: (query: string) =>
-      Effect.runPromise(routes.searchText({ ...scope, query })),
+    list: (folder: string) => routes.list({ ...scope, folder }),
+    read: (file: string) => routes.read({ ...scope, path: file }),
+    searchNames: (query: string) => routes.searchNames({ ...scope, query }),
+    searchText: (query: string) => routes.searchText({ ...scope, query }),
   };
 }
 

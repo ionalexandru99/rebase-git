@@ -8,20 +8,14 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
-import { errorMessage, isFileSystemError } from "#server/error-inspection.ts";
-import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
+import { isFileSystemError } from "#server/error-inspection.ts";
+import { storageOperation } from "#server/persistence/sqlite/storage-operation.ts";
 import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.ts";
 
 export function ensureServerSecret(paths: EnvironmentPaths) {
-  return Effect.tryPromise({
-    try: () => readOrCreateServerSecret(paths.serverSecret),
-    catch: (cause) =>
-      new EnvironmentStorageError({
-        cause,
-        message: `Could not prepare the server secret: ${errorMessage(cause)}`,
-      }),
-  });
+  return storageOperation("Could not prepare the server secret", () =>
+    readOrCreateServerSecret(paths.serverSecret),
+  );
 }
 
 async function readOrCreateServerSecret(path: string) {

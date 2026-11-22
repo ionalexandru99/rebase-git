@@ -1,5 +1,4 @@
 import { request } from "node:http";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import {
   EnvironmentAuthorizationApi,
@@ -158,7 +157,7 @@ describe("Environment authorization transport", () => {
         ...authorization,
         exchangePairing: (exchange) =>
           exchange.label === "Broken"
-            ? Effect.die(new Error("Broken"))
+            ? Promise.reject(new Error("Broken"))
             : authorization.exchangePairing(exchange),
       }),
     });

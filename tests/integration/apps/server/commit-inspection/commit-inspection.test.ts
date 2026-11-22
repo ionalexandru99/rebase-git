@@ -3,7 +3,6 @@ import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { createRepository } from "#tests-support/git.ts";
@@ -34,14 +33,12 @@ describe("historical commit inspection", () => {
   it("rejects a worktree belonging to a different repository", async () => {
     const selected = await fixture();
     const other = await fixture();
-    const failure = await Effect.runPromise(
-      Effect.flip(
-        selected.service.inspect({
-          ...selected.scope,
-          worktreePath: other.directory,
-        }),
-      ),
-    );
+    const failure = await selected.service
+      .inspect({
+        ...selected.scope,
+        worktreePath: other.directory,
+      })
+      .catch((failure: unknown) => failure);
     expect(failure).toEqual({
       _tag: "RepositoryRejected",
       reason: "Missing",
@@ -55,7 +52,7 @@ describe("historical commit inspection", () => {
     await f.git("add", ".");
     await writeFile(join(f.directory, "old.txt"), "unstaged\n");
     const index = await readFile(join(f.directory, ".git/index"));
-    const details = await Effect.runPromise(f.service.inspect(f.scope));
+    const details = await f.service.inspect(f.scope);
     expect(details.message).toBe("Initial\n\nFull commit body.\n");
     expect(details.author).toMatchObject({
       name: "Inspector",
@@ -73,9 +70,7 @@ describe("historical commit inspection", () => {
         lfs: false,
       },
     ]);
-    const diff = await Effect.runPromise(
-      f.service.inspectDiff({ ...f.scope, path: "old.txt" }),
-    );
+    const diff = await f.service.inspectDiff({ ...f.scope, path: "old.txt" });
     expect(diff.before).toBeNull();
     expect(diff.after).toBe("one\ntwo\nthree\n");
     expect(diff.patch).toContain("+one");
@@ -95,7 +90,7 @@ describe("historical commit inspection", () => {
     await f.git("add", ".");
     await f.git("commit", "-m", "Rename and add binary");
     const scope = { ...f.scope, oid: await f.git("rev-parse", "HEAD") };
-    const details = await Effect.runPromise(f.service.inspect(scope));
+    const details = await f.service.inspect(scope);
     expect(details.parentOid).toBe(f.scope.oid);
     expect(details.files).toContainEqual({
       path,
@@ -104,16 +99,16 @@ describe("historical commit inspection", () => {
       lines: { added: 1, removed: 0 },
       lfs: false,
     });
-    const diff = await Effect.runPromise(
-      f.service.inspectDiff({ ...scope, path, previousPath: "old.txt" }),
-    );
+    const diff = await f.service.inspectDiff({
+      ...scope,
+      path,
+      previousPath: "old.txt",
+    });
     expect(diff.before).toBe("one\ntwo\nthree\n");
     expect(diff.after).toBe("one\ntwo\nthree\nfour\n");
     expect(diff.patch).toContain("+four");
     expect(
-      await Effect.runPromise(
-        f.service.inspectDiff({ ...scope, path: "binary.dat" }),
-      ),
+      await f.service.inspectDiff({ ...scope, path: "binary.dat" }),
     ).toMatchObject({ kind: "binary", beforeBytes: 0, afterBytes: 3 });
   });
 
@@ -124,13 +119,11 @@ describe("historical commit inspection", () => {
     await f.git("add", ".");
     await f.git("commit", "-m", "Replace");
     const scope = { ...f.scope, oid: await f.git("rev-parse", "HEAD") };
-    const diff = await Effect.runPromise(
-      f.service.inspectDiff({
-        ...scope,
-        path: "new.txt",
-        previousPath: "old.txt",
-      }),
-    );
+    const diff = await f.service.inspectDiff({
+      ...scope,
+      path: "new.txt",
+      previousPath: "old.txt",
+    });
     expect(diff).toMatchObject({
       kind: "text",
       before: null,
@@ -147,9 +140,7 @@ describe("historical commit inspection", () => {
     await f.git("add", ".");
     await f.git("commit", "-m", "Mark text as binary");
     const scope = { ...f.scope, oid: await f.git("rev-parse", "HEAD") };
-    const diff = await Effect.runPromise(
-      f.service.inspectDiff({ ...scope, path: "old.txt" }),
-    );
+    const diff = await f.service.inspectDiff({ ...scope, path: "old.txt" });
     expect(diff.kind).toBe("text");
     expect(diff.patch).toContain("+four");
   });
@@ -163,9 +154,10 @@ describe("historical commit inspection", () => {
     await writeFile(join(f.directory, "large.txt"), large("after"));
     await f.git("commit", "-am", "Change large");
     const scope = { ...f.scope, oid: await f.git("rev-parse", "HEAD") };
-    const partial = await Effect.runPromise(
-      f.service.inspectDiff({ ...scope, path: "large.txt" }),
-    );
+    const partial = await f.service.inspectDiff({
+      ...scope,
+      path: "large.txt",
+    });
     expect(partial).toMatchObject({
       kind: "partial",
       before: null,
@@ -174,9 +166,11 @@ describe("historical commit inspection", () => {
       afterBytes: 200_006,
     });
     expect(partial.patch).toContain("-before\n+after\n");
-    const whole = await Effect.runPromise(
-      f.service.inspectDiff({ ...scope, path: "large.txt", whole: true }),
-    );
+    const whole = await f.service.inspectDiff({
+      ...scope,
+      path: "large.txt",
+      whole: true,
+    });
     expect(whole).toMatchObject({
       kind: "text",
       revision: partial.revision,
@@ -199,37 +193,29 @@ describe("historical commit inspection", () => {
     const main = await f.git("rev-parse", "HEAD");
     await f.git("merge", "--no-ff", "topic", "-m", "Merge topic");
     const scope = { ...f.scope, oid: await f.git("rev-parse", "HEAD") };
-    const first = await Effect.runPromise(f.service.inspect(scope));
+    const first = await f.service.inspect(scope);
     expect(first.parents).toEqual([main, topic]);
     expect(first.parentOid).toBe(main);
     expect(first.files.map((file) => file.path)).toEqual(["topic.txt"]);
-    const second = await Effect.runPromise(
-      f.service.inspect({ ...scope, parentOid: topic }),
-    );
+    const second = await f.service.inspect({ ...scope, parentOid: topic });
     expect(second.files.map((file) => file.path)).toEqual(["main.txt"]);
     expect(
       (
-        await Effect.runPromise(
-          f.service.inspectDiff({
-            ...scope,
-            parentOid: topic,
-            path: "main.txt",
-          }),
-        )
+        await f.service.inspectDiff({
+          ...scope,
+          parentOid: topic,
+          path: "main.txt",
+        })
       ).after,
     ).toBe("main\n");
     await expect(
-      Effect.runPromise(
-        f.service.inspect({ ...scope, parentOid: f.scope.oid }),
-      ),
+      f.service.inspect({ ...scope, parentOid: f.scope.oid }),
     ).rejects.toMatchObject({ reason: "Unsupported" });
     await expect(
-      Effect.runPromise(f.service.inspectDiff({ ...scope, path: "../secret" })),
+      f.service.inspectDiff({ ...scope, path: "../secret" }),
     ).rejects.toMatchObject({ _tag: "ChangesFailed", reason: "Stale" });
     await expect(
-      Effect.runPromise(
-        f.service.inspect({ ...scope, worktreePath: tmpdir() }),
-      ),
+      f.service.inspect({ ...scope, worktreePath: tmpdir() }),
     ).rejects.toMatchObject({ reason: "Missing" });
   });
 
@@ -237,11 +223,9 @@ describe("historical commit inspection", () => {
     const f = await fixture();
     await f.git("commit", "--allow-empty", "-m", "Empty");
     const scope = { ...f.scope, oid: await f.git("rev-parse", "HEAD") };
-    expect((await Effect.runPromise(f.service.inspect(scope))).files).toEqual(
-      [],
-    );
+    expect((await f.service.inspect(scope)).files).toEqual([]);
     await expect(
-      Effect.runPromise(f.service.inspect({ ...scope, oid: "HEAD^{tree}" })),
+      f.service.inspect({ ...scope, oid: "HEAD^{tree}" }),
     ).rejects.toThrow();
   });
 });

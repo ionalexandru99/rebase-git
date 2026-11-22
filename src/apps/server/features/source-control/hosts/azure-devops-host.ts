@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { z } from "zod";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
@@ -42,19 +42,19 @@ export function createAzureDevOpsHost(client: AzureDevOpsClient): GitHost {
       singleAccount("dev.azure.com", client.account),
     ),
     repositoryId: (remoteUrl) => azureRepository(remoteUrl)?.id,
-    cloneable: cloneableRepositories(client),
-    repository: (remoteUrl) => {
+    cloneable: () => cloneableRepositories(client),
+    repository: async (remoteUrl) => {
       const repository = azureRepository(remoteUrl);
-      return Effect.succeed(
+      return (
         repository && {
           id: repository.id,
           pullRequests: (heads) => listPullRequests(client, repository, heads),
-          pullRequest: (number) =>
-            Effect.gen(function* () {
-              const read = reader(client, yield* client.accessToken);
-              const node = yield* read(
+          pullRequest: async (number) => {
+            try {
+              const read = reader(client, await client.accessToken());
+              const node = await read(
                 pullRequestUrl(repository, number),
-                decodePullRequest,
+                PullRequestNode,
               );
               if (
                 node.repository.name.toLowerCase() !==
@@ -64,81 +64,75 @@ export function createAzureDevOpsHost(client: AzureDevOpsClient): GitHost {
               return azurePullRequest(
                 repository,
                 node,
-                yield* checksOf(read, repository, node),
+                await checksOf(read, repository, node),
               );
-            }).pipe(Effect.orElseSucceed(() => undefined)),
+            } catch {
+              return undefined;
+            }
+          },
           avatar: (author) => readAvatar(client, repository, author),
-        },
+        }
       );
     },
   };
 }
 
-function listPullRequests(
+async function listPullRequests(
   client: AzureDevOpsClient,
   repository: AzureRepository,
   heads: readonly string[],
 ) {
-  return Effect.gen(function* () {
-    const read = reader(client, yield* client.accessToken);
-    return yield* eachHead(heads, branchesAtOnce, (head) =>
-      read(pullRequestsUrl(repository, head), decodePullRequestList).pipe(
-        Effect.flatMap(({ value }) =>
-          Effect.forEach(
-            value.filter((node) => node.forkSource === undefined),
-            (node) =>
-              checksOf(read, repository, node).pipe(
-                Effect.map((state) =>
-                  azurePullRequest(repository, node, state),
-                ),
-              ),
-            { concurrency: "unbounded" },
-          ).pipe(
-            Effect.map((found) =>
-              pageAnswer(value.length, pullRequestsPerBranch, found),
-            ),
+  const read = reader(client, await client.accessToken());
+  return eachHead(heads, branchesAtOnce, async (head) => {
+    const { value } = await read(
+      pullRequestsUrl(repository, head),
+      PullRequestList,
+    );
+    const found = await Promise.all(
+      value
+        .filter((node) => node.forkSource === undefined)
+        .map(async (node) =>
+          azurePullRequest(
+            repository,
+            node,
+            await checksOf(read, repository, node),
           ),
         ),
-      ),
     );
+    return pageAnswer(value.length, pullRequestsPerBranch, found);
   });
 }
 
-function readAvatar(
+async function readAvatar(
   client: AzureDevOpsClient,
   repository: AzureRepository,
   author: AvatarAuthor,
 ) {
-  return Effect.gen(function* () {
-    const accessToken = yield* client.accessToken;
-    const { value } = yield* reader(client, accessToken)(
-      commitsUrl(repository, author.commit),
-      decodeCommits,
-    );
-    const commit = value[0];
-    const url =
-      commit?.commitId === author.commit &&
-      sameEmail(commit.author.email, author)
-        ? avatarUrl(commit.author.imageUrl, [
-            "dev.azure.com",
-            "visualstudio.com",
-          ])
-        : undefined;
-    return foundAvatar(url, `Bearer ${accessToken}`);
-  });
+  const accessToken = await client.accessToken();
+  const { value } = await reader(client, accessToken)(
+    commitsUrl(repository, author.commit),
+    Commits,
+  );
+  const commit = value[0];
+  const url =
+    commit?.commitId === author.commit && sameEmail(commit.author.email, author)
+      ? avatarUrl(commit.author.imageUrl, ["dev.azure.com", "visualstudio.com"])
+      : undefined;
+  return foundAvatar(url, `Bearer ${accessToken}`);
 }
 
-function checksOf(
+async function checksOf(
   read: ReturnType<typeof reader>,
   repository: AzureRepository,
   node: PullRequestNode,
 ) {
-  return node.status === "active"
-    ? read(evaluationsUrl(repository, node), decodeEvaluations).pipe(
-        Effect.map(({ value }) => checksState(value)),
-        Effect.orElseSucceed(() => undefined),
-      )
-    : Effect.succeed(undefined);
+  if (node.status !== "active") return undefined;
+  try {
+    const { value } = await read(evaluationsUrl(repository, node), Evaluations);
+    return checksState(value);
+  } catch {
+    return undefined;
+  }
 }
 
 function azureRepository(remoteUrl: string): AzureRepository | undefined {
@@ -247,58 +241,43 @@ function evaluationsUrl(repository: AzureRepository, node: PullRequestNode) {
   )}`;
 }
 
-const PullRequestNode = Schema.Struct({
-  pullRequestId: Schema.Int,
-  title: Schema.String,
-  status: Schema.String,
-  isDraft: Schema.optionalKey(Schema.Boolean),
-  forkSource: Schema.optionalKey(Schema.Unknown),
-  lastMergeSourceCommit: Schema.optionalKey(
-    Schema.NullOr(Schema.Struct({ commitId: Schema.String })),
-  ),
-  repository: Schema.Struct({
-    name: Schema.String,
-    project: Schema.Struct({ id: Schema.String }),
+const PullRequestNode = z.object({
+  pullRequestId: z.number().int(),
+  title: z.string(),
+  status: z.string(),
+  isDraft: z.boolean().optional(),
+  forkSource: z.unknown().optional(),
+  lastMergeSourceCommit: z
+    .object({ commitId: z.string() })
+    .nullable()
+    .optional(),
+  repository: z.object({
+    name: z.string(),
+    project: z.object({ id: z.string() }),
   }),
 });
-type PullRequestNode = typeof PullRequestNode.Type;
+type PullRequestNode = z.infer<typeof PullRequestNode>;
 
-const decodePullRequestList = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(
-    Schema.Struct({ value: Schema.Array(PullRequestNode) }),
-  ),
-);
+const PullRequestList = z.object({ value: z.array(PullRequestNode) });
 
-const decodePullRequest = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(PullRequestNode),
-);
-
-const decodeCommits = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(
-    Schema.Struct({
-      value: Schema.Array(
-        Schema.Struct({
-          commitId: Schema.String,
-          author: Schema.Struct({
-            email: Schema.optionalKey(Schema.String),
-            imageUrl: Schema.optionalKey(Schema.String),
-          }),
-        }),
-      ),
+const Commits = z.object({
+  value: z.array(
+    z.object({
+      commitId: z.string(),
+      author: z.object({
+        email: z.string().optional(),
+        imageUrl: z.string().optional(),
+      }),
     }),
   ),
-);
-
-const Evaluation = Schema.Struct({
-  status: Schema.String,
-  configuration: Schema.Struct({
-    type: Schema.Struct({ id: Schema.String }),
-  }),
 });
 
-const decodeEvaluations = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(Schema.Struct({ value: Schema.Array(Evaluation) })),
-);
+const Evaluation = z.object({
+  status: z.string(),
+  configuration: z.object({ type: z.object({ id: z.string() }) }),
+});
+
+const Evaluations = z.object({ value: z.array(Evaluation) });
 
 function azurePullRequest(
   repository: AzureRepository,
@@ -326,7 +305,7 @@ function azurePullRequest(
 }
 
 function checksState(
-  evaluations: readonly (typeof Evaluation.Type)[],
+  evaluations: readonly z.infer<typeof Evaluation>[],
 ): PullRequest["checks"] {
   const statuses = evaluations
     .filter(({ configuration }) => checkPolicyTypes.has(configuration.type.id))

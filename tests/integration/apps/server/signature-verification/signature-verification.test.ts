@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { SignatureVerificationApi } from "#contracts/signature-verification/signature-verification.contract.ts";
 import { createRepository } from "#tests-support/git.ts";
@@ -100,8 +99,6 @@ async function fixture() {
         )
       ).stdout.trim(),
     verify: (kind: "commit" | "tag", object: string) =>
-      Effect.runPromise(
-        routes.verify({ repositoryId, worktreePath: repository, kind, object }),
-      ),
+      routes.verify({ repositoryId, worktreePath: repository, kind, object }),
   };
 }

@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem.ts";
 import { createRepository } from "#tests-support/git.ts";
@@ -24,10 +23,8 @@ describe("Environment filesystem", () => {
     await mkdir(join(root, "notes"));
     const filesystem = createEnvironmentFilesystem(root);
 
-    const home = await Effect.runPromise(filesystem.listDirectory());
-    const inside = await Effect.runPromise(
-      filesystem.listDirectory(join(root, "storefront")),
-    );
+    const home = await filesystem.listDirectory();
+    const inside = await filesystem.listDirectory(join(root, "storefront"));
 
     expect(home.repository).toBe(false);
     expect(home.entries.map(({ kind, name }) => ({ kind, name }))).toEqual([
@@ -46,7 +43,7 @@ describe("Environment filesystem", () => {
     await writeFile(join(root, "architecture.pdf"), "pdf");
     const filesystem = createEnvironmentFilesystem(root);
 
-    const listing = await Effect.runPromise(filesystem.listDirectory());
+    const listing = await filesystem.listDirectory();
 
     expect(listing.path).toBe(root);
     expect(listing.parentPath).toBeDefined();
@@ -70,13 +67,11 @@ describe("Environment filesystem", () => {
     await mkdir(join(root, ".hidden"));
     const filesystem = createEnvironmentFilesystem(root);
 
-    await expect(
-      Effect.runPromise(filesystem.listDirectory()),
-    ).resolves.toMatchObject({
+    await expect(filesystem.listDirectory()).resolves.toMatchObject({
       entries: [],
     });
     await expect(
-      Effect.runPromise(filesystem.listDirectory(undefined, true)),
+      filesystem.listDirectory(undefined, true),
     ).resolves.toMatchObject({
       entries: [expect.objectContaining({ name: ".hidden" })],
     });
@@ -94,7 +89,7 @@ describe("Environment filesystem", () => {
     );
     const filesystem = createEnvironmentFilesystem(root);
 
-    const listing = await Effect.runPromise(filesystem.listDirectory());
+    const listing = await filesystem.listDirectory();
 
     expect(listing.truncated).toBe(true);
     expect(listing.entries).toHaveLength(500);
@@ -104,14 +99,12 @@ describe("Environment filesystem", () => {
     const root = await createTemporaryDirectory();
     const filesystem = createEnvironmentFilesystem(root);
 
-    await expect(
-      Effect.runPromise(filesystem.listDirectory("relative")),
-    ).rejects.toMatchObject({
+    await expect(filesystem.listDirectory("relative")).rejects.toMatchObject({
       _tag: "EnvironmentDirectoryRejected",
       reason: "MalformedPath",
     });
     await expect(
-      Effect.runPromise(filesystem.listDirectory(join(root, "missing"))),
+      filesystem.listDirectory(join(root, "missing")),
     ).rejects.toMatchObject({
       _tag: "EnvironmentDirectoryRejected",
       reason: "NotFound",

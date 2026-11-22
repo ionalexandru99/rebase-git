@@ -1,13 +1,12 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Array as Arrays, Effect } from "effect";
 import { SettledDay } from "#contracts/branch-settling/branch-settling.contract.ts";
 import {
   type GitCommandRunner,
   readGitCommonDirectory,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
-  settledPerLock,
+  settledGroups,
   settlePolicy,
 } from "#server/features/branch-settling/branch-settling.ts";
 import {
@@ -48,105 +47,98 @@ export function settledLongEnough(
   );
 }
 
-export function operationBranches(git: GitCommandRunner, directory: string) {
-  return readGitCommonDirectory(git, directory).pipe(
-    Effect.flatMap((common) =>
-      Effect.promise(async () => {
-        const linked = await readdir(join(common, "worktrees")).catch(
-          (): string[] => [],
-        );
-        const contents = await Promise.all(
-          [
-            common,
-            ...linked.map((id) => join(common, "worktrees", id)),
-          ].flatMap((gitDirectory) =>
-            operationBranchFiles.map((file) =>
-              readFile(join(gitDirectory, file), "utf8").catch(() => ""),
-            ),
-          ),
-        );
-        return new Set(
-          contents
-            .map((content) => content.trim().replace(/^refs\/heads\//, ""))
-            .filter((branch) => branch !== ""),
-        );
-      }),
+export async function operationBranches(
+  git: GitCommandRunner,
+  directory: string,
+) {
+  const common = await readGitCommonDirectory(git, directory);
+  const linked = await readdir(join(common, "worktrees")).catch(
+    (): string[] => [],
+  );
+  const contents = await Promise.all(
+    [common, ...linked.map((id) => join(common, "worktrees", id))].flatMap(
+      (gitDirectory) =>
+        operationBranchFiles.map((file) =>
+          readFile(join(gitDirectory, file), "utf8").catch(() => ""),
+        ),
     ),
+  );
+  return new Set(
+    contents
+      .map((content) => content.trim().replace(/^refs\/heads\//, ""))
+      .filter((branch) => branch !== ""),
   );
 }
 
-export function deleteSettledBranches(
+export async function deleteSettledBranches(
   git: GitCommandRunner,
   access: RepositoryAccess,
   coordination: RepositoryCoordination,
   directory: string,
   candidates: readonly SettledCandidate[],
 ) {
-  return Effect.forEach(Arrays.chunksOf(candidates, settledPerLock), (group) =>
-    coordination
-      .run(
-        directory,
-        settlePolicy,
+  let deleted = false;
+  for (const group of settledGroups(candidates)) {
+    const groupDeleted = await coordination
+      .run(directory, settlePolicy, () =>
         deleteSettledGroup(git, access, directory, group),
       )
-      .pipe(Effect.catch(() => Effect.succeed(true))),
-  ).pipe(Effect.map((deleted) => deleted.includes(true)));
+      .catch(() => true);
+    deleted ||= groupDeleted;
+  }
+  return deleted;
 }
 
-function deleteSettledGroup(
+async function deleteSettledGroup(
   git: GitCommandRunner,
   access: RepositoryAccess,
   directory: string,
   candidates: readonly SettledCandidate[],
 ) {
-  return Effect.gen(function* () {
-    const refs = yield* readRefTargets(git, directory);
-    const settled = candidates.flatMap(({ name, mergedTip }) => {
-      const target = refs.get(branchRef(name));
-      return target === undefined ||
-        (mergedTip !== undefined && mergedTip !== target)
-        ? []
-        : [{ local: { name, target }, mergedAtTip: mergedTip !== undefined }];
-    });
-    if (settled.length === 0) return false;
-    const unchecked = settled.flatMap(({ local, mergedAtTip }) =>
-      mergedAtTip ? [] : [{ local }],
-    );
-    const unmerged = new Set(
-      unchecked.length === 0
-        ? []
-        : (yield* unmergedBranches(git, directory, unchecked, refs)).map(
-            ({ branch }) => branch.local?.name,
-          ),
-    );
-    const worktrees = yield* access.worktrees(directory);
-    const busy = yield* operationBranches(git, directory);
-    let deleted = false;
-    for (const { local } of settled) {
-      if (unmerged.has(local.name) || busy.has(local.name)) continue;
-      const holder = worktreeHolding(worktrees, local.name);
-      if (
-        holder !== undefined &&
-        (yield* readRefTargets(git, directory)).get(branchRef(local.name)) !==
-          local.target
-      )
-        continue;
-      const removed =
-        holder === undefined ||
-        (yield* removeWorktree(git, {
-          worktreePath: directory,
-          target: holder.path,
-          changes: 0,
-        }).pipe(
-          Effect.as(true),
-          Effect.catch(() => Effect.succeed(false)),
-        ));
-      if (!removed) continue;
-      deleted = true;
-      yield* deleteLocals(git, directory, [local]).pipe(
-        Effect.catch(() => Effect.void),
-      );
-    }
-    return deleted;
+  const refs = await readRefTargets(git, directory);
+  const settled = candidates.flatMap(({ name, mergedTip }) => {
+    const target = refs.get(branchRef(name));
+    return target === undefined ||
+      (mergedTip !== undefined && mergedTip !== target)
+      ? []
+      : [{ local: { name, target }, mergedAtTip: mergedTip !== undefined }];
   });
+  if (settled.length === 0) return false;
+  const unchecked = settled.flatMap(({ local, mergedAtTip }) =>
+    mergedAtTip ? [] : [{ local }],
+  );
+  const unmerged = new Set(
+    unchecked.length === 0
+      ? []
+      : (await unmergedBranches(git, directory, unchecked, refs)).map(
+          ({ branch }) => branch.local?.name,
+        ),
+  );
+  const worktrees = await access.worktrees(directory);
+  const busy = await operationBranches(git, directory);
+  let deleted = false;
+  for (const { local } of settled) {
+    if (unmerged.has(local.name) || busy.has(local.name)) continue;
+    const holder = worktreeHolding(worktrees, local.name);
+    if (
+      holder !== undefined &&
+      (await readRefTargets(git, directory)).get(branchRef(local.name)) !==
+        local.target
+    )
+      continue;
+    const removed =
+      holder === undefined ||
+      (await removeWorktree(git, {
+        worktreePath: directory,
+        target: holder.path,
+        changes: 0,
+      }).then(
+        () => true,
+        () => false,
+      ));
+    if (!removed) continue;
+    deleted = true;
+    await deleteLocals(git, directory, [local]).catch(() => undefined);
+  }
+  return deleted;
 }

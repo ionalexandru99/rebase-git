@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect, Stream } from "effect";
 import { afterEach, beforeEach, expect, it } from "vite-plus/test";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import {
@@ -27,22 +26,15 @@ afterEach(() => removeTemporaryDirectory(worktree));
 
 function coordinationRun() {
   const git: GitCommandRunner = {
-    stream: () => Stream.empty,
-    run: () =>
-      Effect.sync(() => {
-        resolutions++;
-        return {
-          exitCode: 0,
-          stderr: "",
-          stdout: `${tmpdir()}\n${tmpdir()}\n`,
-        };
-      }),
+    stream: async function* () {},
+    run: async () => {
+      resolutions++;
+      return { exitCode: 0, stderr: "", stdout: `${tmpdir()}\n${tmpdir()}\n` };
+    },
   };
   const coordination = createRepositoryCoordination(git);
-  return (operation: Effect.Effect<void, string> = Effect.void) =>
-    Effect.runPromise(
-      Effect.exit(coordination.run(worktree, recoverPolicy, operation)),
-    );
+  return (operation: () => Promise<void> = async () => {}) =>
+    coordination.run(worktree, recoverPolicy, operation).catch(() => {});
 }
 
 it("resolves a worktree's Git directories once until an operation fails", async () => {
@@ -51,7 +43,7 @@ it("resolves a worktree's Git directories once until an operation fails", async 
   await run();
   await run();
   const resolutionsBeforeFailure = resolutions;
-  await run(Effect.fail("rejected"));
+  await run(() => Promise.reject(new Error("rejected")));
   await run();
 
   expect(resolutionsBeforeFailure).toBe(1);

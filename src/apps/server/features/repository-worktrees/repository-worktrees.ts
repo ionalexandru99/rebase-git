@@ -1,6 +1,5 @@
 import { readdir, realpath } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import { Effect } from "effect";
 import {
   type CreateWorktree,
   type RemoveWorktree,
@@ -18,6 +17,7 @@ import {
 import {
   type GitCommandRunner,
   type GitFailed,
+  isGitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import { conflicted } from "#server/features/repository-changes/git/read-changes.ts";
@@ -76,152 +76,130 @@ export function repositoryWorktreesFeature(
   };
 }
 
-export function readWorktreeStatus(git: GitCommandRunner, directory: string) {
-  return listWorktrees(git, directory).pipe(
-    Effect.flatMap((worktrees) =>
-      Effect.all(
-        worktrees
-          .filter((worktree) => worktree.missing !== true)
-          .map((worktree) =>
-            countChanges(git, worktree.path).pipe(
-              Effect.map((counts) => ({ path: worktree.path, ...counts })),
-            ),
-          ),
-        { concurrency: 4 },
-      ),
-    ),
-    Effect.map((worktrees): RepositoryWorktreeStatus => ({ worktrees })),
+export async function readWorktreeStatus(
+  git: GitCommandRunner,
+  directory: string,
+): Promise<RepositoryWorktreeStatus> {
+  const worktrees = (await listWorktrees(git, directory)).filter(
+    (worktree) => worktree.missing !== true,
   );
+  return {
+    worktrees: await mapWithConcurrency(worktrees, 4, async (worktree) => ({
+      path: worktree.path,
+      ...(await countChanges(git, worktree.path)),
+    })),
+  };
 }
 
-export function createWorktree(git: GitCommandRunner, command: CreateWorktree) {
+export async function createWorktree(
+  git: GitCommandRunner,
+  command: CreateWorktree,
+) {
   const { start, worktreePath: directory } = command;
-  return Effect.gen(function* () {
-    if (!isAbsolute(command.path))
-      return yield* Effect.fail(rejected("NotAbsolute"));
-    if (!(yield* folderIsFree(command.path)))
-      return yield* Effect.fail(rejected("FolderExists"));
-    if (start._tag === "Branch") {
-      if ((yield* readBranchTarget(git, directory, start.name)) === undefined)
-        return yield* Effect.fail({
-          _tag: "RefMissing" as const,
-          name: start.name,
-        });
-      yield* addWorktree(git, directory, start.name, [
-        command.path,
-        start.name,
-      ]);
-    } else {
-      const { name, startPoint, track } = start;
-      yield* requireValidBranchName(git, directory, name);
-      if (track !== undefined)
-        yield* requireRemoteBranch(git, directory, track);
-      yield* runRepositoryGit(
+  if (!isAbsolute(command.path)) throw rejected("NotAbsolute");
+  if (!(await folderIsFree(command.path))) throw rejected("FolderExists");
+  if (start._tag === "Branch") {
+    if ((await readBranchTarget(git, directory, start.name)) === undefined)
+      throw { _tag: "RefMissing" as const, name: start.name };
+    await addWorktree(git, directory, start.name, [command.path, start.name]);
+  } else {
+    const { name, startPoint, track } = start;
+    await requireValidBranchName(git, directory, name);
+    if (track !== undefined) await requireRemoteBranch(git, directory, track);
+    try {
+      await runRepositoryGit(
         git,
         directory,
         ["branch", "--no-track", name, startPoint],
         refCommand,
-      ).pipe(
-        Effect.mapError((error) =>
-          /not a valid object name/i.test(error.detail)
-            ? { _tag: "RefMissing" as const, name: startPoint }
-            : branchWriteFailed(error, name),
-        ),
       );
-      yield* Effect.gen(function* () {
-        if (track !== undefined)
-          yield* runRepositoryGit(
-            git,
-            directory,
-            setUpstreamArguments(name, track),
-            refCommand,
-          ).pipe(Effect.mapError((error) => branchWriteFailed(error, name)));
-        yield* addWorktree(git, directory, name, [command.path, name]);
-      }).pipe(
-        Effect.onError(() =>
-          runRepositoryGit(
-            git,
-            directory,
-            ["branch", "-D", name],
-            refCommand,
-          ).pipe(Effect.ignore),
-        ),
-      );
+    } catch (error) {
+      if (!isGitFailed(error)) throw error;
+      throw /not a valid object name/i.test(error.detail)
+        ? { _tag: "RefMissing" as const, name: startPoint }
+        : branchWriteFailed(error, name);
     }
-    const worktreePath = yield* Effect.promise(() =>
-      realpath(command.path).catch(() => command.path),
-    );
-    return { worktreePath };
-  });
+    try {
+      if (track !== undefined)
+        await runRepositoryGit(
+          git,
+          directory,
+          setUpstreamArguments(name, track),
+          refCommand,
+        ).catch((error: unknown) => {
+          throw isGitFailed(error) ? branchWriteFailed(error, name) : error;
+        });
+      await addWorktree(git, directory, name, [command.path, name]);
+    } catch (error) {
+      await runRepositoryGit(git, directory, ["branch", "-D", name], {
+        ...refCommand,
+        signal: new AbortController().signal,
+      }).catch(() => undefined);
+      throw error;
+    }
+  }
+  const worktreePath = await realpath(command.path).catch(() => command.path);
+  return { worktreePath };
 }
 
-export function removeWorktree(
+export async function removeWorktree(
   git: GitCommandRunner,
   command: Omit<RemoveWorktree, "repositoryId">,
 ) {
-  return Effect.gen(function* () {
-    const worktree = yield* findRemovable(git, command);
-    if (worktree === undefined) return {};
-    if (
-      worktree.head.branch === undefined &&
-      (yield* commitsOnNoBranch(
-        git,
-        command.worktreePath,
-        worktree.head.commit,
-      ))
-    )
-      return yield* Effect.fail(rejected("Unsaved"));
-    const { unstaged, staged } =
-      worktree.missing === true
-        ? { unstaged: 0, staged: 0 }
-        : yield* countChanges(git, worktree.path);
-    const changes = unstaged + staged;
-    if (changes > 0 && changes !== command.changes)
-      return yield* Effect.fail<WorktreeChanged>({
-        _tag: "WorktreeChanged",
-        changes,
-      });
-    yield* runRepositoryGit(
-      git,
-      command.worktreePath,
-      [
-        "worktree",
-        "remove",
-        ...(changes > 0 ? ["--force"] : []),
-        worktree.path,
-      ],
-      worktreeCommand,
-    );
-    return {};
-  });
+  const worktree = await findRemovable(git, command);
+  if (worktree === undefined) return {};
+  if (
+    worktree.head.branch === undefined &&
+    (await commitsOnNoBranch(git, command.worktreePath, worktree.head.commit))
+  )
+    throw rejected("Unsaved");
+  const { unstaged, staged } =
+    worktree.missing === true
+      ? { unstaged: 0, staged: 0 }
+      : await countChanges(git, worktree.path);
+  const changes = unstaged + staged;
+  if (changes > 0 && changes !== command.changes)
+    throw { _tag: "WorktreeChanged", changes } satisfies WorktreeChanged;
+  await runRepositoryGit(
+    git,
+    command.worktreePath,
+    ["worktree", "remove", ...(changes > 0 ? ["--force"] : []), worktree.path],
+    worktreeCommand,
+  );
+  return {};
 }
 
-export function unlockWorktree(git: GitCommandRunner, command: WorktreeTarget) {
-  return Effect.gen(function* () {
-    const worktree = yield* findTarget(git, command);
-    if (worktree?.locked === undefined) return {};
-    yield* runRepositoryGit(
-      git,
-      command.worktreePath,
-      ["worktree", "unlock", worktree.path],
-      refCommand,
-    );
-    return {};
-  });
+export async function unlockWorktree(
+  git: GitCommandRunner,
+  command: WorktreeTarget,
+) {
+  const worktree = await findTarget(git, command);
+  if (worktree?.locked === undefined) return {};
+  await runRepositoryGit(
+    git,
+    command.worktreePath,
+    ["worktree", "unlock", worktree.path],
+    refCommand,
+  );
+  return {};
 }
 
-function addWorktree(
+async function addWorktree(
   git: GitCommandRunner,
   directory: string,
   branch: string,
   arguments_: readonly string[],
 ) {
-  return runRepositoryGit(
-    git,
-    directory,
-    ["worktree", "add", ...arguments_],
-    worktreeCommand,
-  ).pipe(Effect.mapError((error) => addFailed(error, branch)));
+  try {
+    await runRepositoryGit(
+      git,
+      directory,
+      ["worktree", "add", ...arguments_],
+      worktreeCommand,
+    );
+  } catch (error) {
+    throw isGitFailed(error) ? addFailed(error, branch) : error;
+  }
 }
 
 function addFailed(error: GitFailed, branch: string) {
@@ -240,53 +218,42 @@ function addFailed(error: GitFailed, branch: string) {
 }
 
 function folderIsFree(path: string) {
-  return Effect.promise(() =>
-    readdir(path).then(
-      (entries) => entries.length === 0,
-      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
-    ),
+  return readdir(path).then(
+    (entries) => entries.length === 0,
+    (error: NodeJS.ErrnoException) => error.code === "ENOENT",
   );
 }
 
-function findRemovable(
+async function findRemovable(
   git: GitCommandRunner,
   command: Omit<WorktreeTarget, "repositoryId">,
 ) {
-  return Effect.gen(function* () {
-    const worktree = yield* findTarget(git, command);
-    if (worktree === undefined) return undefined;
-    if (worktree.main) return yield* Effect.fail(rejected("Main"));
-    if (worktree.path === command.worktreePath)
-      return yield* Effect.fail(rejected("Current"));
-    if (worktree.locked !== undefined)
-      return yield* Effect.fail(rejected("Locked"));
-    return worktree;
-  });
+  const worktree = await findTarget(git, command);
+  if (worktree === undefined) return undefined;
+  if (worktree.main) throw rejected("Main");
+  if (worktree.path === command.worktreePath) throw rejected("Current");
+  if (worktree.locked !== undefined) throw rejected("Locked");
+  return worktree;
 }
 
-function findTarget(
+async function findTarget(
   git: GitCommandRunner,
   command: Omit<WorktreeTarget, "repositoryId">,
 ) {
-  return listWorktrees(git, command.worktreePath).pipe(
-    Effect.map((worktrees) =>
-      worktrees.find((worktree) => worktree.path === command.target),
-    ),
-  );
+  const worktrees = await listWorktrees(git, command.worktreePath);
+  return worktrees.find((worktree) => worktree.path === command.target);
 }
 
-function listWorktrees(git: GitCommandRunner, directory: string) {
-  return readWorktrees(git, directory).pipe(
-    Effect.flatMap(canonicalizeWorktrees),
-  );
+async function listWorktrees(git: GitCommandRunner, directory: string) {
+  return canonicalizeWorktrees(await readWorktrees(git, directory));
 }
 
-function commitsOnNoBranch(
+async function commitsOnNoBranch(
   git: GitCommandRunner,
   directory: string,
   commit: string,
 ) {
-  return runRepositoryGit(
+  const output = await runRepositoryGit(
     git,
     directory,
     [
@@ -299,30 +266,47 @@ function commitsOnNoBranch(
       "--remotes",
     ],
     refCommand,
-  ).pipe(Effect.map((output) => output.trim().length > 0));
+  );
+  return output.trim().length > 0;
 }
 
-function countChanges(git: GitCommandRunner, directory: string) {
-  return runRepositoryGit(git, directory, [
+async function countChanges(git: GitCommandRunner, directory: string) {
+  const output = await runRepositoryGit(git, directory, [
     "status",
     "--porcelain",
     "-z",
     "--no-renames",
     "--untracked-files=normal",
-  ]).pipe(
-    Effect.map((output) => {
-      const codes = output
-        .split("\0")
-        .filter((entry) => entry.length > 0)
-        .map((entry) => entry.slice(0, 2));
-      return {
-        unstaged: codes.filter((xy) => xy[1] !== " ").length,
-        staged: codes.filter(
-          (xy) => xy[0] !== " " && xy[0] !== "?" && !conflicted(xy),
-        ).length,
-      };
-    }),
+  ]);
+  const codes = output
+    .split("\0")
+    .filter((entry) => entry.length > 0)
+    .map((entry) => entry.slice(0, 2));
+  return {
+    unstaged: codes.filter((xy) => xy[1] !== " ").length,
+    staged: codes.filter(
+      (xy) => xy[0] !== " " && xy[0] !== "?" && !conflicted(xy),
+    ).length,
+  };
+}
+
+async function mapWithConcurrency<Item, Result>(
+  items: readonly Item[],
+  limit: number,
+  map: (item: Item) => Promise<Result>,
+) {
+  const results: Result[] = new Array(items.length);
+  let next = 0;
+  const work = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await map(items[index] as Item);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, work),
   );
+  return results;
 }
 
 function rejected(reason: WorktreeRejected["reason"]): WorktreeRejected {

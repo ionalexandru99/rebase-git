@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import { RepositoryBranchesApi } from "#contracts/repository-refs/repository-branches.contract.ts";
 import {
@@ -43,17 +42,23 @@ describe("repository branches", () => {
     const head = await git(fixture.repositoryPath, "rev-parse", "HEAD");
     const invalid = ["bad..name", "-x", "HEAD", "@{-1}"];
 
-    const failures = await withBranches(fixture, ({ branches, repositoryId }) =>
-      Effect.forEach([...invalid, "main", "spike/deeper"], (name) =>
-        branches
-          .create({
-            name,
-            repositoryId,
-            startPoint: head,
-            worktreePath: fixture.repositoryPath,
-          })
-          .pipe(Effect.flip),
-      ),
+    const failures = await withBranches(
+      fixture,
+      async ({ branches, repositoryId }) => {
+        const failures: unknown[] = [];
+        for (const name of [...invalid, "main", "spike/deeper"])
+          failures.push(
+            await branches
+              .create({
+                name,
+                repositoryId,
+                startPoint: head,
+                worktreePath: fixture.repositoryPath,
+              })
+              .catch((failure: unknown) => failure),
+          );
+        return failures;
+      },
     );
 
     expect(failures).toMatchObject([
@@ -514,21 +519,19 @@ describe("repository branches", () => {
   });
 });
 
-async function withBranches<Value, Failure>(
+async function withBranches<Value>(
   fixture: Pick<Fixture, "repositoryPath">,
   use: (dependencies: {
     readonly branches: RoutesClient<typeof RepositoryBranchesApi>;
     readonly repositoryId: string;
-  }) => Effect.Effect<Value, Failure>,
+  }) => Promise<Value>,
 ) {
   const environment = await openTestEnvironment();
   const repository = await environment.remember(fixture.repositoryPath);
-  return Effect.runPromise(
-    use({
-      branches: environment.routes(RepositoryBranchesApi),
-      repositoryId: repository.id,
-    }),
-  );
+  return use({
+    branches: environment.routes(RepositoryBranchesApi),
+    repositoryId: repository.id,
+  });
 }
 
 async function createFixture(): Promise<Fixture> {

@@ -8,7 +8,6 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { environmentPaths } from "#server/persistence/storage/environment-paths.ts";
 import { ensureServerSecret } from "#server/persistence/storage/server-secret.ts";
@@ -60,11 +59,11 @@ describe("server secret publication", () => {
       opened.resolve();
       await resume.promise;
     };
-    const first = Effect.runPromise(ensureServerSecret(paths));
+    const first = ensureServerSecret(paths);
     await opened.promise;
     pendingWrite.pause = undefined;
     try {
-      const second = await Effect.runPromise(ensureServerSecret(paths));
+      const second = await ensureServerSecret(paths);
       expect(second).toMatch(/^[A-Za-z0-9_-]{43}$/);
       resume.resolve();
       await expect(first).resolves.toBe(second);
@@ -80,7 +79,7 @@ describe("server secret publication", () => {
       Array.from({ length: 64 }, async (_, index) => {
         if (index > 0)
           await new Promise((resolve) => setTimeout(resolve, index % 4));
-        return Effect.runPromise(ensureServerSecret(paths));
+        return ensureServerSecret(paths);
       }),
     );
     expect(new Set(secrets).size).toBe(1);
@@ -97,11 +96,9 @@ describe("server secret publication", () => {
     const paths = await temporaryPaths();
     const original = "a".repeat(43);
     await writeFile(paths.serverSecret, `${original}\n`);
-    await expect(Effect.runPromise(ensureServerSecret(paths))).resolves.toBe(
-      original,
-    );
+    await expect(ensureServerSecret(paths)).resolves.toBe(original);
     await writeFile(paths.serverSecret, "invalid");
-    await expect(Effect.runPromise(ensureServerSecret(paths))).rejects.toThrow(
+    await expect(ensureServerSecret(paths)).rejects.toThrow(
       "The server secret is invalid.",
     );
     expect(await readFile(paths.serverSecret, "utf8")).toBe("invalid");

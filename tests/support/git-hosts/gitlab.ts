@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import type { GitLabCli } from "#server/features/source-control/hosts/gitlab-host.ts";
 
 interface GitLabMergeRequestNode {
@@ -40,19 +39,19 @@ export function fakeGitLab(
       ? `${host}\n  x ${host}: API call failed: 401 Unauthorized`
       : `${host}\n  ✓ Logged in to ${host} as ${accounts[host]} (/home/tanuki/.config/glab-cli/config.yml)`;
   const gitlab: GitLabCli = {
-    version: Effect.succeed(version ?? undefined),
+    version: async () => version ?? undefined,
     authStatus: (hostname) =>
-      Effect.succeed(
+      Promise.resolve(
         hostname === undefined
           ? Object.keys(accounts).map(statusOf).join("\n")
           : statusOf(hostname),
       ),
-    protocol: (hostname) => Effect.succeed(protocols[hostname] ?? "ssh"),
+    protocol: (hostname) => Promise.resolve(protocols[hostname] ?? "ssh"),
     repositories: (hostname, page) => {
       const listed = repositories[hostname];
       if (listed === undefined)
-        return Effect.fail({ _tag: "PullRequestsUnavailable" });
-      return Effect.succeed(
+        return Promise.reject({ _tag: "PullRequestsUnavailable" });
+      return Promise.resolve(
         JSON.stringify(
           listed.slice((page - 1) * 100, page * 100).map((repository) => ({
             path_with_namespace: repository.name,
@@ -65,11 +64,11 @@ export function fakeGitLab(
         ),
       );
     },
-    avatar: () => Effect.succeed(JSON.stringify({ avatar_url: null })),
+    avatar: () => Promise.resolve(JSON.stringify({ avatar_url: null })),
     graphql: (hostname, query, variables) => {
       requests.push({ hostname, ...variables });
       if (bySourceBranch === null)
-        return Effect.fail({ _tag: "PullRequestsUnavailable" });
+        return Promise.reject({ _tag: "PullRequestsUnavailable" });
       const fullPath = variables.fullPath ?? "";
       const asNode = (node: GitLabMergeRequestNode) => ({
         iid: String(node.iid),
@@ -86,7 +85,7 @@ export function fakeGitLab(
         const node = Object.values(bySourceBranch)
           .flat()
           .find(({ iid }) => String(iid) === wanted);
-        return Effect.succeed(
+        return Promise.resolve(
           JSON.stringify({
             data: {
               project: {
@@ -104,7 +103,7 @@ export function fakeGitLab(
             { nodes: (bySourceBranch[sourceBranch] ?? []).map(asNode) },
           ]),
       );
-      return Effect.succeed(
+      return Promise.resolve(
         JSON.stringify({ data: { project: visible ? project : null } }),
       );
     },

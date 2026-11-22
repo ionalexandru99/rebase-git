@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { Deferred, Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
@@ -57,7 +56,7 @@ describe("browser Environment connection", () => {
         ...git,
         run: (command) =>
           command.arguments.includes("for-each-ref")
-            ? Effect.die(new Error("Unreadable refs"))
+            ? Promise.reject(new Error("Unreadable refs"))
             : git.run(command),
       }),
     });
@@ -80,21 +79,18 @@ describe("browser Environment connection", () => {
 
   it("reports Git progress while a fetch and a push run", async () => {
     const holds = {
-      fetch: Effect.runSync(Deferred.make<void>()),
-      push: Effect.runSync(Deferred.make<void>()),
+      fetch: Promise.withResolvers<void>(),
+      push: Promise.withResolvers<void>(),
     };
-    const release = (verb: keyof typeof holds) =>
-      Effect.runSync(Deferred.succeed(holds[verb], undefined));
+    const release = (verb: keyof typeof holds) => holds[verb].resolve();
     const server = await openTestServer({
       git: (git) => ({
         ...git,
-        run: (command) => {
+        run: async (command) => {
           const verb = command.arguments[0];
-          return verb === "fetch" || verb === "push"
-            ? git
-                .run(command)
-                .pipe(Effect.tap(() => Deferred.await(holds[verb])))
-            : git.run(command);
+          const output = await git.run(command);
+          if (verb === "fetch" || verb === "push") await holds[verb].promise;
+          return output;
         },
       }),
     });

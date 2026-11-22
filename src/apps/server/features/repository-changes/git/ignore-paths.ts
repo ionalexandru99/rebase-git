@@ -1,7 +1,6 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, posix } from "node:path";
-import { Effect } from "effect";
 import {
   changesFailed,
   type IgnorePaths,
@@ -10,6 +9,7 @@ import {
   ignoreTracked,
   type ReadIgnoreRule,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
+import { uninterruptible } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandOptions,
   type GitCommandRunner,
@@ -20,7 +20,7 @@ import { safeChangePath } from "#server/features/repository-changes/git/change-f
 
 const argumentCharacters = 24_000;
 
-export function ignorePaths(
+export async function ignorePaths(
   git: GitCommandRunner,
   index: GitCommandOptions,
   command: IgnorePaths,
@@ -28,73 +28,64 @@ export function ignorePaths(
   const directory = command.worktreePath;
   const paths = [...new Set(command.paths)];
   const pathspecs = paths.map((path) => path.replace(/\/+$/, ""));
-  return Effect.gen(function* () {
-    if (paths.some((path) => /[\r\n]/.test(path)))
-      return yield* Effect.fail(
-        changesFailed(
-          "Unsupported",
-          "Git can't ignore a name with a line break.",
-        ),
-      );
-    yield* Effect.forEach(paths, (path) => safeChangePath(directory, path));
-    const tracked = yield* trackedFiles(git, index, directory, pathspecs);
-    const [first] = tracked;
-    if (first !== undefined && !command.untrack)
-      return yield* Effect.fail(ignoreTracked(first, tracked.length));
-    const target = command.target;
-    const file =
-      target === null ? null : yield* ruleFile(git, directory, target);
-    yield* Effect.uninterruptible(
-      Effect.gen(function* () {
-        if (file !== null)
-          yield* changeIo(() => appendRules(file, paths.map(ignoreRule)));
-        if (tracked.length === 0) return;
-        yield* runRepositoryGit(
-          git,
-          directory,
-          [
-            "rm",
-            "-r",
-            "--cached",
-            "--force",
-            "--quiet",
-            "--ignore-unmatch",
-            "--pathspec-from-file=-",
-            "--pathspec-file-nul",
-          ],
-          { ...index, input: `${pathspecs.join("\0")}\0` },
-        );
-      }),
+  if (paths.some((path) => /[\r\n]/.test(path)))
+    throw changesFailed(
+      "Unsupported",
+      "Git can't ignore a name with a line break.",
+    );
+  for (const path of paths) await safeChangePath(directory, path);
+  const tracked = await trackedFiles(git, index, directory, pathspecs);
+  const [first] = tracked;
+  if (first !== undefined && !command.untrack)
+    throw ignoreTracked(first, tracked.length);
+  const target = command.target;
+  const file = target === null ? null : await ruleFile(git, directory, target);
+  await uninterruptible(async () => {
+    if (file !== null)
+      await changeIo(() => appendRules(file, paths.map(ignoreRule)));
+    if (tracked.length === 0) return;
+    await runRepositoryGit(
+      git,
+      directory,
+      [
+        "rm",
+        "-r",
+        "--cached",
+        "--force",
+        "--quiet",
+        "--ignore-unmatch",
+        "--pathspec-from-file=-",
+        "--pathspec-file-nul",
+      ],
+      { ...index, input: `${pathspecs.join("\0")}\0` },
     );
   });
 }
 
-export function readIgnoreRule(
+export async function readIgnoreRule(
   git: GitCommandRunner,
   { worktreePath, path, includeTracked }: ReadIgnoreRule,
 ) {
-  return Effect.gen(function* () {
-    yield* safeChangePath(worktreePath, path);
-    const output = yield* runRepositoryGit(
-      git,
-      worktreePath,
-      [
-        "check-ignore",
-        "-z",
-        "--verbose",
-        ...(includeTracked ? ["--no-index"] : []),
-        "--stdin",
-      ],
-      { input: `./${path}\0`, exitCodes: [0, 1], literalPathspecs: false },
-    );
-    const [file, line, pattern] = output.split("\0");
-    if (!file || !pattern || pattern.startsWith("!")) return null;
-    return {
-      pattern,
-      line: Number(line),
-      ...ruleSource(posix.normalize(separators(file))),
-    } satisfies IgnoreRule;
-  });
+  await safeChangePath(worktreePath, path);
+  const output = await runRepositoryGit(
+    git,
+    worktreePath,
+    [
+      "check-ignore",
+      "-z",
+      "--verbose",
+      ...(includeTracked ? ["--no-index"] : []),
+      "--stdin",
+    ],
+    { input: `./${path}\0`, exitCodes: [0, 1], literalPathspecs: false },
+  );
+  const [file, line, pattern] = output.split("\0");
+  if (!file || !pattern || pattern.startsWith("!")) return null;
+  return {
+    pattern,
+    line: Number(line),
+    ...ruleSource(posix.normalize(separators(file))),
+  } satisfies IgnoreRule;
 }
 
 function ruleSource(file: string): Pick<IgnoreRule, "file" | "inWorktree"> {
@@ -126,39 +117,44 @@ function ignoreRule(path: string) {
   return `/${name}${folder ? "/" : ""}`;
 }
 
-function trackedFiles(
+async function trackedFiles(
   git: GitCommandRunner,
   index: GitCommandOptions,
   directory: string,
   pathspecs: readonly string[],
 ) {
-  return Effect.forEach(argumentGroups(pathspecs), (group) =>
-    runRepositoryGit(git, directory, ["ls-files", "-z", "--", ...group], {
-      ...index,
-      maxOutputBytes: 64 * 1_048_576,
-    }),
-  ).pipe(
-    Effect.map((outputs) => [
-      ...new Set(
-        outputs.flatMap((output) => output.split("\0")).filter(Boolean),
+  const outputs: string[] = [];
+  for (const group of argumentGroups(pathspecs))
+    outputs.push(
+      await runRepositoryGit(
+        git,
+        directory,
+        ["ls-files", "-z", "--", ...group],
+        {
+          ...index,
+          maxOutputBytes: 64 * 1_048_576,
+        },
       ),
-    ]),
-  );
+    );
+  return [
+    ...new Set(outputs.flatMap((output) => output.split("\0")).filter(Boolean)),
+  ];
 }
 
-function ruleFile(
+async function ruleFile(
   git: GitCommandRunner,
   directory: string,
   target: IgnoreTarget,
 ) {
-  if (target === "repository")
-    return Effect.succeed(join(directory, ".gitignore"));
-  return runRepositoryGit(git, directory, [
-    "rev-parse",
-    "--path-format=absolute",
-    "--git-path",
-    "info/exclude",
-  ]).pipe(Effect.map((output) => output.trim()));
+  if (target === "repository") return join(directory, ".gitignore");
+  return (
+    await runRepositoryGit(git, directory, [
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-path",
+      "info/exclude",
+    ])
+  ).trim();
 }
 
 async function appendRules(file: string, rules: readonly string[]) {

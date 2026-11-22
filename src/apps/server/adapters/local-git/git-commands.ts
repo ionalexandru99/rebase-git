@@ -6,9 +6,8 @@ import {
 } from "node:child_process";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
-import { Readable } from "node:stream";
+import type { Readable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
-import { Deferred, Effect, Stream } from "effect";
 import {
   type RepositoryRejected,
   repositoryRejected,
@@ -31,6 +30,7 @@ export interface GitCommand {
   readonly progressStream?: "stdout" | "stderr";
   readonly onSpawn?: (pid: number, stop: () => void) => void;
   readonly expectedExitCodes?: readonly number[];
+  readonly signal?: AbortSignal;
 }
 
 export type GitCommandOptions = Omit<GitCommand, "arguments" | "directory">;
@@ -58,12 +58,8 @@ export interface GitFailed {
 export type GitObjectFormat = "sha1" | "sha256";
 
 export interface GitCommandRunner {
-  readonly run: (
-    command: GitCommand,
-  ) => Effect.Effect<GitCommandOutput, GitFailed>;
-  readonly stream: (
-    command: GitStreamCommand,
-  ) => Stream.Stream<string, GitFailed>;
+  readonly run: (command: GitCommand) => Promise<GitCommandOutput>;
+  readonly stream: (command: GitStreamCommand) => AsyncIterable<string>;
 }
 
 interface RepositoryGitOptions extends GitCommandOptions {
@@ -94,37 +90,30 @@ export function createLocalGitCommandRunner(): GitCommandRunner {
   };
 }
 
-export function runRepositoryGit(
+export async function runRepositoryGit(
   git: GitCommandRunner,
   directory: string,
   args: readonly string[],
   options: RepositoryGitOptions = {},
 ) {
-  return runRepositoryGitOutput(git, directory, args, options).pipe(
-    Effect.map((output) => output.stdout),
-  );
+  return (await runRepositoryGitOutput(git, directory, args, options)).stdout;
 }
 
-export function runRepositoryGitOutput(
+export async function runRepositoryGitOutput(
   git: GitCommandRunner,
   directory: string,
   args: readonly string[],
   { exitCodes = [0], ...options }: RepositoryGitOptions = {},
 ) {
-  return git
-    .run({
-      ...options,
-      directory,
-      arguments: args,
-      expectedExitCodes: exitCodes,
-    })
-    .pipe(
-      Effect.flatMap((output) =>
-        exitCodes.includes(output.exitCode)
-          ? Effect.succeed(output)
-          : Effect.fail(rejectedByGit(output.exitCode, output.stderr)),
-      ),
-    );
+  const output = await git.run({
+    ...options,
+    directory,
+    arguments: args,
+    expectedExitCodes: exitCodes,
+  });
+  if (!exitCodes.includes(output.exitCode))
+    throw rejectedByGit(output.exitCode, output.stderr);
+  return output;
 }
 
 export function streamRepositoryGit(
@@ -144,37 +133,38 @@ export function isGitObjectId(value: string, objectFormat?: GitObjectFormat) {
   return lengths.includes(value.length) && hexadecimal.test(value);
 }
 
-export function readGitCommonDirectory(
+export async function readGitCommonDirectory(
   git: GitCommandRunner,
   directory: string,
   options: GitCommandOptions = {},
 ) {
-  return runRepositoryGit(
-    git,
-    directory,
-    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-    options,
-  ).pipe(Effect.map((output) => output.trim()));
+  return (
+    await runRepositoryGit(
+      git,
+      directory,
+      ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      options,
+    )
+  ).trim();
 }
 
-export function cacheByGitEntry<A, E>(
-  read: (directory: string) => Effect.Effect<A, E>,
+export function cacheByGitEntry<Value>(
+  read: (directory: string) => Promise<Value>,
 ) {
   const entries = new Map<
     string,
-    { readonly identity: string; readonly value: A }
+    { readonly identity: string; readonly value: Value }
   >();
   return {
-    read: (directory: string) =>
-      Effect.gen(function* () {
-        const identity = yield* readGitEntryIdentity(directory);
-        const cached = entries.get(directory);
-        if (identity !== undefined && cached?.identity === identity)
-          return cached.value;
-        const value = yield* read(directory);
-        if (identity !== undefined) entries.set(directory, { identity, value });
-        return value;
-      }),
+    read: async (directory: string) => {
+      const identity = await readGitEntryIdentity(directory);
+      const cached = entries.get(directory);
+      if (identity !== undefined && cached?.identity === identity)
+        return cached.value;
+      const value = await read(directory);
+      if (identity !== undefined) entries.set(directory, { identity, value });
+      return value;
+    },
     forget: (directory: string) => {
       entries.delete(directory);
     },
@@ -182,14 +172,12 @@ export function cacheByGitEntry<A, E>(
 }
 
 function readGitEntryIdentity(directory: string) {
-  return Effect.promise(() =>
-    lstat(join(directory, ".git"), { bigint: true }).then(
-      (info) =>
-        info.isDirectory()
-          ? `${info.dev}:${info.ino}:${info.birthtimeNs}`
-          : `${info.dev}:${info.ino}:${info.ctimeNs}`,
-      () => undefined,
-    ),
+  return lstat(join(directory, ".git"), { bigint: true }).then(
+    (info) =>
+      info.isDirectory()
+        ? `${info.dev}:${info.ino}:${info.birthtimeNs}`
+        : `${info.dev}:${info.ino}:${info.ctimeNs}`,
+    () => undefined,
   );
 }
 
@@ -266,6 +254,15 @@ export function isGitRejection(failure: GitFailed) {
   return failure.exitCode !== undefined;
 }
 
+export function isGitFailed(error: unknown): error is GitFailed {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    error._tag === "GitFailed"
+  );
+}
+
 export function gitFailed(
   reason: GitFailed["reason"],
   detail = `Git could not complete the operation (${reason}).`,
@@ -285,21 +282,29 @@ function rejectedByGit(exitCode: number, stderr: string): GitFailed {
 }
 
 function runLocalGitCommand(command: GitCommand) {
-  return Effect.callback<GitCommandOutput, GitFailed>((resume) => {
+  return new Promise<GitCommandOutput>((resolve, reject) => {
     let ended: GitFailed["reason"] | "Stopped" | undefined;
     let finished = false;
-    const finish = (result: Effect.Effect<GitCommandOutput, GitFailed>) => {
+    const finish = (settle: () => void) => {
       if (finished) return;
       finished = true;
       clearTimeout(deadline);
-      resume(result);
+      command.signal?.removeEventListener("abort", abort);
+      settle();
     };
+    const fail = (failure: GitFailed) => finish(() => reject(failure));
     const end = (reason: GitFailed["reason"] | "Stopped") => {
       if (ended !== undefined || !running(child)) return;
       ended = reason;
       killGit(child);
     };
+    const abort = () => end("Failed");
+    if (command.signal?.aborted) {
+      reject(command.signal.reason);
+      return;
+    }
     const child = startGit(command);
+    command.signal?.addEventListener("abort", abort, { once: true });
     const deadline = setTimeout(
       () => end("Timeout"),
       command.timeoutMilliseconds ?? defaultTimeoutMilliseconds,
@@ -322,25 +327,21 @@ function runLocalGitCommand(command: GitCommand) {
       });
     }
     child.once("error", (cause: NodeJS.ErrnoException) =>
-      finish(
-        Effect.fail(
-          gitFailed(cause.code === "ENOENT" ? "GitUnavailable" : "Failed"),
-        ),
-      ),
+      fail(gitFailed(cause.code === "ENOENT" ? "GitUnavailable" : "Failed")),
     );
     child.once("close", (code) => {
+      if (command.signal?.aborted)
+        return finish(() => reject(command.signal?.reason));
       if (ended === "Stopped")
-        return finish(
-          Effect.fail(gitFailed("Failed", "Stopped from Diagnostics.")),
-        );
-      if (ended !== undefined) return finish(Effect.fail(gitFailed(ended)));
-      if (code === null) return finish(Effect.fail(gitFailed("Failed")));
+        return fail(gitFailed("Failed", "Stopped from Diagnostics."));
+      if (ended !== undefined) return fail(gitFailed(ended));
+      if (code === null) return fail(gitFailed("Failed"));
       const stdout = Buffer.concat(output).toString(
         command.outputEncoding ?? "utf8",
       );
       const stderr = Buffer.concat(errorOutput).toString("utf8");
-      finish(
-        Effect.succeed({
+      finish(() =>
+        resolve({
           exitCode: code,
           stdout,
           stderr:
@@ -352,7 +353,6 @@ function runLocalGitCommand(command: GitCommand) {
     });
     if (child.pid !== undefined)
       command.onSpawn?.(child.pid, () => end("Stopped"));
-    return stopGit(child);
   });
 }
 
@@ -385,17 +385,6 @@ function startGit(command: GitStreamCommand) {
 
 function running(child: ChildProcess) {
   return child.stdout?.closed !== true || child.stderr?.closed !== true;
-}
-
-function stopGit(child: ChildProcess) {
-  return Effect.callback<void>((resume) => {
-    if (!running(child)) {
-      resume(Effect.void);
-      return;
-    }
-    child.once("close", () => resume(Effect.void));
-    killGit(child);
-  });
 }
 
 function killGit(child: ChildProcess) {
@@ -445,49 +434,42 @@ function isProgressLine(segment: string) {
   return progressLines.some((pattern) => pattern.test(line));
 }
 
-function streamLocalGitCommand(command: GitStreamCommand) {
-  return Stream.unwrap(
-    Effect.map(spawnGitProcess(command), (git) =>
-      Stream.fromReadableStream({
-        evaluate: () =>
-          Readable.toWeb(
-            git.child.stdout,
-          ) as unknown as ReadableStream<Uint8Array>,
-        onError: () => gitFailed("Failed"),
-      }).pipe(
-        Stream.decodeText,
-        Stream.concat(Stream.fromEffectDrain(Deferred.await(git.exit))),
-      ),
-    ),
-  ).pipe(
-    Stream.interruptWhen(
-      Effect.sleep(
-        command.timeoutMilliseconds ?? defaultTimeoutMilliseconds,
-      ).pipe(Effect.andThen(Effect.fail(gitFailed("Timeout")))),
-    ),
-  );
-}
-
-function spawnGitProcess(command: GitStreamCommand) {
-  return Effect.acquireRelease(
-    Effect.sync(() => {
-      const child = startGit(command);
-      const exit = watchGitExit(child);
-      if (child.pid !== undefined)
-        command.onSpawn?.(child.pid, () => {
-          if (running(child)) killGit(child);
-        });
-      return { child, exit };
-    }),
-    ({ child }) =>
-      Effect.sync(() => {
-        if (running(child)) signalGit(child);
-      }),
-  );
+async function* streamLocalGitCommand(command: GitStreamCommand) {
+  command.signal?.throwIfAborted();
+  const child = startGit(command);
+  const exit = watchGitExit(child);
+  const stop = () => {
+    if (running(child)) killGit(child);
+  };
+  if (child.pid !== undefined) command.onSpawn?.(child.pid, stop);
+  let timedOut = false;
+  const deadline = setTimeout(() => {
+    timedOut = true;
+    stop();
+  }, command.timeoutMilliseconds ?? defaultTimeoutMilliseconds);
+  command.signal?.addEventListener("abort", stop, { once: true });
+  try {
+    const decoder = new StringDecoder("utf8");
+    for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
+      const text = decoder.write(chunk);
+      if (text !== "") yield text;
+    }
+    const rest = decoder.end();
+    if (rest !== "") yield rest;
+    await exit;
+    if (timedOut) throw gitFailed("Timeout");
+  } catch (error) {
+    if (timedOut) throw gitFailed("Timeout");
+    if (isGitFailed(error) || command.signal?.aborted) throw error;
+    throw gitFailed("Failed");
+  } finally {
+    clearTimeout(deadline);
+    command.signal?.removeEventListener("abort", stop);
+    if (running(child)) signalGit(child);
+  }
 }
 
 function watchGitExit(child: ChildProcessWithoutNullStreams) {
-  const exit = Deferred.makeUnsafe<void, GitFailed>();
   let stderr = "";
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk: string) => {
@@ -495,24 +477,19 @@ function watchGitExit(child: ChildProcessWithoutNullStreams) {
       stderr += chunk.slice(0, defaultMaximumOutputBytes - stderr.length);
     }
   });
-  child.once("error", (cause: NodeJS.ErrnoException) => {
-    Deferred.doneUnsafe(
-      exit,
-      Effect.fail(
-        gitFailed(cause.code === "ENOENT" ? "GitUnavailable" : "Failed"),
-      ),
+  const exit = new Promise<void>((resolve, reject) => {
+    child.once("error", (cause: NodeJS.ErrnoException) =>
+      reject(gitFailed(cause.code === "ENOENT" ? "GitUnavailable" : "Failed")),
     );
+    child.once("close", (code) => {
+      if (code === 0) resolve();
+      else
+        reject(
+          code === null ? gitFailed("Failed") : rejectedByGit(code, stderr),
+        );
+    });
   });
-  child.once("close", (code) => {
-    Deferred.doneUnsafe(
-      exit,
-      code === 0
-        ? Effect.void
-        : Effect.fail(
-            code === null ? gitFailed("Failed") : rejectedByGit(code, stderr),
-          ),
-    );
-  });
+  exit.catch(() => undefined);
   return exit;
 }
 

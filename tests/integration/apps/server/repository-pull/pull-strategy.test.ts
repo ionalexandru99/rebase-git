@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import {
   type PullStrategy,
@@ -73,24 +72,18 @@ async function fixture() {
     environment,
     mainId,
     linkedId,
-    remove: (repositoryId: string) =>
-      Effect.runPromise(environment.catalog.remove(repositoryId)),
+    remove: (repositoryId: string) => environment.catalog.remove(repositoryId),
     storedSettings: () =>
-      Effect.runPromise(
-        environment.context.read("Could not read settings", (database) =>
-          database
-            .select({ pullStrategy: repositorySettingTable.pullStrategy })
-            .from(repositorySettingTable),
-        ),
+      environment.context.read("Could not read settings", (database) =>
+        database
+          .select({ pullStrategy: repositorySettingTable.pullStrategy })
+          .from(repositorySettingTable),
       ),
-    readServer: () => Effect.runPromise(pull.readPullStrategy(undefined)),
-    saveServer: (strategy: PullStrategy) =>
-      Effect.runPromise(pull.savePullStrategy({ strategy })),
+    readServer: () => pull.readPullStrategy(undefined),
+    saveServer: (strategy: PullStrategy) => pull.savePullStrategy({ strategy }),
     readRepository: (repositoryId: string) =>
-      Effect.runPromise(pull.readRepositoryPullStrategy({ repositoryId })),
+      pull.readRepositoryPullStrategy({ repositoryId }),
     saveRepository: (repositoryId: string, strategy: PullStrategy | null) =>
-      Effect.runPromise(
-        pull.saveRepositoryPullStrategy({ repositoryId, strategy }),
-      ),
+      pull.saveRepositoryPullStrategy({ repositoryId, strategy }),
   };
 }
