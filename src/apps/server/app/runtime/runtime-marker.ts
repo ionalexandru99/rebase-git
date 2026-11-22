@@ -1,14 +1,26 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { z } from "zod";
 import { errorMessage, isFileSystemError } from "#server/error-inspection.ts";
 
-interface RuntimeMarker {
-  readonly host: string;
-  readonly origin: string;
-  readonly pid: number;
-  readonly port: number;
-  readonly startedAt: string;
+const RuntimeMarker = z.object({
+  controlToken: z.string(),
+  host: z.string(),
+  origin: z.string(),
+  pid: z.int(),
+  port: z.int(),
+  startedAt: z.string(),
+  version: z.string(),
+});
+export type RuntimeMarker = z.infer<typeof RuntimeMarker>;
+
+export async function readRuntimeMarker(runtimePath: string) {
+  try {
+    return RuntimeMarker.parse(JSON.parse(await readFile(runtimePath, "utf8")));
+  } catch {
+    return undefined;
+  }
 }
 
 export async function acquireRuntimeMarker(

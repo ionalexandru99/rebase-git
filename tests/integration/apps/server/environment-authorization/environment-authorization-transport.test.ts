@@ -1,11 +1,15 @@
 import { request } from "node:http";
+import { join } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 import {
   EnvironmentAuthorizationApi,
   environmentBrowserSessionPath,
+  environmentLocalPairingPath,
   environmentPairingExchangePath,
+  environmentShutdownPath,
 } from "#contracts/environment-authorization/environment-authorization.contract.ts";
 import { unauthorizedCloseCode } from "#contracts/environment-connection/environment-rpc.contract.ts";
+import { readRuntimeMarker } from "#server/app/runtime/runtime-marker.ts";
 import {
   exchangePairing,
   helloOverSocket,
@@ -85,6 +89,38 @@ describe("Environment authorization transport", () => {
       code: unauthorizedCloseCode,
       reason: "RevokedGrant",
     });
+  });
+
+  it("mints local pairings only for the control token", async () => {
+    const { home, origin } = await openTestServer();
+    const marker = await readRuntimeMarker(
+      join(home, ".rebase", "runtime", "runtime.json"),
+    );
+    const control = (path: string, token: string, requestOrigin = {}) =>
+      fetch(`${origin}${path}`, {
+        headers: { authorization: `Bearer ${token}`, ...requestOrigin },
+        method: "POST",
+      });
+
+    const denied = [
+      await control(environmentLocalPairingPath, "wrong"),
+      await control(environmentLocalPairingPath, marker?.controlToken ?? "", {
+        origin: "https://attacker.example",
+      }),
+    ];
+    expect(denied.map(({ status }) => status)).toEqual([401, 403]);
+    const paired = await control(
+      environmentLocalPairingPath,
+      marker?.controlToken ?? "",
+    );
+    const { pairingUrl } = (await paired.json()) as { pairingUrl: string };
+    await expect(exchangePairing(origin, pairingUrl, "CLI")).resolves.toEqual(
+      expect.objectContaining({ type: "bearer" }),
+    );
+    expect(
+      (await control(environmentShutdownPath, marker?.controlToken ?? ""))
+        .status,
+    ).toBe(404);
   });
 
   it("requires the server origin for browser pairing", async () => {

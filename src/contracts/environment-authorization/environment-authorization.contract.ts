@@ -104,6 +104,11 @@ export const environmentBrowserSessionPath =
   "/api/authorization/browser-session";
 export const environmentPairingExchangePath =
   "/api/authorization/pairings/exchange";
+export const environmentLocalPairingPath = "/api/environment/local-pairing";
+export const environmentShutdownPath = "/api/environment/shutdown";
+
+export const EnvironmentLocalPairing = z.object({ pairingUrl: z.string() });
+export type EnvironmentLocalPairing = z.infer<typeof EnvironmentLocalPairing>;
 
 export const EnvironmentAuthorizationApi = {
   createPairing: route("authorization/pairings/create", {

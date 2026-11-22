@@ -42,6 +42,7 @@
     "build": "pnpm build:desktop-package",
     "build:desktop-package": "node packaging/build-desktop.ts",
     "build:package": "node packaging/build.ts",
+    "build:archive": "node packaging/build-archive.ts",
     "build:site": "vp build src/apps/site",
     "build:process-monitor": "node packaging/build-process-monitor.ts",
     "check:process-monitor": "cargo fmt --check --manifest-path native/process-monitor/Cargo.toml && cargo clippy --locked --all-targets --manifest-path native/process-monitor/Cargo.toml -- -D warnings",

@@ -1,6 +1,9 @@
 import { createServer, type Server } from "node:http";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
-import { createEnvironmentHttpHandler } from "#server/adapters/environment-transport/environment-http-handler.ts";
+import {
+  createEnvironmentHttpHandler,
+  type EnvironmentControl,
+} from "#server/adapters/environment-transport/environment-http-handler.ts";
 import { formatHostAddress } from "#server/adapters/environment-transport/environment-request-authorization.ts";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
@@ -21,6 +24,7 @@ export interface EnvironmentListener {
 interface EnvironmentListenerOptions {
   readonly authorization: EnvironmentAuthorization;
   readonly browserAssetsRoot?: string;
+  readonly control: EnvironmentControl;
   readonly environmentId: string;
   readonly events: EnvironmentEventPublisher;
   readonly features: EnvironmentFeature;
@@ -40,11 +44,7 @@ export function acquireEnvironmentListener(
     try {
       const server = createServer(
         { maxHeaderSize: 16_384 },
-        createEnvironmentHttpHandler(
-          options.authorization,
-          options.browserAssetsRoot,
-          options.reportDefect,
-        ),
+        createEnvironmentHttpHandler(options),
       );
       scope.defer(() => closeServer(server));
       scope.use(

@@ -448,9 +448,73 @@ jobs:
       - uses: ./.github/actions/upload-test-results
         if: always()
 
+  archive:
+    name: Build archive (${{ matrix.name }})
+    needs: package
+    if: ${{ !failure() && !cancelled() && needs.package.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            runner: macos-latest
+          - name: macOS x64
+            runner: macos-15-intel
+          - name: Linux x64
+            runner: ubuntu-latest
+          - name: Linux arm64
+            runner: ubuntu-24.04-arm
+          - name: Windows x64
+            runner: windows-latest
+          - name: Windows arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Set release version
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.package.outputs.version }}
+        run: npm pkg set "version=$RELEASE_VERSION"
+
+      - name: Download npm package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: npm-package
+          path: package-artifact
+
+      - name: Extract npm package
+        shell: bash
+        env:
+          PACKAGE_ARTIFACT: ${{ needs.package.outputs.artifact }}
+        run: tar -xzf "package-artifact/$PACKAGE_ARTIFACT"
+
+      - name: Build archive
+        run: pnpm build:archive package/dist
+
+      - name: Smoke-test archive
+        timeout-minutes: 10
+        run: node tests/package/smoke-archive.ts
+
+      - name: Upload archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: archive-${{ runner.os }}-${{ runner.arch }}
+          path: release/rebase-*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
   publish-npm:
     name: Publish npm package
-    needs: [package, desktop]
+    needs: [package, desktop, archive]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -537,12 +601,17 @@ jobs:
 
   publish-github:
     name: Publish GitHub release
-    needs: [package, desktop, publish-npm]
+    needs: [package, desktop, archive, publish-npm]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
+      - name: Check out release commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
       - name: Download package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -569,6 +638,19 @@ jobs:
             "desktop-artifacts/desktop-mac-x64/$mac_manifest" \
             > "desktop-release/$mac_manifest"
           find desktop-artifacts -type f ! -name '*-mac.yml' -exec mv {} desktop-release/ \;
+
+      - name: Download archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: archive-*
+          path: archive-release
+          merge-multiple: true
+
+      - name: Assemble archive release assets
+        shell: bash
+        run: |
+          cp packaging/install/install.sh packaging/install/install.ps1 archive-release/
+          (cd archive-release && sha256sum rebase-* > SHA256SUMS)
 
       - id: draft
         name: Stage draft release
@@ -597,6 +679,10 @@ jobs:
             desktop-release/*.yml
             package-artifact/${{ needs.package.outputs.artifact }}
             package-artifact/${{ needs.package.outputs.artifact }}.sha256
+            archive-release/rebase-*
+            archive-release/SHA256SUMS
+            archive-release/install.sh
+            archive-release/install.ps1
           fail_on_unmatched_files: true
 
       - name: Publish release

@@ -41,7 +41,7 @@ function readGitVersion() {
     execFile(
       "git",
       ["--version"],
-      { encoding: "utf8", timeout: 30_000 },
+      { encoding: "utf8", timeout: 30_000, windowsHide: true },
       (error, stdout) => {
         if (!error) {
           try {

@@ -59,7 +59,7 @@ try {
   await verifyServer(
     spawnProcess(
       "npx",
-      ["--offline", "--no-install", "rebase-git"],
+      ["--offline", "--no-install", "rebase-git", "serve"],
       installRoot,
       serverEnvironment,
     ),

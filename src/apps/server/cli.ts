@@ -1,41 +1,55 @@
 #!/usr/bin/env node
 
-import { execFile, spawn } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { homedir, release } from "node:os";
-
+import { existsSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { environmentProtocol } from "#contracts/environment-connection/environment-rpc.contract.ts";
+import { productVersion } from "#server/app/runtime/product-version.ts";
 import { resolveHostAddress } from "#server/app/server/host-address.ts";
+import { startEnvironmentServer } from "#server/app/server/start-environment-server.ts";
 import {
-  type EnvironmentServerOptions,
-  startEnvironmentServer,
-} from "#server/app/server/start-environment-server.ts";
+  browserOrigin,
+  findRunningServer,
+  openServer,
+  type ServerReady,
+  serverLogPath,
+  stopServer,
+} from "#server/cli/background-server.ts";
+import { openDefaultBrowser } from "#server/cli/default-browser.ts";
+import { updateInstallation } from "#server/cli/self-update.ts";
 import { errorMessage } from "#server/error-inspection.ts";
 
-declare const REBASE_PRODUCT_VERSION: string;
+const usage = `Usage: rebase [command] [options]
 
-const curlCouldNotConnect = 7;
-const windowsReachDeadlineMilliseconds = 10_000;
+Commands:
+  open      Start the server in the background if needed and open the browser (default)
+  serve     Run the server in the foreground
+              --host <ip-address|lan|tailscale>
+              --port <1-65535>
+  stop      Stop the background server
+  status    Show the background server; exits 1 when it is not running
+  update    Update an install made with install.sh or install.ps1
+              --version <version>
 
-const usage =
-  "Usage: rebase [serve] [--host <ip-address|lan|tailscale>] [--port <1-65535>]";
+Environment:
+  BROWSER=none               Print the pairing URL without opening a browser
+  REBASE_RELEASE_BASE_URL    Download releases from this mirror instead of GitHub`;
 
 export async function runCli(arguments_ = process.argv.slice(2)) {
   if (arguments_.includes("--help") || arguments_.includes("-h")) {
     process.stdout.write(`${usage}\n`);
     return 0;
   }
-  if (arguments_.includes("--version") || arguments_.includes("-v")) {
+  if (arguments_[0] === "--version" || arguments_[0] === "-v") {
     process.stdout.write(`${versionOutput()}\n`);
     return 0;
   }
 
+  const [command = "open", ...options] = arguments_;
   try {
-    await serve(parseServeArguments(arguments_));
-    return 0;
+    return await runCommand(command, options);
   } catch (error) {
-    process.stderr.write(`rebase serve failed: ${errorMessage(error)}\n`);
+    process.stderr.write(`rebase ${command} failed: ${errorMessage(error)}\n`);
     return 1;
   }
 }
@@ -44,29 +58,47 @@ export async function main() {
   process.exitCode = await runCli();
 }
 
-function parseServeArguments(arguments_: string[]): EnvironmentServerOptions {
-  const normalizedArguments =
-    arguments_.length === 0 || arguments_[0]?.startsWith("--")
-      ? ["serve", ...arguments_]
-      : arguments_;
-  const [command, ...options] = normalizedArguments;
-  if (command !== "serve") throw new Error(usage);
-
-  const serveOptions: { host?: string; port?: number } = {};
-  for (let index = 0; index < options.length; index += 2) {
-    const flag = options[index];
-    const value = options[index + 1];
-    if (!value) throw new Error(usage);
-    if (flag === "--port") serveOptions.port = parsePort(value);
-    else if (flag === "--host") serveOptions.host = resolveHostAddress(value);
-    else throw new Error(usage);
+async function runCommand(command: string, options: string[]) {
+  const home = homedir();
+  switch (command) {
+    case "open":
+      parseOptions(options, {});
+      await open(home);
+      return 0;
+    case "serve":
+      await serve(home, options);
+      return 0;
+    case "stop":
+      parseOptions(options, {});
+      return stop(home);
+    case "status":
+      parseOptions(options, {});
+      return status(home);
+    case "update": {
+      const { version } = parseOptions(options, { version: String });
+      await updateInstallation(home, productVersion(), version);
+      return 0;
+    }
+    default:
+      throw new Error(usage);
   }
+}
 
-  return {
-    browserAssetsRoot: resolveBrowserAssetsRoot(),
-    home: homedir(),
-    ...serveOptions,
-  };
+function parseOptions<
+  Parsers extends Record<string, (value: string) => unknown>,
+>(options: string[], parsers: Parsers) {
+  const parsed: { [Name in keyof Parsers]?: ReturnType<Parsers[Name]> } = {};
+  for (let index = 0; index < options.length; index += 2) {
+    const name = options[index]?.replace(/^--/, "") ?? "";
+    const value = options[index + 1];
+    const parser = Object.hasOwn(parsers, name) ? parsers[name] : undefined;
+    if (!options[index]?.startsWith("--") || !parser || !value)
+      throw new Error(usage);
+    parsed[name as keyof Parsers] = parser(value) as ReturnType<
+      Parsers[keyof Parsers]
+    >;
+  }
+  return parsed;
 }
 
 function parsePort(value: string) {
@@ -79,23 +111,40 @@ function parsePort(value: string) {
   return port;
 }
 
-async function serve(options: EnvironmentServerOptions) {
+async function open(home: string) {
+  const ready = await openServer(home);
+  writeReady(ready);
+  await openDefaultBrowser(ready.pairingUrl, new AbortController().signal);
+}
+
+async function serve(home: string, options: string[]) {
+  const { host, port } = parseOptions(options, {
+    host: resolveHostAddress,
+    port: parsePort,
+  });
   const shutdown = new AbortController();
   const stop = () => shutdown.abort();
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
   try {
-    const server = await startEnvironmentServer(options);
+    const server = await startEnvironmentServer({
+      browserAssetsRoot: resolveBrowserAssetsRoot(),
+      home,
+      ...(host === undefined ? {} : { host }),
+      ...(port === undefined ? {} : { port }),
+      requestShutdown: stop,
+    });
     try {
       if (shutdown.signal.aborted) return;
       const origin =
-        options.host === undefined
-          ? `http://localhost:${server.port}`
-          : server.origin;
-      const pairingUrl = server.pairingUrl.replace(server.origin, origin);
-      process.stdout.write(`Listening URL: ${origin}\n`);
-      process.stdout.write(`Pairing URL: ${pairingUrl}\n`);
-      void openDefaultBrowser(pairingUrl, shutdown.signal);
+        host === undefined ? `http://localhost:${server.port}` : server.origin;
+      const ready: ServerReady = {
+        origin,
+        pairingUrl: server.pairingUrl.replace(server.origin, origin),
+      };
+      writeReady(ready);
+      process.send?.(ready);
+      void openDefaultBrowser(ready.pairingUrl, shutdown.signal);
       await aborted(shutdown.signal);
     } finally {
       await server.close();
@@ -104,6 +153,46 @@ async function serve(options: EnvironmentServerOptions) {
     process.off("SIGINT", stop);
     process.off("SIGTERM", stop);
   }
+}
+
+async function stop(home: string) {
+  const stopped = await stopServer(home);
+  switch (stopped.state) {
+    case "not-running":
+      process.stdout.write("Rebase is not running.\n");
+      return 0;
+    case "stopped":
+      process.stdout.write(`Stopped Rebase (PID ${stopped.marker.pid}).\n`);
+      return 0;
+    case "desktop":
+      process.stdout.write(
+        `The Rebase desktop app is running the server (PID ${stopped.marker.pid}). Quit the desktop app to stop it.\n`,
+      );
+      return 1;
+  }
+}
+
+async function status(home: string) {
+  const running = await findRunningServer(home);
+  if (running === undefined) {
+    process.stdout.write("Rebase is not running.\n");
+    return 1;
+  }
+  process.stdout.write(
+    [
+      `Rebase ${running.version} is running.`,
+      `URL: ${browserOrigin(running)}`,
+      `PID: ${running.pid}`,
+      `Log: ${serverLogPath(home)}`,
+      "",
+    ].join("\n"),
+  );
+  return 0;
+}
+
+function writeReady(ready: ServerReady) {
+  process.stdout.write(`Listening URL: ${ready.origin}\n`);
+  process.stdout.write(`Pairing URL: ${ready.pairingUrl}\n`);
 }
 
 function aborted(signal: AbortSignal) {
@@ -127,14 +216,6 @@ function resolveBrowserAssetsRoot() {
   return fileURLToPath(root);
 }
 
-function productVersion() {
-  if (typeof REBASE_PRODUCT_VERSION === "string") return REBASE_PRODUCT_VERSION;
-  const packageMetadata = JSON.parse(
-    readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
-  ) as { readonly version: string };
-  return packageMetadata.version;
-}
-
 function versionOutput() {
   return [
     `Rebase ${productVersion()}`,
@@ -148,64 +229,4 @@ if (
   realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entryPoint)
 ) {
   await main();
-}
-
-async function openDefaultBrowser(url: string, shutdown: AbortSignal) {
-  if (process.env.BROWSER === "none") return;
-  if (process.platform === "darwin") return launchBrowser("open", [url]);
-  if (process.platform === "win32") {
-    return launchBrowser("cmd.exe", windowsStartArguments(url));
-  }
-  if (isWindowsSubsystemForLinux()) {
-    await untilWindowsReaches(url, shutdown);
-    if (shutdown.aborted) return;
-    return launchBrowser("cmd.exe", windowsStartArguments(url));
-  }
-  return launchBrowser("xdg-open", [url]);
-}
-
-function launchBrowser(command: string, arguments_: readonly string[]) {
-  try {
-    const child = spawn(command, arguments_, {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-    });
-    child.once("error", () => undefined);
-    child.unref();
-  } catch {}
-}
-
-function windowsStartArguments(url: string) {
-  return ["/d", "/s", "/c", "start", "", url];
-}
-
-async function untilWindowsReaches(url: string, shutdown: AbortSignal) {
-  const signal = AbortSignal.any([
-    shutdown,
-    AbortSignal.timeout(windowsReachDeadlineMilliseconds),
-  ]);
-  while (!signal.aborted && !(await windowsReaches(url, signal))) {}
-}
-
-function windowsReaches(url: string, signal: AbortSignal) {
-  return new Promise<boolean>((resolve) => {
-    execFile(
-      "curl.exe",
-      ["--silent", "--output", "NUL", new URL(url).origin],
-      { signal, windowsHide: true },
-      (error) => resolve(error?.code !== curlCouldNotConnect),
-    );
-  });
-}
-
-function isWindowsSubsystemForLinux() {
-  if (process.env.WSL_DISTRO_NAME !== undefined) return true;
-  try {
-    return readFileSync("/proc/sys/kernel/osrelease", "utf8")
-      .toLowerCase()
-      .includes("microsoft");
-  } catch {
-    return release().toLowerCase().includes("microsoft");
-  }
 }
