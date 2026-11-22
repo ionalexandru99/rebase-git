@@ -22,6 +22,12 @@ describe("runtime requirements", () => {
     ).rejects.toThrow("Git 2.35 or newer is required. Found Git 2.34.9.");
   });
 
+  it("explains when Git starts but fails", async () => {
+    await expect(
+      verifyGitVersion(gitAnswering("fatal: bad config line 1", 128)),
+    ).rejects.toThrow("Could not run Git: fatal: bad config line 1");
+  });
+
   it("explains when Git is not installed", async () => {
     await expect(
       verifyGitVersion(gitAnswering(gitFailed("GitUnavailable"))),
@@ -31,11 +37,14 @@ describe("runtime requirements", () => {
 
 function gitAnswering(
   answer: string | ReturnType<typeof gitFailed>,
+  exitCode = 0,
 ): GitCommandRunner {
   return {
     run: async () => {
       if (typeof answer !== "string") throw answer;
-      return { exitCode: 0, stderr: "", stdout: answer };
+      return exitCode === 0
+        ? { exitCode, stderr: "", stdout: answer }
+        : { exitCode, stderr: answer, stdout: "" };
     },
     stream: () => {
       throw new Error("The version check never streams.");

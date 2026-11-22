@@ -1,7 +1,8 @@
-import { homedir } from "node:os";
+import { tmpdir } from "node:os";
 import {
   type GitCommandRunner,
   isGitFailed,
+  runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 
 const minimumGitVersion = [2, 35, 0] as const;
@@ -16,11 +17,7 @@ export async function verifyGitVersion(git: GitCommandRunner) {
 
 async function readGitVersion(git: GitCommandRunner) {
   try {
-    const { stdout } = await git.run({
-      directory: homedir(),
-      arguments: ["--version"],
-    });
-    return stdout;
+    return await runRepositoryGit(git, tmpdir(), ["--version"]);
   } catch (error) {
     if (!isGitFailed(error)) throw error;
     throw new Error(
