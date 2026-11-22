@@ -1,5 +1,5 @@
 import { FileBlameApi } from "#contracts/file-blame/file-blame.contract.ts";
-import { Button } from "#web/components/ui/button.tsx";
+import { QueryStatus } from "#web/components/ui/query-status.tsx";
 import { CommitRefPill } from "#web/features/commit-graph/components/commit-ref-labels.tsx";
 import {
   type BlameHandlers,
@@ -17,7 +17,6 @@ import {
   type RepositoryScope,
   useRepositoryScope,
 } from "#web/platform/query/repository-scope.tsx";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
 
 export function FileBlamePanel(handlers: BlameHandlers) {
   const feature = usePanelFeature();
@@ -77,21 +76,12 @@ function FileBlame({
         </span>
         {revision === undefined ? null : <CommitRefPill label={revision} />}
       </header>
-      {blame.isError ? (
-        <div role="alert" className="p-3 text-body">
-          {describeFailure(blame.error)}{" "}
-          <Button
-            size="xs"
-            variant="ghost"
-            onClick={() => void blame.refetch()}
-          >
-            Retry
-          </Button>
-        </div>
-      ) : blame.data === undefined ? (
-        <p role="status" className="p-4 text-body text-muted-foreground">
-          Loading blame…
-        </p>
+      {blame.isError || blame.data === undefined ? (
+        <QueryStatus
+          error={blame.error}
+          loading="Loading blame…"
+          onRetry={() => void blame.refetch()}
+        />
       ) : blame.data._tag === "Unblamable" ? (
         <p className="p-4 text-body text-muted-foreground">
           {blame.data.reason === "binary"
