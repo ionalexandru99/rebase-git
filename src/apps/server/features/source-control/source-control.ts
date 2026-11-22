@@ -142,7 +142,7 @@ export function createSourceControl(
           const cloned = new Set(
             remotes.map((url) => host.repositoryId(url) ?? url),
           );
-          return ((await host.cloneable?.()) ?? []).map((list) => ({
+          return (await host.cloneable()).map((list) => ({
             ...list,
             repositories: list.repositories.filter(
               (repository) =>
@@ -162,9 +162,13 @@ export function createSourceControl(
         gitStatus(git),
         lfs.rescan(),
         Promise.all(
-          GitHostKinds.options.map((kind) =>
-            hostStatus(hosts, kind, !disabled.has(kind)),
-          ),
+          hosts
+            .toSorted(
+              (left, right) =>
+                GitHostKinds.options.indexOf(left.kind) -
+                GitHostKinds.options.indexOf(right.kind),
+            )
+            .map((host) => hostStatus(host, !disabled.has(host.kind))),
         ),
       ]);
       return { git: gitState, lfs: lfsState, hosts: hostStates };
@@ -258,11 +262,8 @@ async function gitStatus(git: GitCommandRunner): Promise<GitStatus> {
 }
 
 async function hostStatus(
-  hosts: readonly GitHost[],
-  kind: GitHostKind,
+  host: GitHost,
   enabled: boolean,
 ): Promise<GitHostStatus> {
-  const host = hosts.find((candidate) => candidate.kind === kind);
-  if (host === undefined) return { _tag: "ComingSoon", kind };
-  return { ...(await host.tool()), kind, enabled };
+  return { ...(await host.tool()), kind: host.kind, enabled };
 }

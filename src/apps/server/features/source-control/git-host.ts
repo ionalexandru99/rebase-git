@@ -68,7 +68,7 @@ export interface GitHost {
   readonly repository: (
     remoteUrl: string,
   ) => Promise<HostedRepository | undefined>;
-  readonly cloneable?: () => Promise<readonly HostRepositories[]>;
+  readonly cloneable: () => Promise<readonly HostRepositories[]>;
 }
 
 interface HostCommandResult {

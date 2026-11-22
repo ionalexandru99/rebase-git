@@ -65,7 +65,6 @@ export function SettingsRow({
   description,
   descriptionId,
   liveDescription = false,
-  dim = false,
   details,
   children,
 }: {
@@ -77,13 +76,12 @@ export function SettingsRow({
   readonly description?: ReactNode;
   readonly descriptionId?: string;
   readonly liveDescription?: boolean;
-  readonly dim?: boolean;
   readonly details?: SettingsRowDetails;
   readonly children?: ReactNode;
 }) {
   const detailsId = useId();
   return (
-    <div className={`space-y-4 px-3 py-3 sm:px-4 ${dim ? "opacity-80" : ""}`}>
+    <div className="space-y-4 px-3 py-3 sm:px-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
