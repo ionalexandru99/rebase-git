@@ -31,8 +31,9 @@ const launcher = windows
   ? join(home, ".rebase", "bin", "rebase.cmd")
   : join(home, ".local", "bin", "rebase");
 const release = await serveRelease();
+const { PSModulePath: _pwshModules, ...inherited } = process.env;
 const environment = {
-  ...process.env,
+  ...inherited,
   BROWSER: "none",
   HOME: home,
   REBASE_RELEASE_BASE_URL: release.url,
@@ -180,7 +181,7 @@ async function readUserPath() {
       "-Command",
       "[Environment]::GetEnvironmentVariable('Path', 'User')",
     ],
-    process.env,
+    inherited,
   );
   return output.stdout.trim();
 }
@@ -193,7 +194,7 @@ async function writeUserPath(value: string) {
       "-Command",
       "[Environment]::SetEnvironmentVariable('Path', $env:REBASE_USER_PATH, 'User')",
     ],
-    { ...process.env, REBASE_USER_PATH: value },
+    { ...inherited, REBASE_USER_PATH: value },
   );
 }
 
