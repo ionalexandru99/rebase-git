@@ -100,7 +100,7 @@ jobs:
             runner: windows-latest
             node-version: ""
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: workspace with spaces
@@ -123,6 +123,11 @@ jobs:
       - name: Smoke-test clean npm installation
         timeout-minutes: 10
         run: node tests/package/smoke-packed-package.ts package-artifact
+      - name: Build release archive
+        run: pnpm build:archive dist
+      - name: Smoke-test release archive
+        timeout-minutes: 10
+        run: node tests/package/smoke-archive.ts
       - name: Cache Electron downloads
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

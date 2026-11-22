@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { and, eq, isNull } from "drizzle-orm";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
@@ -7,6 +8,7 @@ import {
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher.ts";
+import { productVersion } from "#server/app/runtime/product-version.ts";
 import { acquireRuntimeMarker } from "#server/app/runtime/runtime-marker.ts";
 import {
   acquireEnvironmentListener,
@@ -92,6 +94,7 @@ export interface EnvironmentServerOptions {
   readonly host?: string;
   readonly pairingReplacesGrantsWithSameLabel?: boolean;
   readonly port?: number;
+  readonly requestShutdown?: () => void;
 }
 
 export interface EnvironmentServer {
@@ -113,12 +116,21 @@ export function serveEnvironment(
   return acquireScoped(async (scope) => {
     const environment = await readCurrentEnvironment(dependencies.context);
     const useAutomaticPort = options.port === undefined || options.port === 0;
+    const controlToken = randomBytes(32).toString("base64url");
+    let marker: { readonly close: () => Promise<void> } | undefined;
+    scope.defer(() => marker?.close());
     const listener = scope.use(
       await acquireEnvironmentListener({
         authorization: dependencies.authorization,
         ...(options.browserAssetsRoot === undefined
           ? {}
           : { browserAssetsRoot: options.browserAssetsRoot }),
+        control: {
+          token: controlToken,
+          ...(options.requestShutdown === undefined
+            ? {}
+            : { shutdown: options.requestShutdown }),
+        },
         environmentId: environment.id,
         events: dependencies.events,
         features: environmentFeatures(dependencies, scope),
@@ -135,11 +147,9 @@ export function serveEnvironment(
       await claimAutomaticPort(dependencies.context, listener.port);
     }
 
-    scope.use(
-      await acquireRuntimeMarker(
-        runtimeMarker(listener),
-        dependencies.paths.runtimeMarker,
-      ),
+    marker = await acquireRuntimeMarker(
+      runtimeMarker(listener, controlToken),
+      dependencies.paths.runtimeMarker,
     );
     const pairing = dependencies.authorization.createPairing({
       replacesGrantsWithSameLabel:
@@ -285,13 +295,15 @@ export function environmentFeatures(
   return observeFeatures(features, dependencies.activity);
 }
 
-function runtimeMarker(listener: EnvironmentListener) {
+function runtimeMarker(listener: EnvironmentListener, controlToken: string) {
   return {
+    controlToken,
     host: listener.host,
     origin: listener.origin,
     pid: process.pid,
     port: listener.port,
     startedAt: new Date().toISOString(),
+    version: productVersion(),
   };
 }
 

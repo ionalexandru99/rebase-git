@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { isIPv4 } from "node:net";
 import type { EnvironmentAccessFailure } from "#contracts/environment-authorization/environment-authorization.contract.ts";
@@ -19,6 +20,30 @@ export function validateRequestOrigin(
   if (origin === undefined && !required) return;
   if (origin !== expectedRequestOrigin(request))
     throw environmentAuthorizationError({ _tag: "InvalidOrigin" });
+}
+
+export function validateControlRequest(
+  request: IncomingMessage,
+  token: string,
+) {
+  validateRequestOrigin(request, false);
+  const remoteAddress = formatHostAddress(request.socket.remoteAddress ?? "");
+  const bearer = request.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
+  if (
+    !loopbackAddresses.includes(remoteAddress) ||
+    bearer === undefined ||
+    !sameSecret(bearer, token)
+  )
+    throw environmentAuthorizationError({ _tag: "InvalidGrant" });
+}
+
+function sameSecret(received: string, expected: string) {
+  const receivedBytes = Buffer.from(received);
+  const expectedBytes = Buffer.from(expected);
+  return (
+    receivedBytes.byteLength === expectedBytes.byteLength &&
+    timingSafeEqual(receivedBytes, expectedBytes)
+  );
 }
 
 export function expectedRequestOrigin(request: IncomingMessage) {

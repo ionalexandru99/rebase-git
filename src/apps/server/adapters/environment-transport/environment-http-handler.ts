@@ -2,14 +2,19 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import {
   type EnvironmentAccessFailure,
   EnvironmentBrowserSession,
+  EnvironmentLocalPairing,
   EnvironmentPairingExchanged,
   ExchangeEnvironmentPairing,
   environmentBrowserSessionPath,
+  environmentLocalPairingPath,
   environmentPairingExchangePath,
+  environmentShutdownPath,
 } from "#contracts/environment-authorization/environment-authorization.contract.ts";
 import { respondWithBrowserAsset } from "#server/adapters/browser-assets.ts";
 import {
   accessFailureStatus,
+  expectedRequestOrigin,
+  validateControlRequest,
   validateRequestHost,
   validateRequestOrigin,
   writeBrowserSessionCookie,
@@ -27,34 +32,38 @@ interface EnvironmentRequestRejected {
 const maximumRequestBytes = 65_536;
 const strictExchange = ExchangeEnvironmentPairing.strict();
 
-export function createEnvironmentHttpHandler(
-  authorization: EnvironmentAuthorization,
-  browserAssetsRoot?: string,
-  reportDefect?: (where: string, error: unknown) => void,
-) {
+export interface EnvironmentControl {
+  readonly token: string;
+  readonly shutdown?: () => void;
+}
+
+interface EnvironmentHttpOptions {
+  readonly authorization: EnvironmentAuthorization;
+  readonly browserAssetsRoot?: string;
+  readonly control: EnvironmentControl;
+  readonly reportDefect?: (where: string, error: unknown) => void;
+}
+
+export function createEnvironmentHttpHandler(options: EnvironmentHttpOptions) {
   return (request: IncomingMessage, response: ServerResponse) => {
-    respondToEnvironmentRequest(
-      request,
-      response,
-      authorization,
-      browserAssetsRoot,
-    ).catch((error: unknown) => {
-      const failure = accessFailure(error);
-      if (failure !== undefined) {
-        writeAccessFailure(response, failure);
-        return;
-      }
-      reportDefect?.("HTTP", error);
-      if (!response.headersSent) response.writeHead(500).end();
-    });
+    respondToEnvironmentRequest(request, response, options).catch(
+      (error: unknown) => {
+        const failure = accessFailure(error);
+        if (failure !== undefined) {
+          writeAccessFailure(response, failure);
+          return;
+        }
+        options.reportDefect?.("HTTP", error);
+        if (!response.headersSent) response.writeHead(500).end();
+      },
+    );
   };
 }
 
 async function respondToEnvironmentRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  authorization: EnvironmentAuthorization,
-  browserAssetsRoot?: string,
+  { authorization, browserAssetsRoot, control }: EnvironmentHttpOptions,
 ) {
   validateRequestHost(request);
   if (
@@ -62,6 +71,13 @@ async function respondToEnvironmentRequest(
     (await respondWithBrowserAsset(request, response, browserAssetsRoot))
   )
     return;
+  if (
+    request.url === environmentLocalPairingPath ||
+    request.url === environmentShutdownPath
+  ) {
+    respondToControlRequest(request, response, authorization, control);
+    return;
+  }
   const browserSession = request.url === environmentBrowserSessionPath;
   if (!browserSession && request.url !== environmentPairingExchangePath) {
     response.writeHead(404).end();
@@ -84,6 +100,38 @@ async function respondToEnvironmentRequest(
     200,
     EnvironmentBrowserSession.parse({
       authorization: paired.authorization,
+    }),
+  );
+}
+
+function respondToControlRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  authorization: EnvironmentAuthorization,
+  control: EnvironmentControl,
+) {
+  if (request.method !== "POST") {
+    response.writeHead(405, { allow: "POST" }).end();
+    return;
+  }
+  validateControlRequest(request, control.token);
+  if (request.url === environmentShutdownPath) {
+    if (control.shutdown === undefined) {
+      response.writeHead(404).end();
+      return;
+    }
+    response.once("finish", control.shutdown);
+    response.writeHead(202).end();
+    return;
+  }
+  const pairing = authorization.createPairing({
+    replacesGrantsWithSameLabel: false,
+  });
+  writeJson(
+    response,
+    200,
+    EnvironmentLocalPairing.parse({
+      pairingUrl: `${expectedRequestOrigin(request)}/pair#${pairing.material}`,
     }),
   );
 }
