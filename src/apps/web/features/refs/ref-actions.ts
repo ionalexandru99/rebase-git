@@ -1,4 +1,3 @@
-import { useEffect, useEffectEvent } from "react";
 import type { MergeMode } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type {
   BranchUpstream,
@@ -21,9 +20,10 @@ import {
 } from "#web/features/refs/ref-kinds.ts";
 import type { ResetActionId } from "#web/features/reset/reset-actions.tsx";
 import {
-  requestWorktreeDraft,
+  worktreeDrafts,
   worktreeName,
 } from "#web/features/worktrees/worktree-draft.ts";
+import { listenerBus } from "#web/lib/listener-bus.ts";
 
 export type RefIntent =
   | { readonly _tag: "DraftRef"; readonly kind: RefKind; readonly oid: string }
@@ -33,23 +33,7 @@ export type RefIntent =
       readonly id: RefAction["id"];
     };
 
-type RefIntentListener = (intent: RefIntent) => void;
-
-const intentListeners = new Set<RefIntentListener>();
-
-export function requestRefIntent(intent: RefIntent) {
-  for (const listener of intentListeners) listener(intent);
-}
-
-export function useRefIntent(handle: RefIntentListener) {
-  const listener = useEffectEvent(handle);
-  useEffect(() => {
-    intentListeners.add(listener);
-    return () => {
-      intentListeners.delete(listener);
-    };
-  }, []);
-}
+export const refIntents = listenerBus<RefIntent>();
 
 export interface RefActionRow {
   readonly id: string;
@@ -236,7 +220,7 @@ export function refActions(
             group: "edit",
             reason: readOnly,
             run: () =>
-              requestWorktreeDraft({ name: target.name, start: startPoint }),
+              worktreeDrafts.emit({ name: target.name, start: startPoint }),
           }),
         ]),
   ];
@@ -543,7 +527,7 @@ export function createRefActions(
     label,
     group: "edit" as const,
     enabled: connected,
-    run: () => requestRefIntent({ _tag: "DraftRef", kind, oid }),
+    run: () => refIntents.emit({ _tag: "DraftRef", kind, oid }),
   }));
   return [
     ...(branch === undefined ? [] : [branch]),
@@ -553,7 +537,7 @@ export function createRefActions(
       group: "edit",
       enabled: connected,
       run: () =>
-        requestWorktreeDraft({ name: "", start: commitStartPoint(oid) }),
+        worktreeDrafts.emit({ name: "", start: commitStartPoint(oid) }),
     },
     ...(tag === undefined ? [] : [tag]),
   ];

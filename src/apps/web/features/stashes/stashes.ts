@@ -1,5 +1,5 @@
 import { skipToken } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { RouteFailure } from "#contracts/environment-connection/environment-route.contract.ts";
 import type { ChangeSection } from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
@@ -13,6 +13,7 @@ import {
   useStatusToast,
 } from "#web/features/notifications/notifications.tsx";
 import { useActiveHead } from "#web/features/refs/repository-refs.ts";
+import { listenerBus, useListener } from "#web/lib/listener-bus.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import type { FailureMessages } from "#web/platform/query/request-failure.ts";
@@ -38,7 +39,7 @@ const stashFailureMessages: FailureMessages<StashFailure> = {
   StashRejected: ({ reason }) => rejectionMessage(reason),
 };
 
-const draftListeners = new Set<(selection: StashSelection) => void>();
+const stashDrafts = listenerBus<StashSelection>();
 
 export function isStashInput(input: unknown): input is StashInput {
   return (
@@ -51,19 +52,9 @@ export function isStashInput(input: unknown): input is StashInput {
   );
 }
 
-function requestStashDraft(selection: StashSelection) {
-  for (const listener of draftListeners) listener(selection);
-  return draftListeners.size > 0;
-}
-
 export function useStashDraft() {
   const [selection, setSelection] = useState<StashSelection>();
-  useEffect(() => {
-    draftListeners.add(setSelection);
-    return () => {
-      draftListeners.delete(setSelection);
-    };
-  }, []);
+  useListener(stashDrafts, setSelection);
   const cancel = () => setSelection(undefined);
   return { selection, cancel };
 }
@@ -97,7 +88,7 @@ export function useStashMenu() {
         label: "New stash",
         enabled,
         run: () => {
-          if (selection !== undefined && !requestStashDraft(selection))
+          if (selection !== undefined && !stashDrafts.emit(selection))
             store(undefined);
         },
       },

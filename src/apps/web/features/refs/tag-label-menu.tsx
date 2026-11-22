@@ -8,10 +8,7 @@ import {
   ContextMenuContent,
   ContextMenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
-import {
-  refActions,
-  requestRefIntent,
-} from "#web/features/refs/ref-actions.ts";
+import { refActions, refIntents } from "#web/features/refs/ref-actions.ts";
 import { useScopedRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
@@ -59,7 +56,7 @@ function TagLabelActions({ name }: { readonly name: string }) {
       },
     ),
     (action) => () =>
-      requestRefIntent({ _tag: "RunRefAction", target, id: action.id }),
+      refIntents.emit({ _tag: "RunRefAction", target, id: action.id }),
   );
   return <ActionMenuItems actions={actions} />;
 }

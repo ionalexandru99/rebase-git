@@ -70,9 +70,9 @@ import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import {
   type RefActionRow,
   refActions,
+  refIntents,
   selectedBranchActions,
   selectedTagActions,
-  useRefIntent,
 } from "#web/features/refs/ref-actions.ts";
 import { useRefEditing } from "#web/features/refs/ref-editing.ts";
 import { RefEditingStatus } from "#web/features/refs/ref-editing-status.tsx";
@@ -101,6 +101,7 @@ import {
   useStashDraft,
   useStashes,
 } from "#web/features/stashes/stashes.ts";
+import { useListener } from "#web/lib/listener-bus.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import { useCommand } from "#web/platform/query/use-command.ts";
 
@@ -304,7 +305,7 @@ export function BranchesSidebar({
           },
         );
 
-  useRefIntent((intent) => {
+  useListener(refIntents, (intent) => {
     if (intent._tag === "DraftRef") {
       editing.draft(intent.kind, commitStartPoint(intent.oid));
       return;
