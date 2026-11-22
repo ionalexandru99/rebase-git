@@ -18,7 +18,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#web/components/ui/popover.tsx";
-import { CopyPill } from "#web/features/clipboard/components/copy-pill.tsx";
+import { CopyPill } from "#web/features/clipboard/copy-pill.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 

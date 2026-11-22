@@ -5,15 +5,15 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "#web/components/ui/resizable.tsx";
-import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
+import { DiffWorkerPool } from "#web/features/file-diff/diff-worker-pool.tsx";
 import {
   LargeFilesNotice,
   useLargeFiles,
 } from "#web/features/large-files/large-files.tsx";
-import { OperationHeader } from "#web/features/operation-recovery/components/operation-controls.tsx";
+import { OperationHeader } from "#web/features/operation-recovery/operation-controls.tsx";
 import { ChangeFileTree } from "#web/features/working-changes/components/change-file-tree.tsx";
 import { CommitEditor } from "#web/features/working-changes/components/commit-editor.tsx";
-import { ConflictViewer } from "#web/features/working-changes/conflicts/components/conflict-viewer.tsx";
+import { ConflictViewer } from "#web/features/working-changes/conflicts/conflict-viewer.tsx";
 import { viewedChange } from "#web/features/working-changes/hooks/use-change-selection.ts";
 import {
   useWorkingChangesView,

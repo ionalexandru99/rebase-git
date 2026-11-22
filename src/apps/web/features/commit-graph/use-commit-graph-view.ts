@@ -10,12 +10,12 @@ import {
 import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
 import type { CommitGraphViewportHandle } from "#web/features/commit-graph/components/commit-graph-virtual-window.tsx";
 import { historyLabelTarget } from "#web/features/commit-graph/components/commit-ref-labels.tsx";
+import type { HistorySelection } from "#web/features/commit-graph/scope/history-scope.ts";
 import {
   type CommitGraphSelectionMode,
   useCommitGraphSelection,
-} from "#web/features/commit-graph/hooks/use-commit-graph-selection.ts";
-import { useGraphRows } from "#web/features/commit-graph/hooks/use-graph-rows.ts";
-import type { HistorySelection } from "#web/features/commit-graph/scope/history-scope.ts";
+} from "#web/features/commit-graph/use-commit-graph-selection.ts";
+import { useGraphRows } from "#web/features/commit-graph/use-graph-rows.ts";
 import type { FarEdgeEnd } from "#web/features/repository-history/commit-lanes.ts";
 import { useRepositoryHistoryOrder } from "#web/features/repository-history/history-order.ts";
 import type { HistoryScopeQuery } from "#web/features/repository-history/history-view.ts";

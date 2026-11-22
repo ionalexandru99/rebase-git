@@ -27,7 +27,7 @@ import { RangeRow } from "#web/features/file-blame/range-row.tsx";
 import {
   diffSurfaceCSS,
   diffThemes,
-} from "#web/features/file-diff/components/diff-content.tsx";
+} from "#web/features/file-diff/diff-content.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useTheme } from "#web/features/theme/theme.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";

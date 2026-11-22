@@ -2,9 +2,9 @@ import { useRef, useState } from "react";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import type { PlanStep } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
-import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { useOperationStart } from "#web/features/operation-recovery/hooks/use-operation.ts";
+import { ConfirmNotice } from "#web/features/notifications/persistent-notification.tsx";
+import { useOperationStart } from "#web/features/operation-recovery/use-operation.ts";
 import { useChangedFileCount } from "#web/features/rebase/rebase-actions.ts";
 import {
   type ReadyPlan,

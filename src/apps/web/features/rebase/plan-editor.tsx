@@ -4,7 +4,7 @@ import type { RepositoryHead } from "#contracts/repository-refs/repository-refs.
 import { Button } from "#web/components/ui/button.tsx";
 import { Input } from "#web/components/ui/input.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { useOperationStart } from "#web/features/operation-recovery/hooks/use-operation.ts";
+import { useOperationStart } from "#web/features/operation-recovery/use-operation.ts";
 import { PlanList } from "#web/features/rebase/plan-list.tsx";
 import { useChangedFileCount } from "#web/features/rebase/rebase-actions.ts";
 import {

@@ -5,7 +5,7 @@ import type { CodeSearchUpdate } from "#contracts/history-search/history-search.
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 import { repositoryScope } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
-import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls.tsx";
+import { RepositoryHistorySearchControls } from "#web/features/history-search/repository-history-search-controls.tsx";
 import type {
   HistorySearchPage,
   HistorySnapshot,

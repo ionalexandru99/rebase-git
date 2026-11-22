@@ -16,16 +16,16 @@ import {
   DialogTitle,
 } from "#web/components/ui/dialog.tsx";
 import { Input } from "#web/components/ui/input.tsx";
-import {
-  type FolderAction,
-  type FolderPickerPurpose,
-  useFolderBrowser,
-} from "#web/features/repository-folder-picker/hooks/use-folder-browser.ts";
 import { RepositoryDirectoryList } from "#web/features/repository-folder-picker/repository-directory-list.tsx";
 import {
   filterDirectoryEntries,
   folderName,
 } from "#web/features/repository-folder-picker/repository-folder-picker-state.ts";
+import {
+  type FolderAction,
+  type FolderPickerPurpose,
+  useFolderBrowser,
+} from "#web/features/repository-folder-picker/use-folder-browser.ts";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 
 const actionLabels: Record<FolderAction, string> = {

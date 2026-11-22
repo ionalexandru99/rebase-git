@@ -7,16 +7,16 @@ import type {
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
 import { Confirmation } from "#web/components/ui/confirmation.tsx";
-import { OperationActionsMenu } from "#web/features/operation-recovery/components/operation-actions-menu.tsx";
-import {
-  type OperationRecoveryState,
-  showsOperationHeader,
-  useOperationRecovery,
-} from "#web/features/operation-recovery/hooks/use-operation-recovery.ts";
+import { OperationActionsMenu } from "#web/features/operation-recovery/operation-actions-menu.tsx";
 import {
   operationHeading,
   operationLabel,
 } from "#web/features/operation-recovery/operation-messages.ts";
+import {
+  type OperationRecoveryState,
+  showsOperationHeader,
+  useOperationRecovery,
+} from "#web/features/operation-recovery/use-operation-recovery.ts";
 import { cn } from "#web/lib/utils.ts";
 
 export function OperationControls({

@@ -1,4 +1,4 @@
-import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
+import { ConfirmNotice } from "#web/features/notifications/persistent-notification.tsx";
 import { deletionTitle } from "#web/features/refs/ref-deletion.ts";
 import type { RefEditing } from "#web/features/refs/ref-editing.ts";
 

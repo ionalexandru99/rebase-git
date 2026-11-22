@@ -5,10 +5,10 @@ import {
   type ResetMode,
 } from "#contracts/repository-reflog/repository-reflog.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
-import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
+import { ConfirmNotice } from "#web/features/notifications/persistent-notification.tsx";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
+import { useOperation } from "#web/features/operation-recovery/use-operation.ts";
 import {
   type RefSourceTarget,
   refSource,

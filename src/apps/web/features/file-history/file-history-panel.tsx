@@ -22,7 +22,7 @@ import {
   useRestoreFiles,
 } from "#web/features/commit-inspection/restore-files.tsx";
 import { useBlameAction } from "#web/features/file-blame/file-blame.ts";
-import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
+import { DiffWorkerPool } from "#web/features/file-diff/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { useDiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 import { isFileHistoryInput } from "#web/features/file-history/file-history.ts";
@@ -37,7 +37,7 @@ import {
 } from "#web/platform/query/repository-scope.tsx";
 
 const CommitDiff = lazy(
-  () => import("#web/features/commit-inspection/components/commit-diff.tsx"),
+  () => import("#web/features/commit-inspection/commit-diff.tsx"),
 );
 
 export function FileHistoryPanel({

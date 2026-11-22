@@ -6,8 +6,8 @@ import {
 } from "@tabler/icons-react";
 import { useEffect, useRef } from "react";
 import type { RebaseStep } from "#contracts/repository-operations/repository-operations.contract.ts";
-import { OperationHeader } from "#web/features/operation-recovery/components/operation-controls.tsx";
-import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
+import { OperationHeader } from "#web/features/operation-recovery/operation-controls.tsx";
+import { useOperation } from "#web/features/operation-recovery/use-operation.ts";
 import { PlanEditor } from "#web/features/rebase/plan-editor.tsx";
 import { actionColors } from "#web/features/rebase/plan-list.tsx";
 import {

@@ -5,7 +5,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#web/components/ui/popover.tsx";
-import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
+import { ConfirmNotice } from "#web/features/notifications/persistent-notification.tsx";
 import type { StartPoint } from "#web/features/refs/ref-kinds.ts";
 import {
   type WorktreeDraft,

@@ -10,7 +10,7 @@ import {
   ContextMenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
 import { Input } from "#web/components/ui/input.tsx";
-import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
+import { ConfirmNotice } from "#web/features/notifications/persistent-notification.tsx";
 import type {
   StashCommands,
   StashSelection,

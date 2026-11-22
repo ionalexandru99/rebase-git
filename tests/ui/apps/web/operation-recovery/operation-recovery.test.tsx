@@ -21,12 +21,12 @@ import {
   testEnvironment,
 } from "#tests-support/render.tsx";
 import { TestWorkspacePanel } from "#tests-support/workspace-panel.tsx";
-import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import { PersistentNotification } from "#web/features/notifications/persistent-notification.tsx";
 import {
   OperationRecoveryNotice,
   OperationRecoveryToast,
-} from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
-import type { OperationRecoveryState } from "#web/features/operation-recovery/hooks/use-operation-recovery.ts";
+} from "#web/features/operation-recovery/operation-recovery-toast.tsx";
+import type { OperationRecoveryState } from "#web/features/operation-recovery/use-operation-recovery.ts";
 import { EnvironmentProvider } from "#web/platform/query/environment-context.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 

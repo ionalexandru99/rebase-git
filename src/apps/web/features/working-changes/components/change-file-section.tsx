@@ -13,11 +13,11 @@ import {
   FileListSection,
   RowLead,
   type SectionLook,
-} from "#web/features/file-diff/components/file-list-section.tsx";
+} from "#web/features/file-diff/file-list-section.tsx";
 import {
   FileRowName,
   LineCounts,
-} from "#web/features/file-diff/components/file-row-name.tsx";
+} from "#web/features/file-diff/file-row-name.tsx";
 import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
 import {
   LockMark,

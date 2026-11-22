@@ -8,16 +8,16 @@ import {
   useState,
 } from "react";
 import {
-  confirmsInPlace,
-  noticeId,
-  PersistentNotificationOutlet,
-} from "#web/features/notifications/components/persistent-notification.tsx";
-import {
   type NoticeChoice,
   type NoticeData,
   NotificationStack,
   type NotifiedRepository,
 } from "#web/features/notifications/notification-stack.tsx";
+import {
+  confirmsInPlace,
+  noticeId,
+  PersistentNotificationOutlet,
+} from "#web/features/notifications/persistent-notification.tsx";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import {
   describeFailure,

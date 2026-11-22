@@ -23,8 +23,8 @@ import {
 import {
   diffSurfaceCSS,
   diffThemes,
-} from "#web/features/file-diff/components/diff-content.tsx";
-import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
+} from "#web/features/file-diff/diff-content.tsx";
+import { DiffWorkerPool } from "#web/features/file-diff/diff-worker-pool.tsx";
 import { useTheme } from "#web/features/theme/theme.ts";
 import { useWorkingChanges } from "#web/features/working-changes/hooks/use-working-changes.ts";
 import {

@@ -48,7 +48,6 @@ import {
   UncommittedChangesRow,
   uncommittedLink,
 } from "#web/features/commit-graph/components/uncommitted-changes-row.tsx";
-import { useCommitGraphView } from "#web/features/commit-graph/hooks/use-commit-graph-view.ts";
 import { useGraphColors } from "#web/features/commit-graph/layout/graph-colors.ts";
 import {
   commitGraphGutterWidth,
@@ -65,9 +64,10 @@ import type {
   HistoryScope,
   HistorySelection,
 } from "#web/features/commit-graph/scope/history-scope.ts";
+import { useCommitGraphView } from "#web/features/commit-graph/use-commit-graph-view.ts";
 import type { CodeMatchTarget } from "#web/features/commit-inspection/commit-input.ts";
 import type { CompareActions } from "#web/features/comparison/comparison.ts";
-import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls.tsx";
+import { RepositoryHistorySearchControls } from "#web/features/history-search/repository-history-search-controls.tsx";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
 import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import type { RewriteCommits } from "#web/features/rebase/rewrite-commits.tsx";

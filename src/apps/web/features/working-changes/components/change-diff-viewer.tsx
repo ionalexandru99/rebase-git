@@ -6,8 +6,8 @@ import { Button } from "#web/components/ui/button.tsx";
 import {
   DiffContent,
   revealRange,
-} from "#web/features/file-diff/components/diff-content.tsx";
-import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls.tsx";
+} from "#web/features/file-diff/diff-content.tsx";
+import { DiffDisplayControls } from "#web/features/file-diff/diff-display-controls.tsx";
 import {
   contentUnchanged,
   createChangeDiffModel,

@@ -9,9 +9,9 @@ import {
 } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
-import { fileName } from "#web/features/file-diff/components/file-row-name.tsx";
-import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
+import { fileName } from "#web/features/file-diff/file-row-name.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
+import { ConfirmNotice } from "#web/features/notifications/persistent-notification.tsx";
 import type { useChangeActions } from "#web/features/working-changes/hooks/use-working-changes.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 

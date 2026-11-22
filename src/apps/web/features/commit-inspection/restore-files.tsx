@@ -8,9 +8,9 @@ import {
   type RestoreSource,
 } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
-import { fileName } from "#web/features/file-diff/components/file-row-name.tsx";
-import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
+import { fileName } from "#web/features/file-diff/file-row-name.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
+import { ConfirmNotice } from "#web/features/notifications/persistent-notification.tsx";
 import {
   type CommandTarget,
   useCommand,

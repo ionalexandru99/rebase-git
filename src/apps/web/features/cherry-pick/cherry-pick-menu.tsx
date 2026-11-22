@@ -14,7 +14,7 @@ import {
   ContextMenuSubmenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { useOperationStart } from "#web/features/operation-recovery/hooks/use-operation.ts";
+import { useOperationStart } from "#web/features/operation-recovery/use-operation.ts";
 import type { HistoryScopeQuery } from "#web/features/repository-history/history-view.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";

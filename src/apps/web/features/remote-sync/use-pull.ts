@@ -8,7 +8,7 @@ import {
   type PullBranch,
   RepositoryPullApi,
 } from "#contracts/repository-pull/repository-pull.contract.ts";
-import { fileName } from "#web/features/file-diff/components/file-row-name.tsx";
+import { fileName } from "#web/features/file-diff/file-row-name.tsx";
 import {
   useErrorToast,
   useStatusToast,

@@ -27,8 +27,8 @@ import {
   useRepositoryHistoryOrder,
 } from "#web/features/repository-history/history-order.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
-import { RepositoryCacheSettings } from "#web/features/repository-settings/components/repository-cache-settings.tsx";
-import { RepositoryDetailsSettings } from "#web/features/repository-settings/components/repository-details-settings.tsx";
+import { RepositoryCacheSettings } from "#web/features/repository-settings/repository-cache-settings.tsx";
+import { RepositoryDetailsSettings } from "#web/features/repository-settings/repository-details-settings.tsx";
 import { RepositorySettingSelect } from "#web/features/settings/setting-rows.tsx";
 import { WorktreeFolderSettings } from "#web/features/worktrees/worktree-folder-settings.tsx";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";

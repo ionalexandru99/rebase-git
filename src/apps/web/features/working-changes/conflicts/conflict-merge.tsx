@@ -20,18 +20,18 @@ import { Confirmation } from "#web/components/ui/confirmation.tsx";
 import {
   diffSurfaceCSS,
   diffThemes,
-} from "#web/features/file-diff/components/diff-content.tsx";
+} from "#web/features/file-diff/diff-content.tsx";
 import { useTheme } from "#web/features/theme/theme.ts";
-import { WholeFileMenu } from "#web/features/working-changes/conflicts/components/whole-file-menu.tsx";
 import {
   type ConflictEdit,
   resolutionEdit,
   useConflictEdits,
-} from "#web/features/working-changes/conflicts/hooks/use-conflict-edits.ts";
+} from "#web/features/working-changes/conflicts/use-conflict-edits.ts";
 import {
   useConflictActions,
   useConflictDocument,
-} from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
+} from "#web/features/working-changes/conflicts/use-conflicts.ts";
+import { WholeFileMenu } from "#web/features/working-changes/conflicts/whole-file-menu.tsx";
 import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view.ts";
 
 const diffsStyle = {

@@ -3,7 +3,7 @@ import { createContext, type ReactNode, useContext } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "#web/components/ui/button.tsx";
 import { useConfirmation } from "#web/components/ui/confirmation.tsx";
-import { NoticeCard } from "#web/features/notifications/components/notice-card.tsx";
+import { NoticeCard } from "#web/features/notifications/notice-card.tsx";
 import type { ErrorAction } from "#web/features/notifications/notifications.tsx";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 

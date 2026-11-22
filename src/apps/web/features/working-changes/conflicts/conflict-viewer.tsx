@@ -6,8 +6,8 @@ import type {
   ConflictSide,
   ConflictSides,
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
-import { ConflictMerge } from "#web/features/working-changes/conflicts/components/conflict-merge.tsx";
-import { WholeFileMenu } from "#web/features/working-changes/conflicts/components/whole-file-menu.tsx";
+import { ConflictMerge } from "#web/features/working-changes/conflicts/conflict-merge.tsx";
+import { WholeFileMenu } from "#web/features/working-changes/conflicts/whole-file-menu.tsx";
 import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 

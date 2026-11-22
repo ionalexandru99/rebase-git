@@ -18,7 +18,7 @@ import {
   type ErrorToast,
   useErrorToast,
 } from "#web/features/notifications/notifications.tsx";
-import { useOperationStart } from "#web/features/operation-recovery/hooks/use-operation.ts";
+import { useOperationStart } from "#web/features/operation-recovery/use-operation.ts";
 import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import type { RewriteCommits } from "#web/features/rebase/rewrite-commits.tsx";
 import { createRefActions } from "#web/features/refs/ref-actions.ts";

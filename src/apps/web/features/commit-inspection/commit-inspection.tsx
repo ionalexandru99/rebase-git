@@ -9,21 +9,21 @@ import {
 } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
 import { QueryStatus } from "#web/components/ui/query-status.tsx";
+import { CommitFiles } from "#web/features/commit-inspection/commit-files.tsx";
 import {
   type CodeMatchTarget,
   type CommitFocus,
   commitInputOid,
   isCommitInput,
 } from "#web/features/commit-inspection/commit-input.ts";
-import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
-import { CommitMetadata } from "#web/features/commit-inspection/components/commit-metadata.tsx";
+import { CommitMetadata } from "#web/features/commit-inspection/commit-metadata.tsx";
 import {
   RestoreConfirmation,
   type RestorePreview,
   useRestoreFiles,
 } from "#web/features/commit-inspection/restore-files.tsx";
 import { useBlameAction } from "#web/features/file-blame/file-blame.ts";
-import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
+import { DiffWorkerPool } from "#web/features/file-diff/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { useDiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
@@ -31,7 +31,7 @@ import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 
 const CommitDiff = lazy(
-  () => import("#web/features/commit-inspection/components/commit-diff.tsx"),
+  () => import("#web/features/commit-inspection/commit-diff.tsx"),
 );
 
 interface SelectedFile {

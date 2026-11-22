@@ -9,7 +9,7 @@ import {
 import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
 import { QueryStatus } from "#web/components/ui/query-status.tsx";
-import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
+import { CommitFiles } from "#web/features/commit-inspection/commit-files.tsx";
 import {
   type CompareInput,
   isCompareInput,
@@ -20,7 +20,7 @@ import {
   ComparisonCommits,
 } from "#web/features/comparison/comparison-commits.tsx";
 import { RefPicker } from "#web/features/comparison/ref-picker.tsx";
-import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
+import { DiffWorkerPool } from "#web/features/file-diff/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { useDiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 import { useScopedRepositoryRefs } from "#web/features/refs/repository-refs.ts";
@@ -33,7 +33,7 @@ import {
 } from "#web/platform/query/repository-scope.tsx";
 
 const CommitDiff = lazy(
-  () => import("#web/features/commit-inspection/components/commit-diff.tsx"),
+  () => import("#web/features/commit-inspection/commit-diff.tsx"),
 );
 
 export function ComparisonPanel({

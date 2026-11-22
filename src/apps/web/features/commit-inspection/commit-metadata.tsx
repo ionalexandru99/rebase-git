@@ -2,7 +2,7 @@ import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { CommitInspection } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
-import { CopyPill } from "#web/features/clipboard/components/copy-pill.tsx";
+import { CopyPill } from "#web/features/clipboard/copy-pill.tsx";
 import { SignatureStatus } from "#web/features/signature-verification/signature-status.tsx";
 
 const dateFormat = new Intl.DateTimeFormat(undefined, {

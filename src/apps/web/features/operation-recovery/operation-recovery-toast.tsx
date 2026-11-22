@@ -6,14 +6,14 @@ import {
 import { useState } from "react";
 import type { OperationAction } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
-import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
-import { OperationControls } from "#web/features/operation-recovery/components/operation-controls.tsx";
+import { PersistentNotification } from "#web/features/notifications/persistent-notification.tsx";
+import { OperationControls } from "#web/features/operation-recovery/operation-controls.tsx";
+import { operationHeading } from "#web/features/operation-recovery/operation-messages.ts";
 import {
   type OperationRecoveryState,
   showsOperationHeader,
   useOperationRecovery,
-} from "#web/features/operation-recovery/hooks/use-operation-recovery.ts";
-import { operationHeading } from "#web/features/operation-recovery/operation-messages.ts";
+} from "#web/features/operation-recovery/use-operation-recovery.ts";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 

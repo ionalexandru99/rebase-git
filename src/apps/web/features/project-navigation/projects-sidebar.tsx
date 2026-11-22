@@ -11,7 +11,7 @@ import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repos
 import { Button } from "#web/components/ui/button.tsx";
 import { Input } from "#web/components/ui/input.tsx";
 import { RepositoryBadge } from "#web/features/repository-catalog/repository-badge.tsx";
-import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button.tsx";
+import { RepositorySettingsButton } from "#web/features/repository-settings/repository-settings-button.tsx";
 import {
   type EnvironmentStatus,
   useEnvironment,

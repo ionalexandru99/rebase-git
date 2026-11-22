@@ -7,7 +7,7 @@ import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-
 import { useHistoryScope } from "#web/features/commit-graph/scope/use-history-scope.ts";
 import { useCompareActions } from "#web/features/comparison/comparison.ts";
 import { useMergeActions } from "#web/features/merge/merge-actions.ts";
-import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
+import { OperationRecoveryNotice } from "#web/features/operation-recovery/operation-recovery-toast.tsx";
 import {
   CurrentPullRequest,
   usePullRequests,

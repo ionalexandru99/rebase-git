@@ -5,9 +5,9 @@ import type {
   RepositoryOperationsApi,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
-import { fileName } from "#web/features/file-diff/components/file-row-name.tsx";
+import { fileName } from "#web/features/file-diff/file-row-name.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { useOperationStart } from "#web/features/operation-recovery/hooks/use-operation.ts";
+import { useOperationStart } from "#web/features/operation-recovery/use-operation.ts";
 import {
   type RefSource,
   type RefSourceTarget,

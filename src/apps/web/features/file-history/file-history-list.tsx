@@ -17,7 +17,7 @@ import {
   isContextMenuKey,
   openContextMenuAt,
 } from "#web/components/ui/context-menu.tsx";
-import { LineCounts } from "#web/features/file-diff/components/file-row-name.tsx";
+import { LineCounts } from "#web/features/file-diff/file-row-name.tsx";
 import { listKeyIndex } from "#web/lib/list-key-index.ts";
 
 export function HistoryList({
