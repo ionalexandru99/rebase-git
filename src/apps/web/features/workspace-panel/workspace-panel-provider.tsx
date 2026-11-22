@@ -39,6 +39,8 @@ function usePanelController(scope: WorkspacePanelScope) {
   const dispatch = (action: WorkspacePanelAction) => {
     const before = store.getSnapshot();
     store.dispatch(action);
+    if (action.type === "visibility" && !action.open)
+      focusPending.current = false;
     if (!focusesPanel(action)) return;
     if (store.getSnapshot() === before && !launcherOpen) focusPanel();
     else focusPending.current = true;
