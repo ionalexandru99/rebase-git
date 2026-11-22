@@ -8,7 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { isFileSystemError } from "#server/error-inspection.ts";
+import { isFileSystemError, isMissingPath } from "#server/error-inspection.ts";
 import { storageOperation } from "#server/persistence/sqlite/storage-operation.ts";
 import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.ts";
 
@@ -23,7 +23,7 @@ async function readOrCreateServerSecret(path: string) {
   try {
     secret = await readFile(path, "utf8");
   } catch (error) {
-    if (!isMissingFile(error)) {
+    if (!isMissingPath(error)) {
       throw error;
     }
 
@@ -55,10 +55,6 @@ async function publishServerSecret(path: string) {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-}
-
-function isMissingFile(error: unknown) {
-  return isFileSystemError(error) && error.code === "ENOENT";
 }
 
 function isExistingFile(error: unknown) {

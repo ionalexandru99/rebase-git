@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { type UtilityProcess, utilityProcess } from "electron";
-import type { EnvironmentServer } from "#server/app/server/start-environment-server.ts";
+import type { EnvironmentServer } from "#server/app/server/serve-environment.ts";
 
 export type EnvironmentProcessMessage =
   | { readonly type: "ready"; readonly server: EnvironmentServer }

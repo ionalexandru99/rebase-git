@@ -3,7 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { startEnvironmentServer } from "#server/app/server/start-environment-server.ts";
+import { startEnvironmentServer } from "#server/app/server/serve-environment.ts";
 import { exchangePairing } from "#tests-support/server.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 

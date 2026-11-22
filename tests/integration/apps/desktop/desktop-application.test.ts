@@ -9,7 +9,7 @@ import {
   startDesktopApplication,
 } from "#desktop/app/desktop-application.ts";
 import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.ts";
-import { startEnvironmentServer } from "#server/app/server/start-environment-server.ts";
+import { startEnvironmentServer } from "#server/app/server/serve-environment.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 import { connectEnvironment } from "#web/platform/environment/environment-connection.ts";
 

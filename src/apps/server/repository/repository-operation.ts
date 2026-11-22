@@ -13,6 +13,7 @@ import {
   isGitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
+import { isMissingPath } from "#server/error-inspection.ts";
 
 const maximumMetadataBytes = 2 * 1024 * 1024;
 const stampConcurrency = 16;
@@ -472,19 +473,11 @@ async function unlessMissing<T>(read: Promise<T>, detail: string) {
   try {
     return await read;
   } catch (error) {
-    if (isMissing(error)) return null;
+    if (isMissingPath(error)) return null;
     throw inspectionFailed(detail);
   }
 }
 
 function inspectionFailed(detail: string) {
   return repositoryRejected("GitFailed", detail);
-}
-
-function isMissing(error: unknown) {
-  return (
-    error instanceof Error &&
-    "code" in error &&
-    (error.code === "ENOENT" || error.code === "ENOTDIR")
-  );
 }
