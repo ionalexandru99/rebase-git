@@ -5,20 +5,19 @@ import {
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   ObjectId,
+  RefName,
   RepositoryId,
   RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 import { RepositoryOperation } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { settingRoutes } from "#contracts/settings/setting-routes.contract.ts";
-
-const RefName = z.string().min(1).max(1_024);
 
 export const DivergedPull = z.enum(["rebase", "merge"]);
 export type DivergedPull = z.infer<typeof DivergedPull>;
 
 export const PullBranch = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
+  ...WorktreeScope.shape,
   branch: RefName,
   strategy: z
     .object({ kind: DivergedPull, upstream: ObjectId })

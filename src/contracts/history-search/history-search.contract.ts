@@ -3,15 +3,14 @@ import { streamRoute } from "#contracts/environment-connection/environment-route
 import { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   ObjectId,
-  RepositoryId,
   RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 
 export const maximumCodeMatches = 1_000;
 
 export const SearchCode = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
+  ...WorktreeScope.shape,
   text: z
     .string()
     .min(1)

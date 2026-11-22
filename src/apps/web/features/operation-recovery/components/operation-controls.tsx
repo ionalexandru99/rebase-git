@@ -1,8 +1,8 @@
 import { IconCircleFilled } from "@tabler/icons-react";
 import { type ReactNode, useRef, useState } from "react";
+import type { WorktreeScope } from "#contracts/git/git-values.contract.ts";
 import type {
   OperationAction,
-  OperationScope,
   RepositoryOperation,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
@@ -141,7 +141,7 @@ function confirmationTitle(
     : "Skip this commit? Its changes will not be included.";
 }
 
-export function OperationHeader({ scope }: { readonly scope: OperationScope }) {
+export function OperationHeader({ scope }: { readonly scope: WorktreeScope }) {
   const recovery = useOperationRecovery(scope);
   const { state } = recovery;
   const operation = state.operation;

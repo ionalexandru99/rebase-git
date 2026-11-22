@@ -5,14 +5,9 @@ import {
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   ObjectId,
-  RepositoryId,
   RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
-
-const LfsScope = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
-});
 
 export const LfsPattern = z
   .string()
@@ -38,14 +33,14 @@ export const LfsLocks = z.array(LfsLock).max(10_000).readonly();
 export type LfsLocks = z.infer<typeof LfsLocks>;
 
 export const SetTracked = z.object({
-  ...LfsScope.shape,
+  ...WorktreeScope.shape,
   pattern: LfsPattern,
   tracked: z.boolean(),
 });
 export type SetTracked = z.infer<typeof SetTracked>;
 
 export const DownloadLargeFiles = z.object({
-  ...LfsScope.shape,
+  ...WorktreeScope.shape,
   paths: z.array(RepositoryPath).min(1).max(1_000).readonly(),
   commits: z.array(ObjectId).max(2).readonly().optional(),
 });
@@ -55,7 +50,7 @@ export const LockAction = z.enum(["Lock", "Unlock", "ForceUnlock"]);
 export type LockAction = z.infer<typeof LockAction>;
 
 export const SetLock = z.object({
-  ...LfsScope.shape,
+  ...WorktreeScope.shape,
   path: RepositoryPath,
   action: LockAction,
 });
@@ -63,11 +58,11 @@ export type SetLock = z.infer<typeof SetLock>;
 
 export const RepositoryLfsApi = {
   read: repositoryQuery("repositories/lfs/read", {
-    request: LfsScope,
+    request: WorktreeScope,
     success: LargeFiles,
   }),
   locks: repositoryQuery("repositories/lfs/locks", {
-    request: LfsScope,
+    request: WorktreeScope,
     success: LfsLocks,
   }),
   setTracked: repositoryCommand("repositories/lfs/set-tracked", {

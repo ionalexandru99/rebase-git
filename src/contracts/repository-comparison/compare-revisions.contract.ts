@@ -4,11 +4,7 @@ import {
   InspectCommitDiff,
 } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { repositoryQuery } from "#contracts/environment-connection/environment-route.contract.ts";
-import {
-  ObjectId,
-  RepositoryId,
-  RepositoryPath,
-} from "#contracts/git/git-values.contract.ts";
+import { ObjectId, WorktreeScope } from "#contracts/git/git-values.contract.ts";
 import { ChangesFailure } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import { RepositoryRefTarget } from "#contracts/repository-refs/repository-refs.contract.ts";
@@ -24,8 +20,7 @@ export const isComparisonSide = (value: unknown): value is ComparisonSide =>
   ComparisonSide.safeParse(value).success;
 
 export const CompareRevisions = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
+  ...WorktreeScope.shape,
   from: ComparisonSide,
   to: ComparisonSide,
 });

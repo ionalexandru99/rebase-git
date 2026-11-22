@@ -1,8 +1,8 @@
 import { IconFileDiff } from "@tabler/icons-react";
 import { Fragment, useEffect, useEffectEvent } from "react";
+import type { WorktreeScope } from "#contracts/git/git-values.contract.ts";
 import type {
   ConflictFile,
-  ConflictScope,
   ConflictSide,
   ConflictSides,
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
@@ -30,7 +30,7 @@ export function ConflictViewer({
   writable,
 }: {
   readonly view: ConflictView;
-  readonly scope: ConflictScope;
+  readonly scope: WorktreeScope;
   readonly writable: boolean;
 }) {
   const { conflicts, selection } = view;

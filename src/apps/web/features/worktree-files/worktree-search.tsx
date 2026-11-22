@@ -2,6 +2,7 @@ import { IconFile, IconLetterCase, IconSearch } from "@tabler/icons-react";
 import { skipToken } from "@tanstack/react-query";
 import { useState } from "react";
 import type { RouteInput } from "#contracts/environment-connection/environment-route.contract.ts";
+import type { WorktreeScope } from "#contracts/git/git-values.contract.ts";
 import type {
   WorktreeFilesApi,
   WorktreeTextMatch,
@@ -9,7 +10,6 @@ import type {
 import { FileIcon } from "#web/components/ui/file-icon.tsx";
 import { IconSwitch } from "#web/components/ui/icon-switch.tsx";
 import { Input } from "#web/components/ui/input.tsx";
-import type { WorktreeScope } from "#web/features/worktree-files/worktree-tree.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 
 export type SearchKind = "names" | "text";

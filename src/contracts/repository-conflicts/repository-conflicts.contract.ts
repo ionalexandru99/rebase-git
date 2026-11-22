@@ -4,18 +4,12 @@ import {
   repositoryQuery,
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
-  RepositoryId,
+  ObjectId,
   RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 
 const Revision = z.string().max(128);
-const ObjectId = z.string().regex(/^[a-f0-9]{40,64}$/);
-
-export const ConflictScope = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
-});
-export type ConflictScope = z.infer<typeof ConflictScope>;
 
 export const ConflictSide = z.enum(["base", "current", "incoming"]);
 export type ConflictSide = z.infer<typeof ConflictSide>;
@@ -86,7 +80,7 @@ export const ConflictDocument = z.object({
 export type ConflictDocument = z.infer<typeof ConflictDocument>;
 
 export const ConflictPath = z.object({
-  ...ConflictScope.shape,
+  ...WorktreeScope.shape,
   path: RepositoryPath,
 });
 export type ConflictPath = z.infer<typeof ConflictPath>;
@@ -123,7 +117,7 @@ export type ConflictFailure = z.infer<typeof ConflictFailure>;
 
 export const RepositoryConflictsApi = {
   list: repositoryQuery("repositories/conflicts/list", {
-    request: ConflictScope,
+    request: WorktreeScope,
     success: ConflictList,
     failure: ConflictFailure,
   }),

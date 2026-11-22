@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import type { WorktreeScope } from "#contracts/git/git-values.contract.ts";
 import type {
   CloseTerminal,
   OpenTerminal,
@@ -8,7 +9,6 @@ import type {
   TerminalOutput,
   Terminals,
   TerminalUnavailable,
-  TerminalWorktree,
 } from "#contracts/terminal/terminal.contract.ts";
 
 const historyLimit = 1_048_576;
@@ -28,7 +28,7 @@ export type SpawnShell = (options: {
   readonly rows: number;
 }) => Promise<TerminalProcess>;
 
-interface TerminalSession extends Terminal, TerminalWorktree {
+interface TerminalSession extends Terminal, WorktreeScope {
   readonly process: TerminalProcess;
   readonly history: TerminalHistory;
   readonly listeners: Set<() => void>;
@@ -48,7 +48,7 @@ export function createTerminalSessions(
   changed: (repositoryId: string) => void,
 ) {
   const sessions = new Map<string, TerminalSession>();
-  const inWorktree = ({ repositoryId, worktreePath }: TerminalWorktree) =>
+  const inWorktree = ({ repositoryId, worktreePath }: WorktreeScope) =>
     [...sessions.values()].filter(
       (session) =>
         session.repositoryId === repositoryId &&
@@ -86,7 +86,7 @@ export function createTerminalSessions(
     return { id: session.id, number };
   };
   return {
-    list: (worktree: TerminalWorktree): Terminals => ({
+    list: (worktree: WorktreeScope): Terminals => ({
       terminals: inWorktree(worktree).map(({ id, number }) => ({ id, number })),
     }),
     open: async (input: OpenTerminal) => {

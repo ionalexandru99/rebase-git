@@ -6,18 +6,13 @@ import {
 import {
   ObjectId,
   RefName,
-  RepositoryId,
   RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 import {
   BranchUpstreamTarget,
   RepositoryBranchesOperationFailure,
 } from "#contracts/repository-refs/repository-branches.contract.ts";
-
-const WorktreeScope = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
-});
 
 export const WorktreeChanges = z.object({
   path: RepositoryPath,

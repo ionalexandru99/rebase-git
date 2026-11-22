@@ -5,8 +5,8 @@ import {
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   ObjectId,
-  RepositoryId,
   RepositoryPath,
+  WorktreeScope,
 } from "#contracts/git/git-values.contract.ts";
 import {
   ChangedLines,
@@ -18,8 +18,7 @@ const Fingerprint = z.string().max(128);
 export const maximumRestorePaths = 1000;
 
 export const InspectCommit = z.object({
-  repositoryId: RepositoryId,
-  worktreePath: RepositoryPath,
+  ...WorktreeScope.shape,
   oid: ObjectId,
   parentOid: ObjectId.optional(),
 });

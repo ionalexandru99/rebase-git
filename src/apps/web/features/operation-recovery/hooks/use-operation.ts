@@ -1,9 +1,7 @@
 import { skipToken } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import {
-  type OperationScope,
-  RepositoryOperationsApi,
-} from "#contracts/repository-operations/repository-operations.contract.ts";
+import type { WorktreeScope } from "#contracts/git/git-values.contract.ts";
+import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
 import { useActiveHead } from "#web/features/refs/repository-refs.ts";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
@@ -15,7 +13,7 @@ import { answer, useCommand } from "#web/platform/query/use-command.ts";
 const operationRefreshMilliseconds = 10_000;
 
 export function useOperation(
-  scope: OperationScope | undefined,
+  scope: WorktreeScope | undefined,
   polling = false,
 ) {
   return useEnvironmentQuery(
@@ -29,7 +27,7 @@ export function useOperation(
   );
 }
 
-export function useOperationAction(scope: OperationScope | undefined) {
+export function useOperationAction(scope: WorktreeScope | undefined) {
   return useCommand(RepositoryOperationsApi.execute, {
     target: scope,
     answers: (operation, input) => [
@@ -65,7 +63,7 @@ export function useOperationStart(busy: string) {
 }
 
 export function useWorktreeOperation(
-  scope: OperationScope | undefined,
+  scope: WorktreeScope | undefined,
   { polling = false }: { readonly polling?: boolean } = {},
 ) {
   const active = useRepositoryScope();
@@ -104,6 +102,6 @@ function useDisconnectedAt() {
 function operationScope({
   repositoryId,
   worktreePath,
-}: OperationScope): OperationScope {
+}: WorktreeScope): WorktreeScope {
   return { repositoryId, worktreePath };
 }

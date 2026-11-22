@@ -22,3 +22,9 @@ export type RefName = z.infer<typeof RefName>;
 
 export const RemoteName = z.string().min(1).max(255);
 export type RemoteName = z.infer<typeof RemoteName>;
+
+export const WorktreeScope = z.object({
+  repositoryId: RepositoryId,
+  worktreePath: RepositoryPath,
+});
+export type WorktreeScope = z.infer<typeof WorktreeScope>;

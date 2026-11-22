@@ -1,6 +1,7 @@
 import { skipToken } from "@tanstack/react-query";
 import { useState } from "react";
 import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
+import type { WorktreeScope } from "#contracts/git/git-values.contract.ts";
 import type {
   ChangedFile,
   RepositoryChanges,
@@ -10,7 +11,6 @@ import {
   type ConflictFile,
   type ConflictList,
   type ConflictPath,
-  type ConflictScope,
   RepositoryConflictsApi,
   type WholeFileChoice,
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
@@ -47,7 +47,7 @@ const fresh = {
   refetchOnWindowFocus: true,
 } as const;
 
-export function useConflictList(scope: ConflictScope | null, enabled = true) {
+export function useConflictList(scope: WorktreeScope | null, enabled = true) {
   return useEnvironmentQuery(
     RepositoryConflictsApi.list,
     scope === null ? skipToken : conflictScope(scope),
@@ -99,12 +99,12 @@ export function wholeFileOnly(failure: ConflictRequestFailure | null) {
 }
 
 export function useConflictActions(
-  scope: ConflictScope,
+  scope: WorktreeScope,
   { revision, onResolved }: ConflictActionOptions,
 ) {
   const options = {
     target: scope,
-    answers: (list: ConflictList, input: ConflictScope) => [
+    answers: (list: ConflictList, input: WorktreeScope) => [
       answer(RepositoryConflictsApi.list, conflictScope(input), list),
     ],
   };
@@ -149,7 +149,7 @@ export function useConflictActions(
 }
 
 export function useConflicts(
-  scope: ConflictScope,
+  scope: WorktreeScope,
   conflicted: readonly string[],
   selected: string | null,
   active: boolean,
@@ -188,7 +188,7 @@ export function useConflicts(
 function conflictScope({
   repositoryId,
   worktreePath,
-}: ConflictScope): ConflictScope {
+}: WorktreeScope): WorktreeScope {
   return { repositoryId, worktreePath };
 }
 
