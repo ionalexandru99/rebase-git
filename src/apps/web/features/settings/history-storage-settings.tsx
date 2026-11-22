@@ -105,7 +105,7 @@ export function HistoryStorageSettings() {
         description="Repository files stay on disk. Reopen a repository to download its history again."
         action="Clear all history"
         onConfirm={() => void run(clearAll)}
-        onCancel={() => setConfirming(false)}
+        onClose={() => setConfirming(false)}
       />
     </SettingsPage>
   );

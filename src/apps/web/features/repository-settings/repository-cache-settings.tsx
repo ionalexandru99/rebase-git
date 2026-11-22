@@ -118,7 +118,7 @@ export function RepositoryCacheSettings(
           if (cache.confirmation !== undefined)
             void cache.manage(cache.confirmation);
         }}
-        onCancel={() => cache.setConfirmation(undefined)}
+        onClose={() => cache.setConfirmation(undefined)}
       />
     </>
   );

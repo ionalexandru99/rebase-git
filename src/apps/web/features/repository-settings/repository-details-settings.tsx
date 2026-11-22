@@ -98,7 +98,7 @@ export function RepositoryDetailsSettings({
         description="The repository and its files stay on disk."
         action="Remove repository"
         onConfirm={() => void run(remove, "removeRepository")}
-        onCancel={() => setConfirming(false)}
+        onClose={() => setConfirming(false)}
       />
     </>
   );

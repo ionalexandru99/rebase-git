@@ -104,20 +104,20 @@ function ConfirmDialog({
   description,
   action,
   onConfirm,
-  onCancel,
+  onClose,
 }: {
   readonly open: boolean;
   readonly title: string;
   readonly description: ReactNode;
   readonly action: string;
   readonly onConfirm: () => void;
-  readonly onCancel: () => void;
+  readonly onClose: () => void;
 }) {
   return (
     <AlertDialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) onCancel();
+        if (!next) onClose();
       }}
     >
       <AlertDialogContent>
