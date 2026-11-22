@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import { cloneDestinationId } from "#web/features/open-project/clone-line.tsx";
 import {
   HostRepositoriesGroup,
@@ -18,7 +19,6 @@ import {
   ProjectList,
 } from "#web/features/open-project/project-list.tsx";
 import { useOpenProjectResults } from "#web/features/open-project/use-open-project-results.ts";
-import type { OpenRepository } from "#web/features/project-navigation/projects-sidebar.tsx";
 import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/repository-folder-browser.tsx";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 
@@ -27,8 +27,8 @@ export function OpenProjectScreen({
   onOpenSettings,
   onRepositoryRemembered,
 }: {
-  readonly onOpenRepository: (repository: OpenRepository) => void;
-  readonly onRepositoryRemembered: (repository: OpenRepository) => void;
+  readonly onOpenRepository: (repository: RepositoryCatalogEntry) => void;
+  readonly onRepositoryRemembered: (repository: RepositoryCatalogEntry) => void;
   readonly onOpenSettings: (repositoryId: string) => void;
 }): JSX.Element {
   const environmentStatus = useEnvironment().status;
@@ -71,7 +71,7 @@ export function OpenProjectScreen({
       ?.scrollIntoView({ block: "nearest" });
   }, [activeKey]);
 
-  const openSettings = (repository: OpenRepository) =>
+  const openSettings = (repository: RepositoryCatalogEntry) =>
     onOpenSettings(repository.id);
   const onBrowse = () => {
     if (available) setFolderPickerOpen(true);
