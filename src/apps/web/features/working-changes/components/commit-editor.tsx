@@ -1,5 +1,5 @@
 import { IconCheck } from "@tabler/icons-react";
-import type { KeyboardEvent } from "react";
+import { type KeyboardEvent, useId } from "react";
 import { Button } from "#web/components/ui/button.tsx";
 import { Input } from "#web/components/ui/input.tsx";
 import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation-status.ts";
@@ -53,6 +53,7 @@ export function CommitEditor({
     (amend || count > 0);
   const subjectLength = draft.subject.length;
   const showSubjectCount = subjectLength > subjectSoftLimit;
+  const subjectCountId = useId();
   const onFieldKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (
       event.nativeEvent.isComposing ||
@@ -71,6 +72,7 @@ export function CommitEditor({
       <div className="relative">
         <Input
           aria-label="Commit subject"
+          aria-describedby={showSubjectCount ? subjectCountId : undefined}
           placeholder="Commit message"
           className={showSubjectCount ? "pr-13" : undefined}
           value={draft.subject}
@@ -81,20 +83,26 @@ export function CommitEditor({
             view.editDraft({ ...draft, subject: event.target.value })
           }
         />
+        <span
+          id={subjectCountId}
+          aria-live="polite"
+          aria-atomic="true"
+          className="sr-only"
+        >
+          {showSubjectCount
+            ? `Subject length ${subjectLength} of ${subjectHardLimit} characters`
+            : ""}
+        </span>
         {showSubjectCount ? (
           <span
+            aria-hidden="true"
             className={`pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-meta tabular-nums ${
               subjectLength > subjectHardLimit
                 ? "text-warning"
                 : "text-muted-foreground"
             }`}
           >
-            <span className="sr-only">
-              Subject length {subjectLength} of {subjectHardLimit} characters
-            </span>
-            <span aria-hidden="true">
-              {subjectLength}/{subjectHardLimit}
-            </span>
+            {subjectLength}/{subjectHardLimit}
           </span>
         ) : null}
       </div>

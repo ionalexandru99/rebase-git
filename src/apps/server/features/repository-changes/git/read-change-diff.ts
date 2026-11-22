@@ -115,7 +115,7 @@ function cleanFileContent(
   });
 }
 
-const inactiveSafeCrlfValues = new Set(["", "false", "0", "no", "off", "warn"]);
+const inactiveSafeCrlfValues = new Set(["false", "0", "no", "off", "warn"]);
 
 function needsCleanFilter(
   git: GitCommandRunner,
