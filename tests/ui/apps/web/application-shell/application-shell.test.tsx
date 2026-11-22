@@ -28,6 +28,7 @@ import { render } from "#tests-support/render.tsx";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.ts";
 import { ApplicationShell } from "#web/app/shell/application-shell.tsx";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace.tsx";
+import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 describe("application shell", () => {
@@ -377,7 +378,9 @@ async function renderRepositoryWorkspace() {
   return render(
     <div style={{ height: 720, width: 1280 }}>
       <RepositoryScopeProvider scope={repositoryScope()}>
-        <RepositoryWorkspace />
+        <WorkspacePanel.Sessions>
+          <RepositoryWorkspace />
+        </WorkspacePanel.Sessions>
       </RepositoryScopeProvider>
     </div>,
   );

@@ -25,7 +25,7 @@ import {
 } from "#web/features/workspace-panel/workspace-panel-state.ts";
 
 function Group({ children }: { readonly children: ReactNode }) {
-  const { store, panelId, state } = useWorkspacePanel();
+  const { dispatch, panelId, state } = useWorkspacePanel();
   const groupRef = useGroupRef();
   const elementRef = useRef<HTMLDivElement>(null);
   const applied = useRef<Layout>({});
@@ -86,7 +86,7 @@ function Group({ children }: { readonly children: ReactNode }) {
             ? saved
             : (size / total) * pixels;
         };
-        store.dispatch({
+        dispatch({
           type: "resize",
           widths: {
             sidebar: dragged("branches", state.widths.sidebar),
@@ -150,7 +150,9 @@ function Controls({
           variant="ghost"
           aria-label={expanded ? "Restore side panel" : "Expand side panel"}
           aria-pressed={expanded === true}
-          onClick={() => panel.execute({ type: "expand", expanded: !expanded })}
+          onClick={() =>
+            panel.dispatch({ type: "expand", expanded: !expanded })
+          }
         >
           {expanded ? (
             <IconArrowsDiagonalMinimize2 aria-hidden="true" />
@@ -172,7 +174,7 @@ function Controls({
         variant="ghost"
         size="icon-sm"
         className="relative border-0 bg-transparent shadow-none aria-expanded:bg-transparent"
-        onClick={() => panel.execute({ type: "visibility", open: !open })}
+        onClick={() => panel.dispatch({ type: "visibility", open: !open })}
       >
         {!open && uncommitted ? (
           <span className="absolute top-1 right-1 size-2 rounded-full bg-primary ring-2 ring-repository" />

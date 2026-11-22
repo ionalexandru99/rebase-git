@@ -86,7 +86,7 @@ export function useCherryPick(
       })
       .then((outcome) => {
         if (outcome._tag === "Ok" && outcome.value.outcome === "Staged")
-          panel.execute({ type: "open", kind: "changes" });
+          panel.dispatch({ type: "open", kind: "changes" });
         errorToast.failure("cherryPick", outcome);
       });
   };

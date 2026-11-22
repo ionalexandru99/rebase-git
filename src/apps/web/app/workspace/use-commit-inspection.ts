@@ -8,7 +8,7 @@ import {
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 
 export function useCommitInspection(connected: boolean) {
-  const { state, execute, store } = useWorkspacePanel();
+  const { state, dispatch, store } = useWorkspacePanel();
   const graphRef = useRef<CommitGraphHandle>(null);
   const selection = useRef<string | undefined>(undefined);
   const hadTab = useRef(false);
@@ -19,14 +19,15 @@ export function useCommitInspection(connected: boolean) {
   }, [state.tabs]);
   return {
     graphRef,
-    open: (input: CommitInput) => {
-      execute({ type: "input", kind: "commit", input });
-      execute({ type: "open", kind: "commit" });
-    },
-    openMatch: (oid: string, match: CodeMatchTarget) => {
-      store.dispatch({ type: "input", kind: "commit", input: { oid, match } });
-      store.dispatch({ type: "open", kind: "commit" });
-    },
+    open: (input: CommitInput) =>
+      dispatch({ type: "open", kind: "commit", input }),
+    openMatch: (oid: string, match: CodeMatchTarget) =>
+      dispatch({
+        type: "open",
+        kind: "commit",
+        input: { oid, match },
+        focus: false,
+      }),
     select: (oid: string | undefined) => {
       if (oid === undefined) {
         return;
@@ -43,7 +44,7 @@ export function useCommitInspection(connected: boolean) {
         connected &&
         commitInputOid(snapshot.inputs?.commit) !== oid
       )
-        store.dispatch({ type: "input", kind: "commit", input: oid });
+        dispatch({ type: "input", kind: "commit", input: oid });
     },
   };
 }

@@ -24,6 +24,7 @@ import {
   storeCommits,
   updateRepository,
 } from "#web/features/repository-history/history-database.ts";
+import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import {
   createEnvironmentQueryClient,
   environmentQueryKey,
@@ -200,7 +201,9 @@ it.each(["Automatic", "Custom"] as const)(
             connected: false,
           })}
         >
-          <RepositoryWorkspace />
+          <WorkspacePanel.Sessions>
+            <RepositoryWorkspace />
+          </WorkspacePanel.Sessions>
         </RepositoryScopeProvider>
       </div>,
       {

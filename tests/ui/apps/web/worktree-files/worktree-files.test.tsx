@@ -15,6 +15,10 @@ import {
   worktreeText,
 } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
+import {
+  saveWorkspacePanel,
+  workspacePanelScope,
+} from "#tests-support/workspace-panel.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 
 const folders: Record<string, ReturnType<typeof worktreeEntry>[]> = {
@@ -65,12 +69,12 @@ async function fixture() {
       path === "debug.log" ? ignoreRule("*.log", 2) : null,
     ),
   );
-  const scopeKey = crypto.randomUUID();
-  localStorage.setItem(
-    `rebase:workspace-panel:v1:${scopeKey}`,
-    JSON.stringify({ tabs: ["files"], active: "files", open: true }),
-  );
-  const repositoryId = crypto.randomUUID();
+  const panelScope = workspacePanelScope({ worktreePath: "/repos/project" });
+  saveWorkspacePanel(panelScope, {
+    tabs: ["files"],
+    active: "files",
+    open: true,
+  });
   const screen = await render(
     <div className="dark text-foreground" style={{ width: 1200, height: 650 }}>
       <WorkspacePanel.Sessions
@@ -79,17 +83,9 @@ async function fixture() {
           connected: true,
           writable: true,
         }}
-        repositoryIds={[repositoryId]}
+        repositoryIds={[panelScope.repositoryId]}
       >
-        <WorkspacePanel.Provider
-          scopeKey={scopeKey}
-          scope={{
-            environmentId: "environment",
-            logicalRepositoryId: repositoryId,
-            repositoryId,
-            worktreePath: "/repos/project",
-          }}
-        >
+        <WorkspacePanel.Provider scope={panelScope}>
           <WorkspacePanel.Group>
             <WorkspacePanel.Sidebar />
             <WorkspacePanel.Main>{() => null}</WorkspacePanel.Main>

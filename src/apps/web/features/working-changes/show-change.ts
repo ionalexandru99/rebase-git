@@ -26,11 +26,10 @@ export function useShowChangeAction() {
     enabled: dispatch !== undefined,
     run: () => {
       dispatch?.({
-        type: "input",
+        type: "open",
         kind: "changes",
         input: { _tag: "ShowChange", path },
       });
-      dispatch?.({ type: "open", kind: "changes" });
     },
   });
 }

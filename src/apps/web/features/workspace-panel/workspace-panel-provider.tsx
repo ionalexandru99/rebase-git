@@ -11,25 +11,12 @@ import type {
 } from "#web/features/workspace-panel/workspace-panel-model.ts";
 import {
   usePanelSession,
-  usePanelSessionOwner,
   type WorkspacePanelScope,
-  WorkspacePanelSessions,
 } from "#web/features/workspace-panel/workspace-panel-sessions.tsx";
 import { useStore } from "#web/platform/store/use-store.ts";
 
-function usePanelController(
-  scopeKey: string,
-  scope: WorkspacePanelScope | undefined,
-) {
-  const sessionKey = scope
-    ? JSON.stringify([
-        scope.environmentId,
-        scope.repositoryId,
-        scope.logicalRepositoryId,
-        scope.worktreePath,
-      ])
-    : scopeKey;
-  const session = usePanelSession(sessionKey, scope, scopeKey);
+function usePanelController(scope: WorkspacePanelScope) {
+  const session = usePanelSession(scope);
   const store = session.store;
   const [launcher, setLauncher] = useState<{
     store: WorkspacePanelStore;
@@ -37,29 +24,49 @@ function usePanelController(
   }>();
   const launcherOpen = launcher?.store === store && launcher.open;
   const setLauncherOpen = (open: boolean) => setLauncher({ store, open });
-  const [focusRequest, setFocusRequest] = useState(0);
   const launcherRef = useRef<HTMLButtonElement>(null);
+  const tabListRef = useRef<HTMLDivElement>(null);
   const emptyStateRef = useRef<HTMLHeadingElement>(null);
-  const execute = (action: WorkspacePanelAction) => {
+  const focusPending = useRef(false);
+  const focusPanel = () => {
+    focusPending.current = false;
+    const tab = tabListRef.current?.querySelector<HTMLElement>(
+      '[aria-selected="true"]',
+    );
+    (tab ?? emptyStateRef.current)?.focus();
+    tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  };
+  const dispatch = (action: WorkspacePanelAction) => {
+    const before = store.getSnapshot();
     store.dispatch(action);
-    if (
-      action.type !== "resize" &&
-      action.type !== "expand" &&
-      action.type !== "input"
-    )
-      setFocusRequest((request) => request + 1);
+    if (!focusesPanel(action)) return;
+    if (store.getSnapshot() === before && !launcherOpen) focusPanel();
+    else focusPending.current = true;
+  };
+  const settleFocus = () => {
+    if (focusPending.current && !launcherOpen) focusPanel();
   };
   return {
     session,
-    panelId: `side-panel:${sessionKey}`,
+    panelId: `side-panel:${session.key}`,
     store,
-    execute,
+    dispatch,
+    settleFocus,
     launcherOpen,
     setLauncherOpen,
-    focusRequest,
     launcherRef,
+    tabListRef,
     emptyStateRef,
   };
+}
+
+function focusesPanel(action: WorkspacePanelAction) {
+  if (action.type === "open") return action.focus !== false;
+  return (
+    action.type !== "resize" &&
+    action.type !== "expand" &&
+    action.type !== "input"
+  );
 }
 
 const WorkspacePanelContext = createContext<
@@ -68,40 +75,12 @@ const WorkspacePanelContext = createContext<
 
 export function WorkspacePanelProvider({
   children,
-  scopeKey,
   scope,
 }: {
   readonly children: ReactNode;
-  readonly scopeKey: string;
-  readonly scope?: WorkspacePanelScope | undefined;
+  readonly scope: WorkspacePanelScope;
 }) {
-  const owner = usePanelSessionOwner();
-  if (!owner) {
-    return (
-      <WorkspacePanelSessions>
-        <PanelProvider scopeKey={scopeKey} scope={scope}>
-          {children}
-        </PanelProvider>
-      </WorkspacePanelSessions>
-    );
-  }
-  return (
-    <PanelProvider scopeKey={scopeKey} scope={scope}>
-      {children}
-    </PanelProvider>
-  );
-}
-
-function PanelProvider({
-  children,
-  scopeKey,
-  scope,
-}: {
-  readonly children: ReactNode;
-  readonly scopeKey: string;
-  readonly scope: WorkspacePanelScope | undefined;
-}) {
-  const controller = usePanelController(scopeKey, scope);
+  const controller = usePanelController(scope);
   return (
     <WorkspacePanelContext.Provider value={controller}>
       {children}

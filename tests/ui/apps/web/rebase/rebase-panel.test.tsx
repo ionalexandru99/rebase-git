@@ -26,6 +26,7 @@ import {
   historyOid,
 } from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
+import { workspacePanelScope } from "#tests-support/workspace-panel.tsx";
 import { RebasePanel } from "#web/features/rebase/rebase-panel.tsx";
 import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
 import { PanelFeatureContext } from "#web/features/workspace-panel/api.ts";
@@ -210,7 +211,7 @@ async function fixture(operation = repositoryOperation()) {
     <RepositoryScopeProvider scope={repositoryScope()}>
       <PanelFeatureContext.Provider
         value={{
-          scope: undefined,
+          scope: workspacePanelScope(),
           environment: undefined,
           active: true,
           input: target,

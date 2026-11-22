@@ -20,13 +20,13 @@ import {
   testChanges,
   testEnvironment,
 } from "#tests-support/render.tsx";
+import { TestWorkspacePanel } from "#tests-support/workspace-panel.tsx";
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
 import {
   OperationRecoveryNotice,
   OperationRecoveryToast,
 } from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
 import type { OperationRecoveryState } from "#web/features/operation-recovery/hooks/use-operation-recovery.ts";
-import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import { EnvironmentProvider } from "#web/platform/query/environment-context.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
@@ -295,9 +295,9 @@ async function liveFixture(initial: RepositoryOperation) {
       })}
     >
       <RepositoryScopeProvider scope={{ ...scope, connected }}>
-        <WorkspacePanel.Provider scopeKey="operation-test">
+        <TestWorkspacePanel>
           <OperationRecoveryNotice repositoryName="catalog-api" />
-        </WorkspacePanel.Provider>
+        </TestWorkspacePanel>
       </RepositoryScopeProvider>
     </EnvironmentProvider>
   );

@@ -179,12 +179,20 @@ export type WorkspacePanelInputAction = {
       };
 }[SingleWorkspacePanelKind];
 export type WorkspacePanelOpenAction =
-  | { readonly type: "open"; readonly kind: SingleWorkspacePanelKind }
+  | {
+      [Kind in SingleWorkspacePanelKind]: {
+        readonly type: "open";
+        readonly kind: Kind;
+        readonly input?: PanelInput<Kind>;
+        readonly focus?: false;
+      };
+    }[SingleWorkspacePanelKind]
   | {
       [Kind in InstanceKind]: {
         readonly type: "open";
         readonly kind: Kind;
         readonly input: PanelInput<Kind>;
+        readonly focus?: false;
       };
     }[InstanceKind];
 export type WorkspacePanelReplaceAction = {

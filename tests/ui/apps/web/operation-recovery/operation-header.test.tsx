@@ -22,15 +22,19 @@ import {
   repositoryScope,
 } from "#tests-support/fixtures.ts";
 import { render, testChanges } from "#tests-support/render.tsx";
+import {
+  saveWorkspacePanel,
+  TestWorkspacePanel,
+  workspacePanelScope,
+} from "#tests-support/workspace-panel.tsx";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
 import { WorkingChanges } from "#web/features/working-changes/working-changes.tsx";
 import { PanelFeatureContext } from "#web/features/workspace-panel/api.ts";
-import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 const path = "src/app.ts";
 const scope = repositoryScope({ repositoryId: crypto.randomUUID() });
-const panelKey = "operation-header";
+const panelScope = workspacePanelScope();
 const panelFeature = {
   scope: { ...scope, environmentId: "local" },
   environment: undefined,
@@ -58,10 +62,11 @@ function ready(): RepositoryOperation {
 }
 
 function showPanel(open: boolean) {
-  localStorage.setItem(
-    `rebase:workspace-panel:v1:${panelKey}`,
-    JSON.stringify({ tabs: ["changes"], active: "changes", open }),
-  );
+  saveWorkspacePanel(panelScope, {
+    tabs: ["changes"],
+    active: "changes",
+    open,
+  });
 }
 
 async function fixture() {
@@ -90,7 +95,7 @@ async function fixture() {
   );
   await render(
     <RepositoryScopeProvider scope={scope}>
-      <WorkspacePanel.Provider scopeKey={panelKey}>
+      <TestWorkspacePanel scope={panelScope}>
         <OperationRecoveryNotice repositoryName="catalog-api" />
         <div
           className="dark text-foreground"
@@ -108,7 +113,7 @@ async function fixture() {
             />
           </PanelFeatureContext.Provider>
         </div>
-      </WorkspacePanel.Provider>
+      </TestWorkspacePanel>
     </RepositoryScopeProvider>,
     { environment: { requests }, queryClient: environmentChanges.queryClient },
   );

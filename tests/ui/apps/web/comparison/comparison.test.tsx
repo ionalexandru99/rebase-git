@@ -17,6 +17,11 @@ import {
 } from "#tests-support/fixtures.ts";
 import { historyOid } from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
+import {
+  saveWorkspacePanel,
+  TestWorkspacePanel,
+  workspacePanelScope,
+} from "#tests-support/workspace-panel.tsx";
 import { ComparisonPanel } from "#web/features/comparison/comparison-panel.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
@@ -63,25 +68,22 @@ async function fixture(featureTip = second) {
     ),
   );
   const tab = "compare:LocalBranch/main...LocalBranch/feature";
-  const scopeKey = crypto.randomUUID();
-  localStorage.setItem(
-    `rebase:workspace-panel:v1:${scopeKey}`,
-    JSON.stringify({
-      tabs: [tab],
-      active: tab,
-      open: true,
-      inputs: {
-        [tab]: {
-          _tag: "Compare",
-          from: { _tag: "LocalBranch", name: "main" },
-          to: { _tag: "LocalBranch", name: "feature" },
-        },
+  const panelScope = workspacePanelScope();
+  saveWorkspacePanel(panelScope, {
+    tabs: [tab],
+    active: tab,
+    open: true,
+    inputs: {
+      [tab]: {
+        _tag: "Compare",
+        from: { _tag: "LocalBranch", name: "main" },
+        to: { _tag: "LocalBranch", name: "feature" },
       },
-    }),
-  );
+    },
+  });
   const screen = await render(
     <div className="dark text-foreground" style={{ width: 1200, height: 650 }}>
-      <WorkspacePanel.Provider scopeKey={scopeKey}>
+      <TestWorkspacePanel scope={panelScope}>
         <WorkspacePanel.Group>
           <WorkspacePanel.Sidebar />
           <WorkspacePanel.Main>{() => null}</WorkspacePanel.Main>
@@ -95,7 +97,7 @@ async function fixture(featureTip = second) {
             }}
           />
         </WorkspacePanel.Group>
-      </WorkspacePanel.Provider>
+      </TestWorkspacePanel>
     </div>,
     { environment: { requests } },
   );
