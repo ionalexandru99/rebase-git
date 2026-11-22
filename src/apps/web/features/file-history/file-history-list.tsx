@@ -14,8 +14,11 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
+  isContextMenuKey,
+  openContextMenuAt,
 } from "#web/components/ui/context-menu.tsx";
 import { LineCounts } from "#web/features/file-diff/components/file-row-name.tsx";
+import { listKeyIndex } from "#web/lib/list-key-index.ts";
 
 export function HistoryList({
   entries,
@@ -46,7 +49,7 @@ export function HistoryList({
   };
 
   const moveTo = (index: number) => {
-    const next = entries[Math.max(0, Math.min(entries.length - 1, index))];
+    const next = entries[index];
     if (next === undefined) return;
     onSelect(next);
     document
@@ -54,13 +57,14 @@ export function HistoryList({
       ?.scrollIntoView({ block: "nearest" });
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const index = entries.indexOf(active);
-    if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey))
-      openMenu(rowId(active.oid));
-    else if (event.key === "ArrowDown") moveTo(index + 1);
-    else if (event.key === "ArrowUp") moveTo(index - 1);
-    else if (event.key === "Home") moveTo(0);
-    else if (event.key === "End") moveTo(entries.length - 1);
+    const target = listKeyIndex(
+      event.key,
+      entries.indexOf(active),
+      entries.length,
+    );
+    if (isContextMenuKey(event))
+      openContextMenuAt(document.getElementById(rowId(active.oid)));
+    else if (target !== undefined) moveTo(target);
     else return;
     event.preventDefault();
   };
@@ -173,19 +177,6 @@ function StatusHint({ entry }: { readonly entry: FileHistoryEntry }) {
   if (entry.status === "D")
     return <span className="text-destructive">Deleted</span>;
   return null;
-}
-
-export function openMenu(id: string) {
-  const element = document.getElementById(id);
-  if (element === null) return;
-  const bounds = element.getBoundingClientRect();
-  element.dispatchEvent(
-    new globalThis.MouseEvent("contextmenu", {
-      bubbles: true,
-      clientX: bounds.left + 48,
-      clientY: bounds.bottom,
-    }),
-  );
 }
 
 const thisYear = new Date().getFullYear();

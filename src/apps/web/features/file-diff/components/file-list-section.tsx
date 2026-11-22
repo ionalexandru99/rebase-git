@@ -13,6 +13,8 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
+  isContextMenuKey,
+  openContextMenuAt,
 } from "#web/components/ui/context-menu.tsx";
 import { FileIcon } from "#web/components/ui/file-icon.tsx";
 import type { ChangeTreeRow } from "#web/features/file-diff/file-tree.ts";
@@ -196,17 +198,9 @@ export function FileListSection<File extends { readonly path: string }>({
 }
 
 export function openMenu(event: KeyboardEvent<HTMLElement>) {
-  if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey))
-    return;
+  if (!isContextMenuKey(event)) return;
   event.preventDefault();
-  const bounds = event.currentTarget.getBoundingClientRect();
-  event.currentTarget.dispatchEvent(
-    new globalThis.MouseEvent("contextmenu", {
-      bubbles: true,
-      clientX: bounds.left + 32,
-      clientY: bounds.bottom,
-    }),
-  );
+  openContextMenuAt(event.currentTarget);
 }
 
 export function RowLead<File extends { readonly path: string }>({

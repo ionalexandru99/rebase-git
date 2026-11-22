@@ -10,6 +10,8 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
+  isContextMenuKey,
+  openContextMenuAt,
 } from "#web/components/ui/context-menu.tsx";
 import { Input } from "#web/components/ui/input.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
@@ -90,11 +92,8 @@ export function WorktreeList({
     if (event.key === "ArrowDown") move(1);
     else if (event.key === "ArrowUp") move(-1);
     else if (event.key === "Enter") activate(highlighted);
-    else if (
-      highlightedRow !== undefined &&
-      (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey))
-    )
-      openMenu(elementId(highlighted));
+    else if (highlightedRow !== undefined && isContextMenuKey(event))
+      openContextMenuAt(document.getElementById(elementId(highlighted)));
     else if (
       highlightedRow === undefined ||
       query.length > 0 ||
@@ -273,18 +272,5 @@ function WorktreeOption({
         </Button>
       ) : null}
     </div>
-  );
-}
-
-function openMenu(elementId: string) {
-  const element = document.getElementById(elementId);
-  if (element === null) return;
-  const bounds = element.getBoundingClientRect();
-  element.dispatchEvent(
-    new globalThis.MouseEvent("contextmenu", {
-      bubbles: true,
-      clientX: bounds.left + 48,
-      clientY: bounds.bottom,
-    }),
   );
 }

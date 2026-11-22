@@ -18,6 +18,10 @@ import {
   keyAction,
   runAction,
 } from "#web/components/ui/action-menu.tsx";
+import {
+  isContextMenuKey,
+  openContextMenuAt,
+} from "#web/components/ui/context-menu.tsx";
 import { IconSwitch } from "#web/components/ui/icon-switch.tsx";
 import { ScrollTopButton } from "#web/components/ui/scroll-top-button.tsx";
 import {
@@ -373,27 +377,14 @@ export function BranchesSidebar({
     else setRowExpanded(row, !row.expanded);
   };
 
-  const openRowMenu = (rowId: string) => {
-    const row = document.getElementById(rowElementId(rowId));
-    if (row === null) return;
-    const bounds = row.getBoundingClientRect();
-    row.dispatchEvent(
-      new MouseEvent("contextmenu", {
-        bubbles: true,
-        clientX: bounds.left + 32,
-        clientY: bounds.bottom,
-      }),
-    );
-  };
-
   const handleTreeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const activeRow = rows.find((row) => row.id === activeRowId);
     if (
       (activeRow?.kind === "ref" || activeRow?.kind === "stash") &&
-      (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey))
+      isContextMenuKey(event)
     ) {
       event.preventDefault();
-      openRowMenu(activeRow.id);
+      openContextMenuAt(document.getElementById(rowElementId(activeRow.id)));
       return;
     }
     if (

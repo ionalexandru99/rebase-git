@@ -14,6 +14,10 @@ import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/r
 import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { type Action, runAction } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
+import {
+  isContextMenuKey,
+  openContextMenuAt,
+} from "#web/components/ui/context-menu.tsx";
 import { ScrollTopButton } from "#web/components/ui/scroll-top-button.tsx";
 import type { CherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
 import {
@@ -212,23 +216,9 @@ export function CommitGraph({
   );
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented) return;
-    if (
-      (event.key === "ContextMenu" ||
-        (event.key === "F10" && event.shiftKey)) &&
-      activeCommitOid !== undefined
-    ) {
+    if (isContextMenuKey(event) && activeCommitOid !== undefined) {
       event.preventDefault();
-      const row = document.getElementById(commitRowId(activeCommitOid));
-      if (row !== null) {
-        const bounds = row.getBoundingClientRect();
-        row.dispatchEvent(
-          new globalThis.MouseEvent("contextmenu", {
-            bubbles: true,
-            clientX: bounds.left + 32,
-            clientY: bounds.top + bounds.height / 2,
-          }),
-        );
-      }
+      openContextMenuAt(document.getElementById(commitRowId(activeCommitOid)));
       return;
     }
     if (
