@@ -37,6 +37,7 @@ function orderStore(identity: RepositoryHistoryIdentity) {
     key,
     (saved): HistoryOrder =>
       saved === "chronological" ? "chronological" : "topological",
+    { followOtherWindows: true },
   );
   stores.set(key, store);
   return store;

@@ -11,6 +11,7 @@ const preferenceStore = createStoredStore(
   "rebase:theme:v1",
   (saved): ThemePreference =>
     saved === "light" || saved === "dark" ? saved : "system",
+  { followOtherWindows: true },
 );
 const themeStore = createStore<Theme>("dark");
 

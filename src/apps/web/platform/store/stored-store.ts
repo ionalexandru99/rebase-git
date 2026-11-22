@@ -4,6 +4,7 @@ import { createStore, type Store } from "#web/platform/store/store.ts";
 export function createStoredStore<T>(
   key: string,
   decode: (saved: unknown) => T,
+  options: { readonly followOtherWindows?: boolean } = {},
 ): Store<T> {
   const store = createStore(read(key, decode));
   const reload = (event: StorageEvent) => {
@@ -13,18 +14,21 @@ export function createStoredStore<T>(
   return {
     getSnapshot: store.getSnapshot,
     subscribe: (listener) => {
-      if (subscribers++ === 0) window.addEventListener("storage", reload);
+      if (subscribers++ === 0 && options.followOtherWindows)
+        window.addEventListener("storage", reload);
       const unsubscribe = store.subscribe(listener);
       return () => {
         unsubscribe();
-        if (--subscribers === 0) window.removeEventListener("storage", reload);
+        if (--subscribers === 0 && options.followOtherWindows)
+          window.removeEventListener("storage", reload);
       };
     },
     set: (next) => {
       if (Object.is(next, store.getSnapshot())) return;
       store.set(next);
       try {
-        localStorage.setItem(key, JSON.stringify(next));
+        if (next === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, JSON.stringify(next));
       } catch {}
     },
   };
