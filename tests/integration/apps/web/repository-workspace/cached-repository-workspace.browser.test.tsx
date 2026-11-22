@@ -167,14 +167,11 @@ it.each(["Automatic", "Custom"] as const)(
     const queryClient = await restoredRefs(environmentId, refs);
     const filterKey = `rebase:history-filter:v1:${environmentId}:${logicalId}`;
     const custom = JSON.stringify({
-      scope: {
-        _tag: "Custom",
-        selections: [
-          { _tag: "LocalBranch", name: "feature" },
-          { _tag: "Tag", name: "new-tag" },
-        ],
-      },
-      version: 1,
+      _tag: "Custom",
+      selections: [
+        { _tag: "LocalBranch", name: "feature" },
+        { _tag: "Tag", name: "new-tag" },
+      ],
     });
     if (mode === "Custom") localStorage.setItem(filterKey, custom);
     const record = await openRepository(environmentId, logicalId);

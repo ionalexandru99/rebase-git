@@ -5,7 +5,7 @@ import {
   IconSearch,
   IconX,
 } from "@tabler/icons-react";
-import { type JSX, type KeyboardEvent, useRef, useState } from "react";
+import { type JSX, type KeyboardEvent, useRef } from "react";
 import { Button } from "#web/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -19,8 +19,8 @@ import type {
   BranchesSidebarScope,
   BranchesSidebarView,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
-
-const viewStorageKey = "rebase:branches-view:v1";
+import { useStoredStore } from "#web/platform/store/stored-store.ts";
+import { useStore } from "#web/platform/store/use-store.ts";
 
 export const branchViewOptions = [
   { value: "linear", label: "Linear view", Icon: IconList },
@@ -39,16 +39,8 @@ const scopeOptions: readonly {
 ];
 
 export function useBranchesSidebarView() {
-  const [view, setView] = useState<BranchesSidebarView>(readView);
-  const changeView = (next: BranchesSidebarView) => {
-    setView(next);
-    try {
-      localStorage.setItem(viewStorageKey, next);
-    } catch {
-      return;
-    }
-  };
-  return [view, changeView] as const;
+  const store = useStoredStore("rebase:branches-view:v1", decodeView);
+  return [useStore(store), store.set] as const;
 }
 
 export function BranchesSidebarFilter({
@@ -119,12 +111,6 @@ export function BranchesSidebarFilter({
   );
 }
 
-function readView(): BranchesSidebarView {
-  try {
-    return localStorage.getItem(viewStorageKey) === "linear"
-      ? "linear"
-      : "tree";
-  } catch {
-    return "tree";
-  }
+function decodeView(saved: unknown): BranchesSidebarView {
+  return saved === "linear" ? "linear" : "tree";
 }
