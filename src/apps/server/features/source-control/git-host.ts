@@ -300,6 +300,17 @@ export function decodeHostJson<Schema extends z.ZodType>(schema: Schema) {
   };
 }
 
+export type HostJsonReader = <Schema extends z.ZodType>(
+  url: string,
+  schema: Schema,
+) => Promise<z.output<Schema>>;
+
+export function hostJsonReader(
+  get: (url: string) => Promise<string>,
+): HostJsonReader {
+  return async (url, schema) => decodeHostJson(schema)(await get(url));
+}
+
 export function isPullRequestsUnavailable(
   error: unknown,
 ): error is PullRequestsUnavailable {

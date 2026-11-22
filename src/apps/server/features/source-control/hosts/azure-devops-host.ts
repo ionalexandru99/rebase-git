@@ -8,6 +8,7 @@ import {
   foundAvatar,
   type GitHost,
   type HostedPullRequest,
+  type HostJsonReader,
   pageAnswer,
   pullRequest,
   sameEmail,
@@ -122,7 +123,7 @@ async function readAvatar(
 }
 
 async function checksOf(
-  read: ReturnType<typeof reader>,
+  read: HostJsonReader,
   repository: AzureRepository,
   node: PullRequestNode,
 ) {

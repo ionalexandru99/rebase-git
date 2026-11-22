@@ -3,6 +3,7 @@ import {
   decodeHostJson,
   hostCommandOutput,
   hostGet,
+  hostJsonReader,
   unavailable,
 } from "#server/features/source-control/git-host.ts";
 
@@ -72,6 +73,5 @@ export function createAzureDevOpsClient(): AzureDevOpsClient {
 }
 
 export function reader(client: AzureDevOpsClient, accessToken: string) {
-  return async <Schema extends z.ZodType>(url: string, schema: Schema) =>
-    decodeHostJson(schema)(await client.get(url, accessToken));
+  return hostJsonReader((url) => client.get(url, accessToken));
 }

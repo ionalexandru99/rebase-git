@@ -1,5 +1,5 @@
 import { bitbucketApiTokenScopes } from "#contracts/source-control/source-control.contract.ts";
-import type { BitbucketClient } from "#server/features/source-control/hosts/bitbucket-client.ts";
+import type { BitbucketClient } from "#server/features/source-control/hosts/bitbucket-host.ts";
 
 interface BitbucketPullRequestNode {
   readonly id: number;
