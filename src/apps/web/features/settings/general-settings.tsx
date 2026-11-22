@@ -1,4 +1,4 @@
-import { type JSX, useState } from "react";
+import { type JSX, useEffect, useState } from "react";
 import {
   type DesktopUpdateSnapshot,
   type DesktopUpdates,
@@ -55,15 +55,13 @@ export function GeneralSettings({
   desktopUpdates,
   productVersion,
   selectSection,
-  updateLoadError,
-  updateSnapshot,
 }: {
   readonly desktopUpdates: DesktopUpdates | undefined;
   readonly productVersion: string;
   readonly selectSection: (section: "licenses" | "diagnostics") => void;
-  readonly updateLoadError: string | undefined;
-  readonly updateSnapshot: DesktopUpdateSnapshot | undefined;
 }): JSX.Element {
+  const { snapshot: updateSnapshot, loadError: updateLoadError } =
+    useDesktopUpdateSnapshot(desktopUpdates);
   const snapshot = updateSnapshot ?? unavailableSnapshot;
   const errorToast = useErrorToast();
   const themePreference = useThemePreference();
@@ -256,4 +254,51 @@ function updateDescription(
     case "Idle":
       return "";
   }
+}
+
+function useDesktopUpdateSnapshot(desktopUpdates: DesktopUpdates | undefined) {
+  const [snapshot, setSnapshot] = useState<DesktopUpdateSnapshot>();
+  const [loadError, setLoadError] = useState<string>();
+
+  useEffect(() => {
+    if (desktopUpdates === undefined) {
+      setSnapshot(undefined);
+      setLoadError(undefined);
+      return;
+    }
+
+    let active = true;
+    let receivedSubscriptionSnapshot = false;
+    setLoadError(undefined);
+    const unsubscribe = desktopUpdates.subscribe((snapshot) => {
+      if (active) {
+        receivedSubscriptionSnapshot = true;
+        setLoadError(undefined);
+        setSnapshot(snapshot);
+      }
+    });
+    void desktopUpdates
+      .getSnapshot()
+      .then((snapshot) => {
+        if (active && !receivedSubscriptionSnapshot) {
+          setLoadError(undefined);
+          setSnapshot(snapshot);
+        }
+      })
+      .catch((error: unknown) => {
+        if (active && !receivedSubscriptionSnapshot) {
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : "Update settings could not be loaded.",
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [desktopUpdates]);
+  return { snapshot, loadError };
 }
