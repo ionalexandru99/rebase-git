@@ -1,10 +1,5 @@
 import { z } from "zod";
-import {
-  repositoryCommand,
-  repositoryQuery,
-  route,
-} from "#contracts/environment-connection/environment-route.contract.ts";
-import { RepositoryId } from "#contracts/git/git-values.contract.ts";
+import { settingRoutes } from "#contracts/settings/setting-routes.contract.ts";
 
 const IdentityValue = z.string().trim().min(1).max(256);
 
@@ -25,31 +20,8 @@ export const RepositoryIdentity = z.object({
 });
 export type RepositoryIdentity = z.infer<typeof RepositoryIdentity>;
 
-export const IdentityFailed = z.object({
-  _tag: z.literal("IdentityFailed"),
-  detail: z.string().max(2_048),
+export const GitIdentityApi = settingRoutes("git-identity", {
+  value: SavedIdentity,
+  choice: GitIdentity,
+  repository: RepositoryIdentity,
 });
-export type IdentityFailed = z.infer<typeof IdentityFailed>;
-
-export const GitIdentityApi = {
-  read: route("git-identity/read", {
-    success: SavedIdentity,
-    failure: IdentityFailed,
-  }),
-  save: route("git-identity/save", {
-    request: GitIdentity,
-    success: SavedIdentity,
-    failure: IdentityFailed,
-  }),
-  readRepository: repositoryQuery("repositories/identity", {
-    request: z.object({ repositoryId: RepositoryId }),
-    success: RepositoryIdentity,
-  }),
-  saveRepository: repositoryCommand("repositories/save-identity", {
-    request: z.object({
-      repositoryId: RepositoryId,
-      identity: GitIdentity,
-    }),
-    success: RepositoryIdentity,
-  }),
-};

@@ -1,6 +1,9 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
-import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
+import {
+  FetchPruneApi,
+  RepositoryPullApi,
+} from "#contracts/repository-pull/repository-pull.contract.ts";
 import { cloneRepository, fastImport, git } from "#tests-support/git.ts";
 import { openTestEnvironment } from "#tests-support/server.ts";
 
@@ -95,8 +98,8 @@ async function fixture() {
     local,
     fetch: () => routes.fetch({ repositoryId }),
     status: () => routes.fetchStatus({ repositoryId }),
-    savePrune: (prune: boolean | null) =>
-      routes.saveRepositoryFetchPrune({ repositoryId, prune }),
+    savePrune: (value: boolean | null) =>
+      environment.routes(FetchPruneApi).saveRepository({ repositoryId, value }),
     configure: (
       setting: Parameters<typeof routes.configureFetch>[0]["setting"],
     ) => routes.configureFetch({ repositoryId, setting }),

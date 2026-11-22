@@ -1,10 +1,6 @@
 import { z } from "zod";
-import {
-  repositoryCommand,
-  repositoryQuery,
-  route,
-} from "#contracts/environment-connection/environment-route.contract.ts";
-import { RepositoryId } from "#contracts/git/git-values.contract.ts";
+import { route } from "#contracts/environment-connection/environment-route.contract.ts";
+import { settingRoutes } from "#contracts/settings/setting-routes.contract.ts";
 
 export const SigningFormat = z.enum(["openpgp", "ssh", "x509"]);
 export type SigningFormat = z.infer<typeof SigningFormat>;
@@ -42,37 +38,13 @@ export const RepositorySigning = z.object({
 });
 export type RepositorySigning = z.infer<typeof RepositorySigning>;
 
-export const SigningFailed = z.object({
-  _tag: z.literal("SigningFailed"),
-  detail: z.string().max(2_048),
-});
-export type SigningFailed = z.infer<typeof SigningFailed>;
-
 export const GitSigningApi = {
-  read: route("git-signing/read", {
-    success: Signing,
-    failure: SigningFailed,
+  ...settingRoutes("git-signing", {
+    value: Signing,
+    choice: SigningChoice,
+    repository: RepositorySigning,
   }),
-  save: route("git-signing/save", {
-    request: SigningChoice,
-    success: Signing,
-    failure: SigningFailed,
-  }),
-  keys: route("git-signing/keys", {
-    success: z.array(SigningKey).readonly(),
-    failure: SigningFailed,
-  }),
-  readRepository: repositoryQuery("repositories/signing", {
-    request: z.object({ repositoryId: RepositoryId }),
-    success: RepositorySigning,
-  }),
-  saveRepository: repositoryCommand("repositories/save-signing", {
-    request: z.object({
-      repositoryId: RepositoryId,
-      signing: SigningChoice.nullable(),
-    }),
-    success: RepositorySigning,
-  }),
+  keys: route("git-signing/keys", { success: z.array(SigningKey).readonly() }),
 };
 
 export function signingKeyName(path: string) {

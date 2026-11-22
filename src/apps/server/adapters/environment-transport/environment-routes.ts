@@ -8,6 +8,7 @@ import type {
   StreamValue,
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
+import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import {
   type GitCommandRunner,
   isGitFailed,
@@ -129,14 +130,16 @@ export interface RepositoryDependencies {
   readonly progress: CommandProgress;
 }
 
-interface WorktreeScope {
+type ScopedRoute<Scope> = EnvironmentRoute & {
+  readonly request: { readonly _zod: { readonly output: Scope } };
+};
+
+type RepositoryRoute = ScopedRoute<{ readonly repositoryId: string }>;
+
+type WorktreeRoute = ScopedRoute<{
   readonly repositoryId: string;
   readonly worktreePath: string;
-}
-
-type WorktreeRoute = EnvironmentRoute & {
-  readonly request: { readonly _zod: { readonly output: WorktreeScope } };
-};
+}>;
 
 type RepositoryHandle<Route extends EnvironmentRoute> = (
   input: RouteInput<Route>,
@@ -154,6 +157,17 @@ export function repositoryRoutes({
   progress,
 }: RepositoryDependencies) {
   return {
+    repository: <Route extends RepositoryRoute>(
+      definition: Route,
+      handle: (
+        input: RouteInput<Route>,
+        repository: RepositoryCatalogEntry,
+      ) => Promise<RouteSuccess<Route>>,
+    ) =>
+      route(definition, async (input) => {
+        const repository = await access.repository(input.repositoryId);
+        return rejectingGitFailures(() => handle(input, repository));
+      }),
     query: <Route extends WorktreeRoute>(
       definition: Route,
       handle: RepositoryHandle<Route>,

@@ -24,7 +24,11 @@ import { RepositoryConflictsApi } from "#contracts/repository-conflicts/reposito
 import { RepositoryHistoryApi } from "#contracts/repository-history/repository-history.contract.ts";
 import { RepositoryLfsApi } from "#contracts/repository-lfs/repository-lfs.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
-import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
+import {
+  FetchPruneApi,
+  PullStrategyApi,
+  RepositoryPullApi,
+} from "#contracts/repository-pull/repository-pull.contract.ts";
 import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
 import { RepositoryReflogApi } from "#contracts/repository-reflog/repository-reflog.contract.ts";
 import { RepositoryBranchesApi } from "#contracts/repository-refs/repository-branches.contract.ts";
@@ -37,7 +41,7 @@ import { SourceControlApi } from "#contracts/source-control/source-control.contr
 import { TerminalsApi } from "#contracts/terminal/terminal.contract.ts";
 import { WorktreeFilesApi } from "#contracts/worktree-files/worktree-files.contract.ts";
 
-export const environmentProtocol = 6;
+export const environmentProtocol = 7;
 export const environmentMaxMessageBytes = 64 * 1_048_576;
 export const environmentLivePath = "/api/environment/live";
 export const environmentSubprotocol = "rebase";
@@ -101,6 +105,8 @@ export const environmentRoutes: readonly AnyEnvironmentRoute[] = [
   RepositoryLfsApi,
   RepositoryOperationsApi,
   RepositoryPullApi,
+  FetchPruneApi,
+  PullStrategyApi,
   PullRequestsApi,
   AuthorAvatarsApi,
   RepositoryPushApi,

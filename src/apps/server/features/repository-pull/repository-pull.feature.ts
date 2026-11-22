@@ -1,5 +1,6 @@
 import {
   type PullBranch,
+  PullStrategyApi,
   RepositoryPullApi,
 } from "#contracts/repository-pull/repository-pull.contract.ts";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
@@ -10,8 +11,9 @@ import {
   route,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
+import { gitConfigSettingRoutes } from "#server/features/git-config-settings/git-config-setting.ts";
 import type { GitLfs } from "#server/features/repository-lfs/git-lfs.ts";
-import { createFetchPrunes } from "#server/features/repository-pull/fetch-prune.ts";
+import { fetchPruneSetting } from "#server/features/repository-pull/fetch-prune.ts";
 import {
   pullBlocked,
   pullBranch,
@@ -45,7 +47,6 @@ export function acquireRepositoryPullFeature(
     dependencies.context,
     dependencies.access,
   );
-  const prunes = createFetchPrunes(dependencies.git, dependencies.access);
   const feature: EnvironmentFeature = {
     routes: [
       route(RepositoryPullApi.fetchStatus, (input) =>
@@ -57,23 +58,7 @@ export function acquireRepositoryPullFeature(
       route(RepositoryPullApi.configureFetch, (input) =>
         fetch.configure(input.repositoryId, input.setting),
       ),
-      route(RepositoryPullApi.readFetchPrune, () => prunes.server()),
-      route(RepositoryPullApi.saveFetchPrune, async ({ prune }) => {
-        const saved = await prunes.saveServer(prune);
-        events.publishChanged();
-        return saved;
-      }),
-      route(RepositoryPullApi.readRepositoryFetchPrune, ({ repositoryId }) =>
-        prunes.repository(repositoryId),
-      ),
-      route(
-        RepositoryPullApi.saveRepositoryFetchPrune,
-        async ({ repositoryId, prune }) => {
-          const saved = await prunes.saveRepository(repositoryId, prune);
-          events.publishChanged([repositoryId]);
-          return saved;
-        },
-      ),
+      ...gitConfigSettingRoutes(fetchPruneSetting, dependencies),
       command(
         RepositoryPullApi.pull,
         {
@@ -83,26 +68,23 @@ export function acquireRepositoryPullFeature(
         },
         pullInCheckout(dependencies.coordination, dependencies.lfs, strategies),
       ),
-      route(RepositoryPullApi.readPullStrategy, () => strategies.server()),
-      route(RepositoryPullApi.savePullStrategy, async ({ strategy }) => {
-        await strategies.saveServer(strategy);
+      route(PullStrategyApi.read, () => strategies.server()),
+      route(PullStrategyApi.save, async ({ value }) => {
+        await strategies.saveServer(value);
         events.publishChanged();
-        return strategy;
+        return value;
       }),
-      route(RepositoryPullApi.readRepositoryPullStrategy, ({ repositoryId }) =>
+      route(PullStrategyApi.readRepository, ({ repositoryId }) =>
         strategies.repository(repositoryId),
       ),
-      route(
-        RepositoryPullApi.saveRepositoryPullStrategy,
-        async ({ repositoryId, strategy }) => {
-          const repositoryIds = await strategies.saveRepository(
-            repositoryId,
-            strategy,
-          );
-          events.publishChanged(repositoryIds);
-          return strategies.repository(repositoryId);
-        },
-      ),
+      route(PullStrategyApi.saveRepository, async ({ repositoryId, value }) => {
+        const repositoryIds = await strategies.saveRepository(
+          repositoryId,
+          value,
+        );
+        events.publishChanged(repositoryIds);
+        return strategies.repository(repositoryId);
+      }),
     ],
   };
   return { feature, close: fetch.close };

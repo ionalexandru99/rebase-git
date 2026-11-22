@@ -1,4 +1,3 @@
-import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   type CreateRepositoryBranch,
   RepositoryBranchesApi,
@@ -11,7 +10,6 @@ import {
   type EnvironmentFeature,
   type RepositoryDependencies,
   repositoryRoutes,
-  route,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
@@ -61,22 +59,14 @@ export function repositoryRefsFeature(
   },
 ): EnvironmentFeature {
   const { access, git, changes } = dependencies;
-  const { command, query } = repositoryRoutes(dependencies);
-  const readRefs = async (repositoryId: string) => {
-    const repository = await access.repository(repositoryId);
-    await changes.watch(repository);
-    try {
-      return await readRepositoryRefs(git, repository);
-    } catch (error) {
-      throw isGitFailed(error)
-        ? repositoryRejected("GitFailed", error.detail)
-        : error;
-    }
-  };
+  const { command, query, repository } = repositoryRoutes(dependencies);
   const branches = RepositoryBranchesApi;
   return {
     routes: [
-      route(RepositoryRefsApi.read, (input) => readRefs(input.repositoryId)),
+      repository(RepositoryRefsApi.read, async (_, entry) => {
+        await changes.watch(entry);
+        return readRepositoryRefs(git, entry);
+      }),
       command(
         RepositoryRefsApi.checkout,
         {

@@ -11,9 +11,7 @@ import {
   SettingsField,
   SettingsRow,
 } from "#web/components/ui/settings-layout.tsx";
-import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
-import { answer, useCommand } from "#web/platform/query/use-command.ts";
+import { useSetting } from "#web/features/settings/setting-rows.tsx";
 
 export function ServerIdentityRow({
   icon,
@@ -22,12 +20,11 @@ export function ServerIdentityRow({
   readonly icon: ReactNode;
   readonly version: string;
 }) {
-  const identity = useEnvironmentQuery(GitIdentityApi.read, undefined, {
-    changes: "refs",
-  });
-  const save = useCommand(GitIdentityApi.save, {
-    answers: (value) => [answer(GitIdentityApi.read, undefined, value)],
-  });
+  const identity = useSetting(
+    GitIdentityApi.read,
+    undefined,
+    GitIdentityApi.save,
+  );
   const saved = identity.data;
   const missing =
     saved !== undefined &&
@@ -37,8 +34,8 @@ export function ServerIdentityRow({
     <SettingsRow
       {...(missing ? { badge: "Identity missing" } : {})}
       description={
-        identity.error !== null ? (
-          `Available · ${describeFailure(identity.error)}`
+        identity.error !== undefined ? (
+          `Available · ${identity.error}`
         ) : saved === undefined || missing ? (
           `Available${missing ? " · Add your name and email to commit." : ""}`
         ) : (
@@ -54,19 +51,15 @@ export function ServerIdentityRow({
               label: "Git identity",
               open: open ?? missing,
               onOpenChange: (next: boolean) => {
-                save.reset();
+                identity.reset();
                 setOpen(next);
               },
               content: (
                 <IdentityForm
-                  busy={save.running || !save.canRun}
-                  error={
-                    save.failure === undefined
-                      ? undefined
-                      : describeFailure(save.failure)
-                  }
+                  busy={identity.busy}
+                  error={identity.saveError}
                   onSave={async (next) => {
-                    const result = await save.run(next);
+                    const result = await identity.save(next);
                     if (result._tag === "Ok") setOpen(false);
                   }}
                   saved={saved}
@@ -87,16 +80,11 @@ export function RepositoryIdentityRow({
 }: {
   readonly repositoryId: string;
 }) {
-  const identity = useEnvironmentQuery(
+  const identity = useSetting(
     GitIdentityApi.readRepository,
     { repositoryId },
-    { changes: "refs" },
+    GitIdentityApi.saveRepository,
   );
-  const save = useCommand(GitIdentityApi.saveRepository, {
-    answers: (value) => [
-      answer(GitIdentityApi.readRepository, { repositoryId }, value),
-    ],
-  });
   const [open, setOpen] = useState(false);
   const data = identity.data;
   const overridden =
@@ -107,8 +95,8 @@ export function RepositoryIdentityRow({
   return (
     <SettingsRow
       description={
-        identity.error !== null ? (
-          describeFailure(identity.error)
+        identity.error !== undefined ? (
+          identity.error
         ) : effective === undefined ? undefined : effective.name ===
             undefined || effective.email === undefined ? (
           "Add your name and email to commit."
@@ -126,23 +114,16 @@ export function RepositoryIdentityRow({
               label: "Repository identity",
               open,
               onOpenChange: (next: boolean) => {
-                save.reset();
+                identity.reset();
                 setOpen(next);
               },
               content: (
                 <IdentityForm
-                  busy={save.running || !save.canRun}
-                  error={
-                    save.failure === undefined
-                      ? undefined
-                      : describeFailure(save.failure)
-                  }
+                  busy={identity.busy}
+                  error={identity.saveError}
                   inherited={data.inherited}
                   onSave={async (next) => {
-                    const result = await save.run({
-                      repositoryId,
-                      identity: next,
-                    });
+                    const result = await identity.save(next);
                     if (result._tag === "Ok") setOpen(false);
                   }}
                   saved={data.local}

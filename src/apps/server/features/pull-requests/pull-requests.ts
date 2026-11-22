@@ -11,11 +11,9 @@ import {
   type EnvironmentFeature,
   type RepositoryDependencies,
   repositoryRoutes,
-  route,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
-  isGitFailed,
   runRepositoryGit,
   runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
@@ -38,44 +36,34 @@ export function pullRequestsFeature(
     readonly sourceControl: SourceControl;
   },
 ) {
-  const { access, events, git, sourceControl } = dependencies;
-  const { command } = repositoryRoutes(dependencies);
+  const { events, git, sourceControl } = dependencies;
+  const { command, repository } = repositoryRoutes(dependencies);
   return {
     routes: [
-      route(PullRequestsApi.list, ({ repositoryId }) =>
-        rejectingGitFailures(async () => {
-          const repository = await access.repository(repositoryId);
-          const found = await listPullRequests(
-            git,
-            sourceControl,
-            repository.path,
-          );
-          return found === undefined
-            ? null
-            : {
-                kind: found.kind,
-                branches: found.branches.filter(
-                  ({ pullRequests }) => pullRequests.length > 0,
-                ),
-              };
-        }),
-      ),
-      route(PullRequestsApi.find, ({ repositoryId, number }) =>
-        rejectingGitFailures(async () => {
-          const repository = await access.repository(repositoryId);
-          const found = await sourceControl.hostedRepository(repository.path);
-          if (found === undefined) throw unavailable;
-          const pullRequest = await found.repository.pullRequest(number);
-          return {
-            kind: pullRequestKind(found.host.kind),
-            pullRequest:
-              pullRequest !== undefined &&
-              isPullRequestLink(pullRequest.url, found.host.kind)
-                ? shown(pullRequest)
-                : null,
-          };
-        }),
-      ),
+      repository(PullRequestsApi.list, async (_, { path }) => {
+        const found = await listPullRequests(git, sourceControl, path);
+        return found === undefined
+          ? null
+          : {
+              kind: found.kind,
+              branches: found.branches.filter(
+                ({ pullRequests }) => pullRequests.length > 0,
+              ),
+            };
+      }),
+      repository(PullRequestsApi.find, async ({ number }, { path }) => {
+        const found = await sourceControl.hostedRepository(path);
+        if (found === undefined) throw unavailable;
+        const pullRequest = await found.repository.pullRequest(number);
+        return {
+          kind: pullRequestKind(found.host.kind),
+          pullRequest:
+            pullRequest !== undefined &&
+            isPullRequestLink(pullRequest.url, found.host.kind)
+              ? shown(pullRequest)
+              : null,
+        };
+      }),
       command(
         PullRequestsApi.link,
         settlePolicy,
@@ -121,16 +109,6 @@ export function pullRequestsFeature(
       ),
     ],
   } satisfies EnvironmentFeature;
-}
-
-async function rejectingGitFailures<Value>(run: () => Promise<Value>) {
-  try {
-    return await run();
-  } catch (error) {
-    throw isGitFailed(error)
-      ? repositoryRejected("GitFailed", error.detail)
-      : error;
-  }
 }
 
 export interface PullRequestBranch {

@@ -1,12 +1,10 @@
 import { homedir } from "node:os";
-import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   GitSigningApi,
   gpgKeyId,
   type RepositorySigning,
   type Signing,
   type SigningChoice,
-  type SigningFailed,
   type SigningFormat,
   SigningFormats,
   type SigningKey,
@@ -16,21 +14,16 @@ import {
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
 import {
   type EnvironmentFeature,
+  type RepositoryDependencies,
   route,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
-  type GitCommandRunner,
-  isGitFailed,
-} from "#server/adapters/local-git/git-commands.ts";
-import {
   type ConfigScope,
-  readScopedConfig,
   type ScopedConfig,
-  saveScopedConfig,
   scopedValue,
 } from "#server/adapters/local-git/git-config-scopes.ts";
+import { gitConfigSettingRoutes } from "#server/features/git-config-settings/git-config-setting.ts";
 import { listSigningKeys } from "#server/features/git-signing/signing-keys.ts";
-import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
 const keys = {
   sign: "commit.gpgSign",
@@ -44,56 +37,26 @@ type SigningConfigKey = (typeof configKeys)[number];
 type SigningConfig = ScopedConfig<SigningConfigKey>;
 type ConfigValue = (key: SigningConfigKey) => string | undefined;
 
-export function gitSigningFeature({
-  access,
-  events,
-  git,
-}: {
-  readonly access: RepositoryAccess;
-  readonly events: EnvironmentEventPublisher;
-  readonly git: GitCommandRunner;
-}) {
+export function gitSigningFeature(
+  dependencies: RepositoryDependencies & {
+    readonly events: EnvironmentEventPublisher;
+  },
+) {
   return {
     routes: [
-      route(GitSigningApi.read, () =>
-        failingAsSigning(async () =>
-          globalSigning(await readScopedConfig(git, homedir(), configKeys)),
-        ),
+      ...gitConfigSettingRoutes(
+        {
+          api: GitSigningApi,
+          keys: configKeys,
+          server: globalSigning,
+          repository: repositorySigning,
+          writes: writesFor,
+        },
+        dependencies,
       ),
-      route(GitSigningApi.save, (choice) =>
-        failingAsSigning(async () => {
-          const values = await saveScopedConfig(
-            git,
-            homedir(),
-            "--global",
-            configKeys,
-            writesFor(choice),
-          );
-          events.publishChanged();
-          return globalSigning(values);
-        }),
+      route(GitSigningApi.keys, () =>
+        listSigningKeys(dependencies.git, homedir()),
       ),
-      route(GitSigningApi.keys, () => listSigningKeys(git, homedir())),
-      route(GitSigningApi.readRepository, async ({ repositoryId }) => {
-        const { path } = await access.repository(repositoryId);
-        return rejectingGitFailures(async () =>
-          repositorySigning(await readScopedConfig(git, path, configKeys)),
-        );
-      }),
-      route(GitSigningApi.saveRepository, async ({ repositoryId, signing }) => {
-        const { path } = await access.repository(repositoryId);
-        return rejectingGitFailures(async () => {
-          const values = await saveScopedConfig(
-            git,
-            path,
-            "--local",
-            configKeys,
-            writesFor(signing),
-          );
-          events.publishChanged([repositoryId]);
-          return repositorySigning(values);
-        });
-      }),
     ],
   } satisfies EnvironmentFeature;
 }
@@ -151,26 +114,4 @@ function signingKey(format: SigningFormat, value: string): SigningKey {
   }
   const id = gpgKeyId(value);
   return { format, key: value, label: id === undefined ? value : id.slice(-8) };
-}
-
-async function failingAsSigning<Value>(run: () => Promise<Value>) {
-  try {
-    return await run();
-  } catch (error) {
-    if (!isGitFailed(error)) throw error;
-    throw {
-      _tag: "SigningFailed",
-      detail: error.detail.slice(0, 2_048),
-    } satisfies SigningFailed;
-  }
-}
-
-async function rejectingGitFailures<Value>(run: () => Promise<Value>) {
-  try {
-    return await run();
-  } catch (error) {
-    throw isGitFailed(error)
-      ? repositoryRejected("GitFailed", error.detail)
-      : error;
-  }
 }

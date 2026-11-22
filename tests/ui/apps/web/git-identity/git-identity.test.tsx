@@ -25,8 +25,8 @@ describe("Git identity", () => {
     let identity: GitIdentity = {};
     await renderServerIdentity(
       respond(GitIdentityApi.read, async () => identity),
-      respond(GitIdentityApi.save, async (input) => {
-        identity = input;
+      respond(GitIdentityApi.save, async ({ value }) => {
+        identity = value;
         return identity;
       }),
     );
@@ -53,7 +53,7 @@ describe("Git identity", () => {
       respond(GitIdentityApi.read, async () => ({})),
       respond(GitIdentityApi.save, async () => {
         throw rejected({
-          _tag: "IdentityFailed" as const,
+          _tag: "SettingFailed" as const,
           detail: "error: could not lock config file /home/ada/.gitconfig",
         });
       }),
@@ -88,7 +88,7 @@ describe("Git identity", () => {
             respond(GitIdentityApi.readRepository, async () => identity),
             respond(GitIdentityApi.saveRepository, async (input) => {
               saved.push(input);
-              identity = { ...identity, local: input.identity };
+              identity = { ...identity, local: input.value ?? {} };
               return identity;
             }),
           ),
@@ -108,7 +108,7 @@ describe("Git identity", () => {
     await expect
       .element(page.getByText("· set for this repository"))
       .not.toBeInTheDocument();
-    expect(saved).toEqual([{ repositoryId, identity: {} }]);
+    expect(saved).toEqual([{ repositoryId, value: {} }]);
   });
 });
 

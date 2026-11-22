@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 import {
   type PullBranch,
+  PullStrategyApi,
   RepositoryPullApi,
 } from "#contracts/repository-pull/repository-pull.contract.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
@@ -450,6 +451,7 @@ async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
 
   const repositoryId = (await environment.remember(repositoryPath)).id;
   const service = environment.routes(RepositoryPullApi);
+  const strategies = environment.routes(PullStrategyApi);
   return {
     repositoryPath,
     pull: (branch: string, strategy?: PullBranch["strategy"]) =>
@@ -459,8 +461,8 @@ async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
         branch,
         ...(strategy === undefined ? {} : { strategy }),
       }),
-    save: (strategy: "merge" | "rebase") =>
-      service.saveRepositoryPullStrategy({ repositoryId, strategy }),
+    save: (value: "merge" | "rebase") =>
+      strategies.saveRepository({ repositoryId, value }),
     publish: (branch: string, file: string, content: string) =>
       commitFile(originPath, { branch, parent: branch, file, content }),
   };

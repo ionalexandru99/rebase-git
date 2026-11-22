@@ -39,7 +39,7 @@ describe("Git identity", () => {
     const saved = f.save({ name: "Ada Lovelace" });
 
     await expect(saved).rejects.toMatchObject({
-      _tag: "IdentityFailed",
+      _tag: "SettingFailed",
       detail: expect.stringMatching(
         /local\.inc sets user\.name, so change it there\.$/,
       ),
@@ -108,8 +108,8 @@ async function fixture() {
     scope: { repositoryId, worktreePath: repository, amend: false },
     globalConfig: (...args: string[]) => git("config", "--global", ...args),
     read: () => identity.read(undefined),
-    save: (value: GitIdentity) => identity.save(value),
+    save: (value: GitIdentity) => identity.save({ value }),
     saveRepository: (value: GitIdentity) =>
-      identity.saveRepository({ repositoryId, identity: value }),
+      identity.saveRepository({ repositoryId, value }),
   };
 }
