@@ -25,7 +25,7 @@ import {
   runGitLfs,
 } from "#server/features/repository-lfs/git-lfs.ts";
 
-const isPattern = Schema.is(LfsPattern);
+const isPattern = (value: unknown) => LfsPattern.safeParse(value).success;
 const LockRecord = Schema.Struct({
   path: Schema.String,
   owner: Schema.optional(Schema.Struct({ name: Schema.String })),

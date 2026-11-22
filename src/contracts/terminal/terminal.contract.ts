@@ -1,9 +1,9 @@
-import { Schema } from "effect";
-import { Rpc } from "effect/rpc";
+import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
   route,
+  streamRoute,
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   RepositoryId,
@@ -12,75 +12,81 @@ import {
 
 export const terminalWriteLimit = 65_536;
 
-const TerminalId = Schema.String.check(Schema.isUUID(4));
+const TerminalId = z.uuidv4();
 
-const TerminalWorktree = Schema.Struct({
+const TerminalWorktree = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
 });
-export type TerminalWorktree = typeof TerminalWorktree.Type;
+export type TerminalWorktree = z.infer<typeof TerminalWorktree>;
 
-const TerminalSize = Schema.Struct({
-  cols: Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 1_000 })),
-  rows: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 500 })),
+const TerminalSize = z.object({
+  cols: z.int().min(2).max(1_000),
+  rows: z.int().min(1).max(500),
 });
-export type TerminalSize = typeof TerminalSize.Type;
+export type TerminalSize = z.infer<typeof TerminalSize>;
 
-export const Terminal = Schema.Struct({
+export const Terminal = z.object({
   id: TerminalId,
-  number: Schema.Int.check(Schema.isGreaterThan(0)),
+  number: z.int().gt(0),
 });
-export type Terminal = typeof Terminal.Type;
+export type Terminal = z.infer<typeof Terminal>;
 
-export const Terminals = Schema.Struct({
-  terminals: Schema.Array(Terminal).check(Schema.isMaxLength(256)),
+export const Terminals = z.object({
+  terminals: z.array(Terminal).max(256).readonly(),
 });
-export type Terminals = typeof Terminals.Type;
+export type Terminals = z.infer<typeof Terminals>;
 
-export const OpenTerminal = Schema.Struct({
-  ...TerminalWorktree.fields,
-  ...TerminalSize.fields,
+export const OpenTerminal = z.object({
+  ...TerminalWorktree.shape,
+  ...TerminalSize.shape,
 });
-export type OpenTerminal = typeof OpenTerminal.Type;
+export type OpenTerminal = z.infer<typeof OpenTerminal>;
 
-export const CloseTerminal = Schema.Struct({
-  ...TerminalWorktree.fields,
+export const CloseTerminal = z.object({
+  ...TerminalWorktree.shape,
   id: TerminalId,
 });
-export type CloseTerminal = typeof CloseTerminal.Type;
+export type CloseTerminal = z.infer<typeof CloseTerminal>;
 
-export const WriteTerminal = Schema.Struct({
+export const WriteTerminal = z.object({
   id: TerminalId,
-  data: Schema.String.check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(terminalWriteLimit),
-  ),
+  data: z.string().min(1).max(terminalWriteLimit),
 });
-export type WriteTerminal = typeof WriteTerminal.Type;
+export type WriteTerminal = z.infer<typeof WriteTerminal>;
 
-export const ResizeTerminal = Schema.Struct({
+export const ResizeTerminal = z.object({
   id: TerminalId,
-  ...TerminalSize.fields,
+  ...TerminalSize.shape,
 });
-export type ResizeTerminal = typeof ResizeTerminal.Type;
+export type ResizeTerminal = z.infer<typeof ResizeTerminal>;
 
-export const AttachTerminal = Schema.Struct({
+export const AttachTerminal = z.object({
   id: TerminalId,
-  since: Schema.Natural,
+  since: z.int().nonnegative(),
 });
-export type AttachTerminal = typeof AttachTerminal.Type;
+export type AttachTerminal = z.infer<typeof AttachTerminal>;
 
-export const TerminalOutput = Schema.Union([
-  Schema.TaggedStruct("Output", { data: Schema.String, end: Schema.Natural }),
-  Schema.TaggedStruct("Reset", { data: Schema.String, end: Schema.Natural }),
-  Schema.TaggedStruct("Exited", {}),
+export const TerminalOutput = z.discriminatedUnion("_tag", [
+  z.object({
+    _tag: z.literal("Output"),
+    data: z.string(),
+    end: z.int().nonnegative(),
+  }),
+  z.object({
+    _tag: z.literal("Reset"),
+    data: z.string(),
+    end: z.int().nonnegative(),
+  }),
+  z.object({ _tag: z.literal("Exited") }),
 ]);
-export type TerminalOutput = typeof TerminalOutput.Type;
+export type TerminalOutput = z.infer<typeof TerminalOutput>;
 
-export const TerminalUnavailable = Schema.TaggedStruct("TerminalUnavailable", {
-  detail: Schema.String,
+export const TerminalUnavailable = z.object({
+  _tag: z.literal("TerminalUnavailable"),
+  detail: z.string(),
 });
-export type TerminalUnavailable = typeof TerminalUnavailable.Type;
+export type TerminalUnavailable = z.infer<typeof TerminalUnavailable>;
 
 export const TerminalsApi = {
   list: repositoryQuery("terminals/list", {
@@ -94,19 +100,18 @@ export const TerminalsApi = {
   }),
   close: repositoryCommand("terminals/close", {
     request: CloseTerminal,
-    success: Schema.Struct({}),
+    success: z.object({}),
   }),
   write: route("terminals/write", {
     request: WriteTerminal,
-    success: Schema.Struct({}),
+    success: z.object({}),
   }),
   resize: route("terminals/resize", {
     request: ResizeTerminal,
-    success: Schema.Struct({}),
+    success: z.object({}),
   }),
-  attach: Rpc.make("terminals/attach", {
-    payload: AttachTerminal,
+  attach: streamRoute("terminals/attach", {
+    request: AttachTerminal,
     success: TerminalOutput,
-    stream: true,
   }),
 };

@@ -1,29 +1,25 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import { repositoryQuery } from "#contracts/environment-connection/environment-route.contract.ts";
 import { RepositoryId } from "#contracts/git/git-values.contract.ts";
 
-export const AvatarImage = Schema.String.check(
-  Schema.isPattern(/^data:image\/[\w.+-]+;base64,[A-Za-z0-9+/]+=*$/),
-  Schema.isMaxLength(400_000),
-);
-export type AvatarImage = typeof AvatarImage.Type;
+export const AvatarImage = z
+  .string()
+  .regex(/^data:image\/[\w.+-]+;base64,[A-Za-z0-9+/]+=*$/)
+  .max(400_000);
+export type AvatarImage = z.infer<typeof AvatarImage>;
 
-export const AuthorAvatarUnavailable = Schema.TaggedStruct(
-  "AuthorAvatarUnavailable",
-  {},
-);
-export type AuthorAvatarUnavailable = typeof AuthorAvatarUnavailable.Type;
+export const AuthorAvatarUnavailable = z.object({
+  _tag: z.literal("AuthorAvatarUnavailable"),
+});
+export type AuthorAvatarUnavailable = z.infer<typeof AuthorAvatarUnavailable>;
 
 export const AuthorAvatarsApi = {
   read: repositoryQuery("repositories/author-avatar", {
-    request: Schema.Struct({
+    request: z.object({
       repositoryId: RepositoryId,
-      email: Schema.String.check(
-        Schema.isMinLength(1),
-        Schema.isMaxLength(320),
-      ),
+      email: z.string().min(1).max(320),
     }),
-    success: Schema.NullOr(AvatarImage),
+    success: AvatarImage.nullable(),
     failure: AuthorAvatarUnavailable,
   }),
 };

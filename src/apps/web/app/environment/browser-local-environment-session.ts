@@ -1,4 +1,3 @@
-import { Effect, Schema } from "effect";
 import type { DesktopHostBridge } from "#contracts/desktop-host/desktop-host.contract.ts";
 import {
   DesktopUpdateSnapshot,
@@ -17,9 +16,8 @@ import {
 import {
   connectEnvironment,
   type EnvironmentAccess,
-  EnvironmentAccessDenied,
+  type EnvironmentConnectionFailure,
   type EnvironmentCredential,
-  EnvironmentUnavailable,
 } from "#web/platform/environment/environment-connection.ts";
 
 type DesktopEnvironmentHost = Pick<
@@ -27,7 +25,9 @@ type DesktopEnvironmentHost = Pick<
   "environmentOrigin" | "getEnvironmentCredential"
 >;
 
-const decodeAccessFailure = Schema.decodeUnknownSync(EnvironmentAccessFailure);
+const unavailable: EnvironmentConnectionFailure = {
+  _tag: "EnvironmentUnavailable",
+};
 
 export function createBrowserLocalEnvironmentSession(
   host: DesktopEnvironmentHost | undefined,
@@ -42,25 +42,23 @@ export function createBrowserLocalEnvironmentSession(
     onConnect: (credential) =>
       lifetime.onConnect?.({ origin: bootstrap.environmentOrigin, credential }),
     gateway: {
-      authorize: () =>
-        Effect.gen(function* () {
-          if (host !== undefined) {
-            const value = yield* Effect.tryPromise({
-              try: () => host.getEnvironmentCredential(),
-              catch: () => new EnvironmentUnavailable(),
-            });
-            return { type: "bearer", value } satisfies EnvironmentCredential;
-          }
-          if (pairingMaterial !== undefined) {
-            yield* createBrowserSession(bootstrap.environmentOrigin, {
-              label: "Rebase browser",
-              pairingMaterial,
-            });
-            pairingMaterial = undefined;
-            window.history.replaceState(null, "", "/");
-          }
-          return { type: "browser-session" } satisfies EnvironmentCredential;
-        }),
+      authorize: async (): Promise<EnvironmentCredential> => {
+        if (host !== undefined) {
+          const value = await host
+            .getEnvironmentCredential()
+            .catch(() => Promise.reject(unavailable));
+          return { type: "bearer", value };
+        }
+        if (pairingMaterial !== undefined) {
+          await createBrowserSession(bootstrap.environmentOrigin, {
+            label: "Rebase browser",
+            pairingMaterial,
+          });
+          pairingMaterial = undefined;
+          window.history.replaceState(null, "", "/");
+        }
+        return { type: "browser-session" };
+      },
       connect: (credential) =>
         connectEnvironment(
           bootstrap.environmentOrigin,
@@ -82,36 +80,26 @@ export function resolveLocalEnvironmentBootstrap(
   };
 }
 
-function createBrowserSession(
+async function createBrowserSession(
   origin: string,
   exchange: ExchangeEnvironmentPairing,
 ) {
-  return Effect.tryPromise({
-    try: async (signal) => {
-      const response = await fetch(
-        new URL(environmentBrowserSessionPath, origin),
-        {
-          body: JSON.stringify(exchange),
-          credentials: "same-origin",
-          headers: { "content-type": "application/json" },
-          method: "POST",
-          signal,
-        },
-      );
-      if (response.ok) {
-        await response.body?.cancel();
-        return undefined;
-      }
-      return decodeAccessFailure(await response.json());
-    },
-    catch: () => new EnvironmentUnavailable(),
-  }).pipe(
-    Effect.flatMap((failure) =>
-      failure === undefined
-        ? Effect.void
-        : Effect.fail(new EnvironmentAccessDenied({ failure })),
-    ),
+  const response = await fetch(new URL(environmentBrowserSessionPath, origin), {
+    body: JSON.stringify(exchange),
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  }).catch(() => Promise.reject(unavailable));
+  if (response.ok) {
+    await response.body?.cancel();
+    return;
+  }
+  const failure = EnvironmentAccessFailure.safeParse(
+    await response.json().catch(() => undefined),
   );
+  throw failure.success
+    ? { _tag: "EnvironmentAccessDenied", failure: failure.data }
+    : unavailable;
 }
 
 function readPairingMaterial(location: Pick<Location, "hash" | "pathname">) {
@@ -127,7 +115,8 @@ declare global {
   }
 }
 
-const decodeSnapshot = Schema.decodeUnknownSync(DesktopUpdateSnapshot);
+const decodeSnapshot = (snapshot: unknown) =>
+  DesktopUpdateSnapshot.parse(snapshot);
 
 export function readDesktopHostBridge(): DesktopHostBridge | undefined {
   const host = window.rebaseHost;

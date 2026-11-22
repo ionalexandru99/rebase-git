@@ -1,13 +1,16 @@
 import { createServer, type Server } from "node:http";
-import { type Cause, Data, Effect, FiberSet } from "effect";
+import { Cause, Data, Effect, FiberSet } from "effect";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
 import {
   createEnvironmentHttpHandler,
   type RunEnvironmentEffect,
 } from "#server/adapters/environment-transport/environment-http-handler.ts";
 import { formatHostAddress } from "#server/adapters/environment-transport/environment-request-authorization.ts";
-import type { EnvironmentFeatures } from "#server/adapters/environment-transport/environment-routes.ts";
-import { attachEnvironmentSocket } from "#server/adapters/environment-transport/environment-socket.ts";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes.ts";
+import {
+  attachEnvironmentSocket,
+  environmentRouter,
+} from "#server/adapters/environment-transport/environment-socket.ts";
 import { errorMessage, isFileSystemError } from "#server/error-inspection.ts";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
 
@@ -30,7 +33,7 @@ interface EnvironmentListenerOptions {
   readonly browserAssetsRoot?: string;
   readonly environmentId: string;
   readonly events: EnvironmentEventPublisher;
-  readonly features: EnvironmentFeatures;
+  readonly features: EnvironmentFeature;
   readonly host?: string;
   readonly port?: number;
   readonly reportDefect?: (where: string, cause: Cause.Cause<unknown>) => void;
@@ -45,6 +48,8 @@ export function acquireEnvironmentListener(
     const host = options.host ?? loopbackHost;
     const port = options.port ?? 0;
     const runFork = yield* FiberSet.makeRuntime<never, void, never>();
+    const reportDefect = (where: string, error: unknown) =>
+      options.reportDefect?.(where, Cause.die(error));
     const runEnvironmentEffect: RunEnvironmentEffect = (effect, signal) => {
       runFork(effect, signal === undefined ? undefined : { signal });
     };
@@ -56,7 +61,13 @@ export function acquireEnvironmentListener(
     yield* Effect.acquireRelease(
       Effect.try({
         try: () =>
-          attachEnvironmentSocket(server, options, runEnvironmentEffect),
+          attachEnvironmentSocket(
+            server,
+            environmentRouter({ ...options, reportDefect }),
+            options.authorization,
+            runEnvironmentEffect,
+            reportDefect,
+          ),
         catch: (cause) => environmentServerError(cause, host, port),
       }),
       (webSockets) => Effect.promise(webSockets.close).pipe(Effect.orDie),

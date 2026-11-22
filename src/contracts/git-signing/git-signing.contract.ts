@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
@@ -6,46 +6,47 @@ import {
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import { RepositoryId } from "#contracts/git/git-values.contract.ts";
 
-export const SigningFormat = Schema.Literals(["openpgp", "ssh", "x509"]);
-export type SigningFormat = typeof SigningFormat.Type;
+export const SigningFormat = z.enum(["openpgp", "ssh", "x509"]);
+export type SigningFormat = z.infer<typeof SigningFormat>;
 
 const KeyReference = {
   format: SigningFormat,
-  key: Schema.Trim.check(Schema.isMaxLength(8_192)),
+  key: z.string().trim().max(8_192),
 };
 
-export const SigningFormats = SigningFormat.literals;
+export const SigningFormats = SigningFormat.options;
 
-export const SigningKey = Schema.Struct({
+export const SigningKey = z.object({
   ...KeyReference,
-  label: Schema.String,
+  label: z.string(),
 });
-export type SigningKey = typeof SigningKey.Type;
+export type SigningKey = z.infer<typeof SigningKey>;
 
-const Off = Schema.TaggedStruct("Off", {});
+const Off = z.object({ _tag: z.literal("Off") });
 
-export const Signing = Schema.Union([
+export const Signing = z.discriminatedUnion("_tag", [
   Off,
-  Schema.TaggedStruct("Key", SigningKey.fields),
+  z.object({ _tag: z.literal("Key"), ...SigningKey.shape }),
 ]);
-export type Signing = typeof Signing.Type;
+export type Signing = z.infer<typeof Signing>;
 
-export const SigningChoice = Schema.Union([
+export const SigningChoice = z.discriminatedUnion("_tag", [
   Off,
-  Schema.TaggedStruct("Key", KeyReference),
+  z.object({ _tag: z.literal("Key"), ...KeyReference }),
 ]);
-export type SigningChoice = typeof SigningChoice.Type;
+export type SigningChoice = z.infer<typeof SigningChoice>;
 
-export const RepositorySigning = Schema.Struct({
-  local: Schema.NullOr(Signing),
+export const RepositorySigning = z.object({
+  local: Signing.nullable(),
   inherited: Signing,
 });
-export type RepositorySigning = typeof RepositorySigning.Type;
+export type RepositorySigning = z.infer<typeof RepositorySigning>;
 
-export const SigningFailed = Schema.TaggedStruct("SigningFailed", {
-  detail: Schema.String.check(Schema.isMaxLength(2_048)),
+export const SigningFailed = z.object({
+  _tag: z.literal("SigningFailed"),
+  detail: z.string().max(2_048),
 });
-export type SigningFailed = typeof SigningFailed.Type;
+export type SigningFailed = z.infer<typeof SigningFailed>;
 
 export const GitSigningApi = {
   read: route("git-signing/read", {
@@ -58,17 +59,17 @@ export const GitSigningApi = {
     failure: SigningFailed,
   }),
   keys: route("git-signing/keys", {
-    success: Schema.Array(SigningKey),
+    success: z.array(SigningKey).readonly(),
     failure: SigningFailed,
   }),
   readRepository: repositoryQuery("repositories/signing", {
-    request: Schema.Struct({ repositoryId: RepositoryId }),
+    request: z.object({ repositoryId: RepositoryId }),
     success: RepositorySigning,
   }),
   saveRepository: repositoryCommand("repositories/save-signing", {
-    request: Schema.Struct({
+    request: z.object({
       repositoryId: RepositoryId,
-      signing: Schema.NullOr(SigningChoice),
+      signing: SigningChoice.nullable(),
     }),
     success: RepositorySigning,
   }),

@@ -1,4 +1,3 @@
-import { Schema } from "effect";
 import {
   EnvironmentPairingExchanged,
   type ExchangeEnvironmentPairing,
@@ -75,9 +74,7 @@ export async function exchangeEnvironmentPairing(
     throw new Error(
       `The Environment refused pairing (${response.status}): ${await response.text()}`,
     );
-  return Schema.decodeUnknownSync(EnvironmentPairingExchanged)(
-    await response.json(),
-  );
+  return EnvironmentPairingExchanged.parse(await response.json());
 }
 
 export class DesktopApplication {

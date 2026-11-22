@@ -28,7 +28,7 @@ const browserProject = (
 ) => ({
   extends: "./src/apps/web/vite.config.ts",
   optimizeDeps: {
-    include: ["effect/rpc", "effect/socket"],
+    include: ["@orpc/client", "@orpc/client/websocket", "zod"],
   },
   test: {
     browser: {

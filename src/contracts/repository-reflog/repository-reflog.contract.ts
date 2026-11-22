@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
@@ -11,24 +11,25 @@ import {
 } from "#contracts/git/git-values.contract.ts";
 import { RefMissing } from "#contracts/repository-refs/repository-refs.contract.ts";
 
-const ReflogText = Schema.String.check(Schema.isMaxLength(1_024));
+const ReflogText = z.string().max(1_024);
 const maximumEntries = 2_000;
 
-export const ReflogRef = Schema.Union([
-  Schema.TaggedStruct("Head", {}),
-  Schema.TaggedStruct("LocalBranch", { name: RefName }),
+export const ReflogRef = z.discriminatedUnion("_tag", [
+  z.object({ _tag: z.literal("Head") }),
+  z.object({ _tag: z.literal("LocalBranch"), name: RefName }),
 ]);
-export type ReflogRef = typeof ReflogRef.Type;
-export const isReflogRef = Schema.is(ReflogRef);
+export type ReflogRef = z.infer<typeof ReflogRef>;
+export const isReflogRef = (value: unknown): value is ReflogRef =>
+  ReflogRef.safeParse(value).success;
 
-export const ReadRepositoryReflog = Schema.Struct({
+export const ReadRepositoryReflog = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
   ref: ReflogRef,
 });
-export type ReadRepositoryReflog = typeof ReadRepositoryReflog.Type;
+export type ReadRepositoryReflog = z.infer<typeof ReadRepositoryReflog>;
 
-export const ReflogAction = Schema.Literals([
+export const ReflogAction = z.enum([
   "commit",
   "amend",
   "merge",
@@ -40,67 +41,66 @@ export const ReflogAction = Schema.Literals([
   "created",
   "other",
 ]);
-export type ReflogAction = typeof ReflogAction.Type;
+export type ReflogAction = z.infer<typeof ReflogAction>;
 
-export const ReflogStep = Schema.Struct({
+export const ReflogStep = z.object({
   oid: ObjectId,
-  label: Schema.String.check(Schema.isMaxLength(32)),
+  label: z.string().max(32),
   description: ReflogText,
 });
-export type ReflogStep = typeof ReflogStep.Type;
+export type ReflogStep = z.infer<typeof ReflogStep>;
 
-export const ReflogEntry = Schema.Struct({
+export const ReflogEntry = z.object({
   oid: ObjectId,
-  previousOid: Schema.NullOr(ObjectId),
+  previousOid: ObjectId.nullable(),
   action: ReflogAction,
   description: ReflogText,
   subject: ReflogText,
-  recordedAt: Schema.Int,
-  orphaned: Schema.Boolean,
-  steps: Schema.Array(ReflogStep).check(Schema.isMaxLength(maximumEntries)),
+  recordedAt: z.int(),
+  orphaned: z.boolean(),
+  steps: z.array(ReflogStep).max(maximumEntries).readonly(),
 });
-export type ReflogEntry = typeof ReflogEntry.Type;
+export type ReflogEntry = z.infer<typeof ReflogEntry>;
 
-export const RepositoryReflog = Schema.Struct({
-  entries: Schema.Array(ReflogEntry).check(Schema.isMaxLength(maximumEntries)),
-  truncated: Schema.Boolean,
+export const RepositoryReflog = z.object({
+  entries: z.array(ReflogEntry).max(maximumEntries).readonly(),
+  truncated: z.boolean(),
 });
-export type RepositoryReflog = typeof RepositoryReflog.Type;
+export type RepositoryReflog = z.infer<typeof RepositoryReflog>;
 
-export const ResetMode = Schema.Literals(["soft", "mixed", "hard"]);
-export type ResetMode = typeof ResetMode.Type;
+export const ResetMode = z.enum(["soft", "mixed", "hard"]);
+export type ResetMode = z.infer<typeof ResetMode>;
 
-export const ResetToCommit = Schema.Struct({
+export const ResetToCommit = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
   target: ObjectId,
   mode: ResetMode,
   expectedHead: ObjectId,
-  discard: Schema.optional(Schema.String.check(Schema.isMaxLength(128))),
+  discard: z.string().max(128).optional(),
 });
-export type ResetToCommit = typeof ResetToCommit.Type;
+export type ResetToCommit = z.infer<typeof ResetToCommit>;
 
-export const HeadMoved = Schema.TaggedStruct("HeadMoved", {
-  head: Schema.NullOr(ObjectId),
+export const HeadMoved = z.object({
+  _tag: z.literal("HeadMoved"),
+  head: ObjectId.nullable(),
 });
-export type HeadMoved = typeof HeadMoved.Type;
+export type HeadMoved = z.infer<typeof HeadMoved>;
 
-export const ResetDiscardsChanges = Schema.TaggedStruct(
-  "ResetDiscardsChanges",
-  {
-    paths: Schema.Array(Schema.String).check(Schema.isMaxLength(20)),
-    count: Schema.Natural,
-    fingerprint: Schema.String.check(Schema.isMaxLength(128)),
-  },
-);
-export type ResetDiscardsChanges = typeof ResetDiscardsChanges.Type;
+export const ResetDiscardsChanges = z.object({
+  _tag: z.literal("ResetDiscardsChanges"),
+  paths: z.array(z.string()).max(20).readonly(),
+  count: z.int().nonnegative(),
+  fingerprint: z.string().max(128),
+});
+export type ResetDiscardsChanges = z.infer<typeof ResetDiscardsChanges>;
 
-export const ResetFailure = Schema.Union([
+export const ResetFailure = z.discriminatedUnion("_tag", [
   HeadMoved,
   ResetDiscardsChanges,
   RefMissing,
 ]);
-export type ResetFailure = typeof ResetFailure.Type;
+export type ResetFailure = z.infer<typeof ResetFailure>;
 
 export const RepositoryReflogApi = {
   read: repositoryQuery("repositories/reflog/read", {
@@ -109,7 +109,7 @@ export const RepositoryReflogApi = {
   }),
   reset: repositoryCommand("repositories/reflog/reset", {
     request: ResetToCommit,
-    success: Schema.Struct({ head: ObjectId }),
+    success: z.object({ head: ObjectId }),
     failure: ResetFailure,
   }),
 };

@@ -15,7 +15,7 @@ const strategyLabels: Record<PullStrategy, string> = {
   rebase: "Rebase",
   merge: "Merge",
 };
-const strategyOptions = PullStrategy.literals.map((value) => ({
+const strategyOptions = PullStrategy.options.map((value) => ({
   label: strategyLabels[value],
   value,
 }));

@@ -12,10 +12,6 @@ import {
   helloOverSocket,
   openTestServer,
 } from "#tests-support/server.ts";
-import {
-  EnvironmentAccessDenied,
-  EnvironmentUnavailable,
-} from "#web/platform/environment/environment-connection.ts";
 
 describe("Environment authorization transport", () => {
   it("opens the socket with a browser session cookie only from the server origin", async () => {
@@ -43,7 +39,7 @@ describe("Environment authorization transport", () => {
       helloOverSocket(origin, { headers: { cookie, origin } }),
     ).resolves.toMatchObject({
       _tag: "Answered",
-      message: { exit: { _tag: "Success", value: { sequence: 0 } } },
+      greeting: { environmentId: expect.any(String) },
     });
     const localhostOrigin = origin.replace("127.0.0.1", "localhost");
     await expect(
@@ -52,7 +48,7 @@ describe("Environment authorization transport", () => {
       }),
     ).resolves.toMatchObject({
       _tag: "Answered",
-      message: { exit: { _tag: "Success", value: { sequence: 0 } } },
+      greeting: { environmentId: expect.any(String) },
     });
     await expect(
       helloOverSocket(origin, {
@@ -201,7 +197,7 @@ describe("Environment authorization transport", () => {
       }),
     ).resolves.toMatchObject({
       _tag: "Answered",
-      message: { exit: { _tag: "Success" } },
+      greeting: { environmentId: expect.any(String) },
     });
   });
 
@@ -216,12 +212,11 @@ describe("Environment authorization transport", () => {
       { authorizationId: viewer.authorizationId },
     );
 
-    await expect(Effect.runPromise(connection.closed)).resolves.toEqual(
-      new EnvironmentUnavailable(),
-    );
-    await expect(server.connect(viewer)).rejects.toEqual(
-      new EnvironmentAccessDenied({ failure: { _tag: "RevokedGrant" } }),
-    );
+    await expect(connection.closed).resolves.toBeUndefined();
+    await expect(server.connect(viewer)).rejects.toEqual({
+      _tag: "EnvironmentAccessDenied",
+      failure: { _tag: "RevokedGrant" },
+    });
   });
 });
 

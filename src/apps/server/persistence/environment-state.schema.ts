@@ -6,6 +6,7 @@ import {
   sqliteTable,
   text,
 } from "drizzle-orm/sqlite-core";
+import type { z } from "zod";
 import { RepositoryColor } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import { PullStrategy } from "#contracts/repository-pull/repository-pull.contract.ts";
 
@@ -40,7 +41,7 @@ export const repositoryCatalogTable = sqliteTable(
   "repository_catalog",
   {
     addedAt: text("added_at").notNull(),
-    color: text("color", { enum: RepositoryColor.literals })
+    color: text("color", { enum: enumValues(RepositoryColor) })
       .notNull()
       .default("blue"),
     gitCommonDirectory: text("git_common_directory"),
@@ -92,7 +93,7 @@ export const serverSettingTable = sqliteTable(
   "server_setting",
   {
     cloneFolder: text("clone_folder"),
-    pullStrategy: text("pull_strategy", { enum: PullStrategy.literals })
+    pullStrategy: text("pull_strategy", { enum: enumValues(PullStrategy) })
       .notNull()
       .default("ask"),
     singleton: integer("singleton").primaryKey(),
@@ -104,7 +105,7 @@ export const serverSettingTable = sqliteTable(
 
 export const repositorySettingTable = sqliteTable("repository_setting", {
   pullStrategy: text("pull_strategy", {
-    enum: PullStrategy.literals,
+    enum: enumValues(PullStrategy),
   }).notNull(),
   repositoryId: text("repository_id").primaryKey(),
 });
@@ -118,3 +119,9 @@ export const authorAvatarTable = sqliteTable(
   },
   (avatar) => [index("author_avatar_expires_at").on(avatar.expiresAt)],
 );
+
+function enumValues<Value extends string>(
+  schema: z.ZodEnum<{ [Key in Value]: Key }>,
+) {
+  return schema.options as [Value, ...Value[]];
+}

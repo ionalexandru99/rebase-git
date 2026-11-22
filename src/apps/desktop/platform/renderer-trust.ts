@@ -29,7 +29,7 @@ export function isTrustedRendererLocation(
 }
 
 export function isExternalPullRequestLink(target: string) {
-  return GitHostKind.literals.some((kind) => isPullRequestLink(target, kind));
+  return GitHostKind.options.some((kind) => isPullRequestLink(target, kind));
 }
 
 export async function licenseSourceLinks(

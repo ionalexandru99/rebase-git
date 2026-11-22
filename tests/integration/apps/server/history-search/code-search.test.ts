@@ -8,7 +8,6 @@ import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-c
 import { createCodeSearchRepository, git } from "#tests-support/git.ts";
 import { openTestServer } from "#tests-support/server.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
-import { environmentSubscriptions } from "#web/platform/environment/environment-connection.ts";
 
 describe("code search", () => {
   it("finds commits whose changed lines contain the text, newest first, within a path", async () => {
@@ -42,9 +41,7 @@ async function codeSearch() {
   const { id: repositoryId } = await requests(RepositoryCatalogApi.remember, {
     path: directory,
   });
-  const subscribe = environmentSubscriptions(
-    (await server.connect(server.owner)).rpc,
-  );
+  const subscribe = (await server.connect(server.owner)).subscribe;
   const commits = (await git(directory, "rev-list", "main")).split("\n");
   return {
     commits,

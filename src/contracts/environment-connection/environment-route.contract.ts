@@ -1,72 +1,125 @@
-import { Schema } from "effect";
-import { Rpc, type RpcSchema } from "effect/rpc";
+import { z } from "zod";
 import { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 
-export interface EnvironmentRoute extends Rpc.Any {
-  readonly payloadSchema: Schema.Top;
-  readonly successSchema: Schema.Top;
-  readonly errorSchema: Schema.Top;
+interface Route<
+  Tag extends string,
+  Request extends z.ZodType,
+  Success extends z.ZodType,
+  Failure extends z.ZodType,
+> {
+  readonly _tag: Tag;
+  readonly request: Request;
+  readonly success: Success;
+  readonly failure: Failure;
 }
 
-export type RouteInput<Route extends EnvironmentRoute> =
-  Route["payloadSchema"]["Type"];
+export interface EnvironmentRoute<
+  Tag extends string = string,
+  Request extends z.ZodType = z.ZodType,
+  Success extends z.ZodType = z.ZodType,
+  Failure extends z.ZodType = z.ZodType,
+> extends Route<Tag, Request, Success, Failure> {
+  readonly stream: false;
+}
+
+export interface EnvironmentStreamRoute<
+  Tag extends string = string,
+  Request extends z.ZodType = z.ZodType,
+  Value extends z.ZodType = z.ZodType,
+  Failure extends z.ZodType = z.ZodType,
+> extends Route<Tag, Request, Value, Failure> {
+  readonly stream: true;
+}
+
+export type AnyEnvironmentRoute = EnvironmentRoute | EnvironmentStreamRoute;
+
+export type RouteInput<Route extends AnyEnvironmentRoute> =
+  Route["request"]["_zod"]["output"];
 export type RouteSuccess<Route extends EnvironmentRoute> =
-  Route["successSchema"]["Type"];
-export type RouteFailure<Route extends EnvironmentRoute> =
-  Route["errorSchema"]["Type"];
-
-export interface EnvironmentStreamRoute extends EnvironmentRoute {
-  readonly successSchema: RpcSchema.Stream<Schema.Top, Schema.Top>;
-}
-
+  Route["success"]["_zod"]["output"];
+export type RouteFailure<Route extends AnyEnvironmentRoute> =
+  Route["failure"]["_zod"]["output"];
 export type StreamValue<Route extends EnvironmentStreamRoute> =
-  Route["successSchema"]["success"]["Type"];
+  Route["success"]["_zod"]["output"];
 
 interface RouteDefinition<
-  Request extends Schema.Top,
-  Success extends Schema.Top,
-  Failure extends Schema.Top,
+  Request extends z.ZodType,
+  Success extends z.ZodType,
+  Failure extends z.ZodType,
 > {
   readonly request?: Request;
   readonly success: Success;
   readonly failure?: Failure;
 }
 
+type RepositoryRouteDefinition<
+  Request extends z.ZodType,
+  Success extends z.ZodType,
+  Failure extends z.ZodType,
+> = RouteDefinition<Request, Success, Failure> & { readonly request: Request };
+
+type WithRejection<Failure extends z.ZodType> = z.ZodUnion<
+  [Failure, typeof RepositoryRejected]
+>;
+
 export function route<
   const Tag extends string,
-  Success extends Schema.Top,
-  Failure extends Schema.Top = Schema.Never,
-  Request extends Schema.Top = Schema.Void,
+  Success extends z.ZodType,
+  Failure extends z.ZodType = z.ZodNever,
+  Request extends z.ZodType = z.ZodVoid,
 >(
   tag: Tag,
   definition: RouteDefinition<Request, Success, Failure>,
-): Rpc.Rpc<Tag, Request, Success, Failure> {
-  return Rpc.make(tag, {
-    payload: definition.request ?? Schema.Void,
-    success: definition.success,
-    error: definition.failure ?? Schema.Never,
-  }) as unknown as Rpc.Rpc<Tag, Request, Success, Failure>;
+): EnvironmentRoute<Tag, Request, Success, Failure> {
+  return { ...describe(tag, definition), stream: false };
+}
+
+export function streamRoute<
+  const Tag extends string,
+  Value extends z.ZodType,
+  Failure extends z.ZodType = z.ZodNever,
+  Request extends z.ZodType = z.ZodVoid,
+>(
+  tag: Tag,
+  definition: RouteDefinition<Request, Value, Failure>,
+): EnvironmentStreamRoute<Tag, Request, Value, Failure> {
+  return { ...describe(tag, definition), stream: true };
 }
 
 export function repositoryQuery<
   const Tag extends string,
-  Request extends Schema.Top,
-  Success extends Schema.Top,
-  Failure extends Schema.Top = Schema.Never,
+  Request extends z.ZodType,
+  Success extends z.ZodType,
+  Failure extends z.ZodType = z.ZodNever,
 >(
   tag: Tag,
-  definition: RouteDefinition<Request, Success, Failure> & {
-    readonly request: Request;
-  },
-) {
+  definition: RepositoryRouteDefinition<Request, Success, Failure>,
+): EnvironmentRoute<Tag, Request, Success, WithRejection<Failure>> {
   return route(tag, {
-    request: definition.request,
-    success: definition.success,
-    failure: Schema.Union([
-      definition.failure ?? Schema.Never,
-      RepositoryRejected,
-    ]),
+    ...definition,
+    failure: withRejection(definition.failure),
   });
 }
 
 export const repositoryCommand = repositoryQuery;
+
+function describe<
+  Tag extends string,
+  Request extends z.ZodType,
+  Success extends z.ZodType,
+  Failure extends z.ZodType,
+>(tag: Tag, definition: RouteDefinition<Request, Success, Failure>) {
+  return {
+    _tag: tag,
+    request: (definition.request ?? z.void()) as Request,
+    success: definition.success,
+    failure: (definition.failure ?? z.never()) as Failure,
+  };
+}
+
+function withRejection<Failure extends z.ZodType>(failure?: Failure) {
+  return z.union([
+    failure ?? z.never(),
+    RepositoryRejected,
+  ]) as WithRejection<Failure>;
+}

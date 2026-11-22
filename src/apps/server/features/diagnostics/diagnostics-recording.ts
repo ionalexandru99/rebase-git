@@ -1,5 +1,8 @@
 import { Cause, Context, Effect, Exit, Option, Stream } from "effect";
-import type { EnvironmentFeatures } from "#server/adapters/environment-transport/environment-routes.ts";
+import type {
+  EnvironmentFeature,
+  RouteHandler,
+} from "#server/adapters/environment-transport/environment-routes.ts";
 import type {
   GitCommandRunner,
   GitFailed,
@@ -71,54 +74,50 @@ export function recordGitActivity(
 }
 
 export function observeFeatures(
-  features: EnvironmentFeatures,
+  features: EnvironmentFeature,
   activity: DiagnosticsActivity,
-): EnvironmentFeatures {
+): EnvironmentFeature {
   return {
-    routes: features.routes.map(({ route, handle }) => ({
-      route,
-      handle: (input, context) =>
-        Effect.suspend(() => {
-          const request = requestOf(route._tag, input);
-          const startedAt = performance.now();
-          return handle(input, context).pipe(
-            reportingDefects(activity, request),
-            Effect.ensuring(
-              Effect.sync(() =>
-                activity.requestFinished(
-                  route._tag,
-                  request.repositoryId,
-                  performance.now() - startedAt,
+    routes: features.routes.map((handler): RouteHandler => {
+      if (handler.route.stream)
+        return {
+          route: handler.route,
+          handle: (input, context) => {
+            const request = requestOf(handler.route._tag, input);
+            return (
+              handler.handle(input, context) as Stream.Stream<unknown, unknown>
+            ).pipe(
+              Stream.tapCause((cause) =>
+                Effect.sync(() => reportDefect(activity, request, cause)),
+              ),
+              Stream.provideService(CurrentRequest, request),
+            );
+          },
+        };
+      return {
+        route: handler.route,
+        handle: (input, context) =>
+          Effect.suspend(() => {
+            const request = requestOf(handler.route._tag, input);
+            const startedAt = performance.now();
+            return (
+              handler.handle(input, context) as Effect.Effect<unknown, unknown>
+            ).pipe(
+              reportingDefects(activity, request),
+              Effect.ensuring(
+                Effect.sync(() =>
+                  activity.requestFinished(
+                    handler.route._tag,
+                    request.repositoryId,
+                    performance.now() - startedAt,
+                  ),
                 ),
               ),
-            ),
-            Effect.provideService(CurrentRequest, request),
-          );
-        }),
-    })),
-    rpc: () =>
-      Object.fromEntries(
-        Object.entries(features.rpc()).map(([procedure, handler]) => [
-          procedure,
-          (payload: unknown, options: unknown) => {
-            const request = requestOf(procedure, payload);
-            const result = (
-              handler as (payload: unknown, options: unknown) => unknown
-            )(payload, options);
-            return Stream.isStream(result)
-              ? result.pipe(
-                  Stream.tapCause((cause) =>
-                    Effect.sync(() => reportDefect(activity, request, cause)),
-                  ),
-                  Stream.provideService(CurrentRequest, request),
-                )
-              : (result as Effect.Effect<unknown, unknown>).pipe(
-                  reportingDefects(activity, request),
-                  Effect.provideService(CurrentRequest, request),
-                );
-          },
-        ]),
-      ),
+              Effect.provideService(CurrentRequest, request),
+            );
+          }),
+      };
+    }),
   };
 }
 

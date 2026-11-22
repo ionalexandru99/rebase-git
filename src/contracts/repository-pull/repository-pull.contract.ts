@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
@@ -11,116 +11,106 @@ import {
 } from "#contracts/git/git-values.contract.ts";
 import { RepositoryOperation } from "#contracts/repository-operations/repository-operations.contract.ts";
 
-const RefName = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(1_024),
-);
+const RefName = z.string().min(1).max(1_024);
 
-export const DivergedPull = Schema.Literals(["rebase", "merge"]);
-export type DivergedPull = typeof DivergedPull.Type;
+export const DivergedPull = z.enum(["rebase", "merge"]);
+export type DivergedPull = z.infer<typeof DivergedPull>;
 
-export const PullBranch = Schema.Struct({
+export const PullBranch = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
   branch: RefName,
-  strategy: Schema.optionalKey(
-    Schema.Struct({ kind: DivergedPull, upstream: ObjectId }),
-  ),
+  strategy: z
+    .object({ kind: DivergedPull, upstream: ObjectId })
+    .exactOptional(),
 });
-export type PullBranch = typeof PullBranch.Type;
+export type PullBranch = z.infer<typeof PullBranch>;
 
-export const BranchPulled = Schema.Union([
-  Schema.Struct({
-    outcome: Schema.Literals([
-      "UpToDate",
-      "FastForwarded",
-      "Rebased",
-      "Merged",
-    ]),
-    stashKept: Schema.Boolean,
-    movedToStash: Schema.optionalKey(ObjectId),
+export const BranchPulled = z.union([
+  z.object({
+    outcome: z.enum(["UpToDate", "FastForwarded", "Rebased", "Merged"]),
+    stashKept: z.boolean(),
+    movedToStash: ObjectId.exactOptional(),
   }),
-  Schema.Struct({
-    outcome: Schema.Literal("Stopped"),
+  z.object({
+    outcome: z.literal("Stopped"),
     worktreePath: RepositoryPath,
     operation: RepositoryOperation,
   }),
 ]);
-export type BranchPulled = typeof BranchPulled.Type;
+export type BranchPulled = z.infer<typeof BranchPulled>;
 
-export const PullFailure = Schema.Union([
-  Schema.TaggedStruct("BranchMissing", {}),
-  Schema.TaggedStruct("UpstreamMissing", {
-    upstream: Schema.optional(RefName),
+export const PullFailure = z.discriminatedUnion("_tag", [
+  z.object({ _tag: z.literal("BranchMissing") }),
+  z.object({
+    _tag: z.literal("UpstreamMissing"),
+    upstream: RefName.optional(),
   }),
-  Schema.TaggedStruct("PullDiverged", {
+  z.object({
+    _tag: z.literal("PullDiverged"),
     upstream: RefName,
     upstreamCommit: ObjectId,
   }),
-  Schema.TaggedStruct("UpstreamMoved", {}),
-  Schema.TaggedStruct("PullWouldOverwrite", {
-    paths: Schema.Array(RepositoryPath).check(Schema.isMaxLength(100)),
+  z.object({ _tag: z.literal("UpstreamMoved") }),
+  z.object({
+    _tag: z.literal("PullWouldOverwrite"),
+    paths: z.array(RepositoryPath).max(100).readonly(),
   }),
-  Schema.TaggedStruct("PullBlocked", {
-    detail: Schema.String.check(Schema.isMaxLength(2_048)),
-  }),
-  Schema.TaggedStruct("PullStashKept", {
+  z.object({ _tag: z.literal("PullBlocked"), detail: z.string().max(2_048) }),
+  z.object({
+    _tag: z.literal("PullStashKept"),
     stash: ObjectId,
-    busy: Schema.Boolean,
+    busy: z.boolean(),
   }),
 ]);
-export type PullFailure = typeof PullFailure.Type;
+export type PullFailure = z.infer<typeof PullFailure>;
 
-export const RepositoryFetchSetting = Schema.Union([
-  Schema.TaggedStruct("Inherit", {}),
-  Schema.TaggedStruct("Disabled", {}),
-  Schema.TaggedStruct("Interval", {
-    seconds: Schema.Int.check(
-      Schema.isBetween({ minimum: 1, maximum: 86_400 }),
-    ),
+export const RepositoryFetchSetting = z.discriminatedUnion("_tag", [
+  z.object({ _tag: z.literal("Inherit") }),
+  z.object({ _tag: z.literal("Disabled") }),
+  z.object({
+    _tag: z.literal("Interval"),
+    seconds: z.int().min(1).max(86_400),
   }),
 ]);
-export type RepositoryFetchSetting = typeof RepositoryFetchSetting.Type;
+export type RepositoryFetchSetting = z.infer<typeof RepositoryFetchSetting>;
 
-export const FetchFailed = Schema.TaggedStruct("FetchFailed", {
-  reason: Schema.Literals([
-    "GitUnavailable",
-    "Timeout",
-    "OutputTooLarge",
-    "Failed",
-  ]),
+export const FetchFailed = z.object({
+  _tag: z.literal("FetchFailed"),
+  reason: z.enum(["GitUnavailable", "Timeout", "OutputTooLarge", "Failed"]),
 });
-export type FetchFailed = typeof FetchFailed.Type;
+export type FetchFailed = z.infer<typeof FetchFailed>;
 
-export const RepositoryFetchStatus = Schema.Struct({
-  fetching: Schema.Boolean,
-  defaultIntervalSeconds: Schema.Int.check(Schema.isGreaterThan(0)),
+export const RepositoryFetchStatus = z.object({
+  fetching: z.boolean(),
+  defaultIntervalSeconds: z.int().gt(0),
   setting: RepositoryFetchSetting,
-  failure: Schema.optionalKey(FetchFailed),
+  failure: FetchFailed.exactOptional(),
 });
-export type RepositoryFetchStatus = typeof RepositoryFetchStatus.Type;
+export type RepositoryFetchStatus = z.infer<typeof RepositoryFetchStatus>;
 
-export const FetchPrune = Schema.Struct({
-  repository: Schema.NullOr(Schema.Boolean),
-  server: Schema.Boolean,
+export const FetchPrune = z.object({
+  repository: z.boolean().nullable(),
+  server: z.boolean(),
 });
-export type FetchPrune = typeof FetchPrune.Type;
+export type FetchPrune = z.infer<typeof FetchPrune>;
 
-export const FetchPruneFailed = Schema.TaggedStruct("FetchPruneFailed", {
-  detail: Schema.String.check(Schema.isMaxLength(2_048)),
+export const FetchPruneFailed = z.object({
+  _tag: z.literal("FetchPruneFailed"),
+  detail: z.string().max(2_048),
 });
-export type FetchPruneFailed = typeof FetchPruneFailed.Type;
+export type FetchPruneFailed = z.infer<typeof FetchPruneFailed>;
 
-export const PullStrategy = Schema.Literals(["ask", ...DivergedPull.literals]);
-export type PullStrategy = typeof PullStrategy.Type;
+export const PullStrategy = z.enum(["ask", ...DivergedPull.options]);
+export type PullStrategy = z.infer<typeof PullStrategy>;
 
-export const RepositoryPullStrategy = Schema.Struct({
-  repository: Schema.NullOr(PullStrategy),
+export const RepositoryPullStrategy = z.object({
+  repository: PullStrategy.nullable(),
   server: PullStrategy,
 });
-export type RepositoryPullStrategy = typeof RepositoryPullStrategy.Type;
+export type RepositoryPullStrategy = z.infer<typeof RepositoryPullStrategy>;
 
-const RepositoryTarget = Schema.Struct({ repositoryId: RepositoryId });
+const RepositoryTarget = z.object({ repositoryId: RepositoryId });
 
 export const RepositoryPullApi = {
   fetchStatus: repositoryQuery("repositories/fetch-status", {
@@ -133,19 +123,19 @@ export const RepositoryPullApi = {
     failure: FetchFailed,
   }),
   configureFetch: repositoryCommand("repositories/configure-fetch", {
-    request: Schema.Struct({
+    request: z.object({
       repositoryId: RepositoryId,
       setting: RepositoryFetchSetting,
     }),
     success: RepositoryFetchStatus,
   }),
   readFetchPrune: route("fetch-prune/read", {
-    success: Schema.Boolean,
+    success: z.boolean(),
     failure: FetchPruneFailed,
   }),
   saveFetchPrune: route("fetch-prune/save", {
-    request: Schema.Struct({ prune: Schema.Boolean }),
-    success: Schema.Boolean,
+    request: z.object({ prune: z.boolean() }),
+    success: z.boolean(),
     failure: FetchPruneFailed,
   }),
   readRepositoryFetchPrune: repositoryQuery("repositories/fetch-prune", {
@@ -153,9 +143,9 @@ export const RepositoryPullApi = {
     success: FetchPrune,
   }),
   saveRepositoryFetchPrune: repositoryCommand("repositories/save-fetch-prune", {
-    request: Schema.Struct({
+    request: z.object({
       repositoryId: RepositoryId,
-      prune: Schema.NullOr(Schema.Boolean),
+      prune: z.boolean().nullable(),
     }),
     success: FetchPrune,
   }),
@@ -168,7 +158,7 @@ export const RepositoryPullApi = {
     success: PullStrategy,
   }),
   savePullStrategy: route("pull-strategy/save", {
-    request: Schema.Struct({ strategy: PullStrategy }),
+    request: z.object({ strategy: PullStrategy }),
     success: PullStrategy,
   }),
   readRepositoryPullStrategy: repositoryQuery("repositories/pull-strategy", {
@@ -178,9 +168,9 @@ export const RepositoryPullApi = {
   saveRepositoryPullStrategy: repositoryCommand(
     "repositories/save-pull-strategy",
     {
-      request: Schema.Struct({
+      request: z.object({
         repositoryId: RepositoryId,
-        strategy: Schema.NullOr(PullStrategy),
+        strategy: PullStrategy.nullable(),
       }),
       success: RepositoryPullStrategy,
     },

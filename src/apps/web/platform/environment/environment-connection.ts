@@ -1,37 +1,27 @@
-import {
-  Cause,
-  Data,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Option,
-  Schedule,
-  Schema,
-  Scope,
-  Stream,
-} from "effect";
-import { RpcClient, RpcClientError, RpcSerialization } from "effect/rpc";
-import { Socket } from "effect/socket";
-import type { CommandProgressUpdate } from "#contracts/command-progress/command-progress.contract.ts";
+import { createORPCClient, ORPCError } from "@orpc/client";
+import { RPCLink } from "@orpc/client/websocket";
+import { CommandProgressApi } from "#contracts/command-progress/command-progress.contract.ts";
 import {
   type EnvironmentAccessFailure,
   EnvironmentAuthorizationFailure,
 } from "#contracts/environment-authorization/environment-authorization.contract.ts";
-import type { RouteSuccess } from "#contracts/environment-connection/environment-route.contract.ts";
+import type {
+  EnvironmentRoute,
+  RouteInput,
+  RouteSuccess,
+} from "#contracts/environment-connection/environment-route.contract.ts";
 import {
-  EnvironmentRpc,
-  type EnvironmentRpcClient,
+  EnvironmentSessionApi,
   environmentLivePath,
   environmentProtocol,
   environmentSubprotocol,
-  type ProtocolMismatch,
+  ProtocolMismatch,
   unauthorizedCloseCode,
 } from "#contracts/environment-connection/environment-rpc.contract.ts";
-import type {
-  RepositoryHistoryUpdate,
-  SynchronizeRepositoryHistory,
+import {
+  RepositoryHistoryApi,
+  type RepositoryHistoryUpdate,
+  type SynchronizeRepositoryHistory,
 } from "#contracts/repository-history/repository-history.contract.ts";
 import type {
   EnvironmentRequests,
@@ -50,126 +40,178 @@ export interface EnvironmentAccess {
   readonly credential: EnvironmentCredential;
 }
 
-export class EnvironmentAccessDenied extends Data.TaggedError(
-  "EnvironmentAccessDenied",
-)<{ readonly failure: EnvironmentAccessFailure }> {}
-
-export class EnvironmentProtocolMismatch extends Data.TaggedError(
-  "EnvironmentProtocolMismatch",
-)<{ readonly serverProtocol: number }> {}
-
-export class EnvironmentUnavailable extends Data.TaggedError(
-  "EnvironmentUnavailable",
-) {}
-
 export type EnvironmentConnectionFailure =
-  | EnvironmentAccessDenied
-  | EnvironmentProtocolMismatch
-  | EnvironmentUnavailable;
+  | {
+      readonly _tag: "EnvironmentAccessDenied";
+      readonly failure: EnvironmentAccessFailure;
+    }
+  | {
+      readonly _tag: "EnvironmentProtocolMismatch";
+      readonly serverProtocol: number;
+    }
+  | { readonly _tag: "EnvironmentUnavailable" };
 
 export interface EnvironmentConnection {
   readonly environmentId: string;
-  readonly rpc: EnvironmentRpcClient;
-  readonly closed: Effect.Effect<EnvironmentConnectionFailure>;
+  readonly requests: EnvironmentRequests;
+  readonly subscribe: EnvironmentSubscriptions;
+  readonly closed: Promise<void>;
+  readonly close: () => void;
 }
+
+type Procedure = (
+  input: unknown,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<unknown>;
+
+type Procedures = Readonly<Record<string, Procedure>>;
+
+interface SocketClosed {
+  readonly _tag: "SocketClosed";
+  readonly code: number;
+  readonly reason: string;
+}
+
+const greetingDeadlineMilliseconds = 10_000;
+const silenceDeadlineMilliseconds = 90_000;
+const unavailable: EnvironmentConnectionFailure = {
+  _tag: "EnvironmentUnavailable",
+};
+const unanswered: RequestFailure<never> = { _tag: "Unanswered" };
 
 export function reconnectDelay(attempt: number) {
   return Math.min(250 * 2 ** (attempt - 1), 5_000);
 }
 
-const decodeAuthorizationFailure = Schema.decodeUnknownOption(
-  EnvironmentAuthorizationFailure,
-);
+export function isEnvironmentConnectionFailure(
+  error: unknown,
+): error is EnvironmentConnectionFailure {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    (error._tag === "EnvironmentAccessDenied" ||
+      error._tag === "EnvironmentProtocolMismatch" ||
+      error._tag === "EnvironmentUnavailable")
+  );
+}
 
-export function connectEnvironment(
+export async function connectEnvironment(
   origin: string,
   credential: EnvironmentCredential,
   invalidation: EnvironmentInvalidation,
-) {
-  return Effect.gen(function* () {
-    const disconnected = yield* Deferred.make<void>();
-    const rpc = yield* openEnvironmentRpc(origin, credential, disconnected);
-    const greeting = yield* rpc.Hello({ protocol: environmentProtocol }).pipe(
-      Effect.mapError(connectionFailure),
-      Effect.timeoutOrElse({
-        duration: "10 seconds",
-        orElse: () => Effect.fail(new EnvironmentUnavailable()),
+): Promise<EnvironmentConnection> {
+  const socket = openSocket(origin, credential);
+  const ended = Promise.withResolvers<SocketClosed>();
+  socket.addEventListener(
+    "close",
+    (event) =>
+      ended.resolve({
+        _tag: "SocketClosed",
+        code: event.code,
+        reason: event.reason,
       }),
-    );
-    const watching = yield* Effect.forkScoped(
-      watchEnvironment(rpc, greeting.sequence, invalidation),
+    { once: true },
+  );
+  const closed = ended.promise;
+  const procedures = createORPCClient<Procedures>(
+    new RPCLink({ websocket: discardingAfterClose(socket) }),
+  );
+  const open = () => socket.readyState <= WebSocket.OPEN;
+  const requests = environmentRequests(procedures, open);
+  const subscribe = environmentSubscriptions(procedures, open);
+  const close = () => {
+    socket.close();
+    ended.resolve({ _tag: "SocketClosed", code: 1006, reason: "" });
+  };
+  try {
+    const [greeting] = await beforeClose(
+      Promise.all([
+        requests(EnvironmentSessionApi.hello, {
+          protocol: environmentProtocol,
+        }),
+        watchEnvironment(subscribe, invalidation, close),
+      ]),
+      closed,
     );
     return {
       environmentId: greeting.environmentId,
-      rpc,
-      closed: Deferred.await(disconnected).pipe(
-        Effect.raceFirst(Fiber.await(watching)),
-        Effect.as(new EnvironmentUnavailable()),
-      ),
-    } satisfies EnvironmentConnection;
-  });
+      requests,
+      subscribe,
+      closed: closed.then(() => undefined),
+      close,
+    };
+  } catch (error) {
+    close();
+    throw connectionFailure(error);
+  }
 }
 
 export function environmentRequests(
-  rpc: EnvironmentRpcClient,
+  procedures: Procedures,
+  open: () => boolean,
 ): EnvironmentRequests {
-  const procedures = rpc as unknown as Record<
-    string,
-    (input: unknown) => Effect.Effect<unknown, unknown>
-  >;
-  return async (route, input, options) => {
+  return async <Route extends EnvironmentRoute>(
+    route: Route,
+    input: RouteInput<Route>,
+    options?: Parameters<EnvironmentRequests>[2],
+  ) => {
     const call = procedures[route._tag];
-    if (call === undefined) throw unanswered;
+    if (call === undefined || !open()) throw unanswered;
+    const signal = options?.signal;
+    const progress = options?.progress;
     const repositoryId = inputRepositoryId(input);
-    const exit = await Effect.runPromiseExit(
-      options?.progress === undefined || repositoryId === null
-        ? call(input)
-        : watchProgress(rpc, repositoryId, route._tag, options.progress).pipe(
-            Effect.raceFirst(call(input)),
-          ),
-      options?.signal === undefined ? undefined : { signal: options.signal },
-    );
-    if (Exit.isSuccess(exit)) return exit.value as RouteSuccess<typeof route>;
-    throw requestFailure(exit.cause);
+    const watching = new AbortController();
+    if (progress !== undefined && repositoryId !== null)
+      environmentSubscriptions(procedures, open)(
+        CommandProgressApi.watch,
+        { repositoryId, route: route._tag },
+        progress,
+        watching.signal,
+      ).catch(() => undefined);
+    try {
+      return (await call(
+        input,
+        signal === undefined ? undefined : { signal },
+      )) as RouteSuccess<Route>;
+    } catch (error) {
+      throw requestFailure(error, signal);
+    } finally {
+      watching.abort();
+    }
   };
 }
 
 export function environmentSubscriptions(
-  rpc: EnvironmentRpcClient,
+  procedures: Procedures,
+  open: () => boolean,
 ): EnvironmentSubscriptions {
-  const procedures = rpc as unknown as Record<
-    string,
-    (
-      input: unknown,
-      options: { readonly streamBufferSize: number },
-    ) => Stream.Stream<unknown, unknown>
-  >;
   return async (route, input, accept, signal) => {
     const call = procedures[route._tag];
-    if (call === undefined) throw unanswered;
-    const exit = await Effect.runPromiseExit(
-      call(input, { streamBufferSize: 1 }).pipe(
-        Stream.runForEach((value) =>
-          Effect.sync(() => accept(value as Parameters<typeof accept>[0])),
-        ),
-      ),
-      { signal },
-    );
-    if (Exit.isFailure(exit)) throw requestFailure(exit.cause);
+    if (call === undefined || !open()) throw unanswered;
+    const credits = createCredits();
+    let rejected: { readonly error: unknown } | undefined;
+    try {
+      const values = (await call(streamRequest(input, credits), {
+        signal,
+      })) as AsyncIterable<never>;
+      credits.open();
+      for await (const value of values) {
+        try {
+          await accept(value);
+        } catch (error) {
+          rejected = { error };
+          break;
+        }
+        credits.grant();
+      }
+    } catch (error) {
+      throw requestFailure(error, signal);
+    } finally {
+      credits.close();
+    }
+    if (rejected !== undefined) throw rejected.error;
   };
-}
-
-function watchProgress(
-  rpc: EnvironmentRpcClient,
-  repositoryId: string,
-  route: string,
-  progress: (update: CommandProgressUpdate) => void,
-) {
-  return rpc.WatchCommandProgress({ repositoryId, route }).pipe(
-    Stream.runForEach((update) => Effect.sync(() => progress(update))),
-    Effect.ignore,
-    Effect.andThen(Effect.never),
-  );
 }
 
 export interface EnvironmentSocket {
@@ -187,44 +229,23 @@ export async function openEnvironmentSocket(
   credential: EnvironmentCredential,
   invalidation: EnvironmentInvalidation,
 ): Promise<EnvironmentSocket> {
-  const scope = Effect.runSync(Scope.make());
-  const close = () => void Effect.runFork(Scope.close(scope, Exit.void));
-  const exit = await Effect.runPromiseExit(
-    connectEnvironment(origin, credential, invalidation).pipe(
-      Scope.provide(scope),
-    ),
-  );
-  if (Exit.isFailure(exit)) {
-    close();
-    throw unanswered;
-  }
-  const { environmentId, rpc, closed } = exit.value;
+  const connection = await connectEnvironment(
+    origin,
+    credential,
+    invalidation,
+  ).catch(() => Promise.reject(unanswered));
   return {
-    environmentId,
-    synchronizeHistory: async (request, accept, signal) => {
-      let rejected: { readonly error: unknown } | undefined;
-      const result = await Effect.runPromiseExit(
-        rpc.SynchronizeHistory(request, { streamBufferSize: 1 }).pipe(
-          Stream.runForEach((update) =>
-            Effect.tryPromise({
-              try: () => accept(update),
-              catch: (error) => {
-                rejected = { error };
-                return error;
-              },
-            }),
-          ),
-        ),
-        { signal },
-      );
-      if (rejected !== undefined) throw rejected.error;
-      if (Exit.isFailure(result)) throw requestFailure(result.cause);
-    },
-    closed: Effect.runPromise(closed).then(() => undefined),
+    environmentId: connection.environmentId,
+    synchronizeHistory: (request, accept, signal) =>
+      connection.subscribe(
+        RepositoryHistoryApi.synchronize,
+        request,
+        accept,
+        signal,
+      ),
+    closed: connection.closed,
   };
 }
-
-const unanswered: RequestFailure<never> = { _tag: "Unanswered" };
 
 export const unavailableRequests: EnvironmentRequests = async () => {
   throw unanswered;
@@ -234,89 +255,161 @@ export const unavailableSubscriptions: EnvironmentSubscriptions = async () => {
   throw unanswered;
 };
 
-function requestFailure(cause: Cause.Cause<unknown>): RequestFailure<unknown> {
-  if (Cause.hasInterruptsOnly(cause)) return { _tag: "Cancelled" };
-  const error = Cause.findErrorOption(cause);
-  return Option.isSome(error) &&
-    !(error.value instanceof RpcClientError.RpcClientError)
-    ? { _tag: "Rejected", failure: error.value }
-    : unanswered;
-}
-
-function openEnvironmentRpc(
-  origin: string,
-  credential: EnvironmentCredential,
-  disconnected: Deferred.Deferred<void>,
-) {
+function openSocket(origin: string, credential: EnvironmentCredential) {
   const url = new URL(environmentLivePath, origin);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const protocols =
+  return new WebSocket(
+    url.href,
     credential.type === "bearer"
       ? [environmentSubprotocol, credential.value]
-      : [environmentSubprotocol];
-  const protocol = Layer.effect(RpcClient.Protocol)(
-    RpcClient.makeProtocolSocket({
-      retryPolicy: Schedule.recurs(0),
-      pingTimeout: "90 seconds",
-    }),
-  ).pipe(
-    Layer.provide(
-      Socket.layerWebSocket(url.href, { protocols }).pipe(
-        Layer.provide(Socket.layerWebSocketConstructorGlobal),
-      ),
-    ),
-    Layer.provide(RpcSerialization.layerJson),
-    Layer.provide(
-      Layer.succeed(RpcClient.ConnectionHooks)({
-        onConnect: Effect.void,
-        onDisconnect: Deferred.succeed(disconnected, undefined).pipe(
-          Effect.asVoid,
-        ),
-      }),
-    ),
-  );
-  return Layer.build(protocol).pipe(
-    Effect.flatMap((context) =>
-      RpcClient.make(EnvironmentRpc).pipe(Effect.provideContext(context)),
-    ),
+      : [environmentSubprotocol],
   );
 }
 
 function watchEnvironment(
-  rpc: EnvironmentRpcClient,
-  initialSequence: number,
+  subscribe: EnvironmentSubscriptions,
   invalidation: EnvironmentInvalidation,
+  close: () => void,
 ) {
-  let sequence = initialSequence;
-  return rpc.WatchEnvironment(undefined, { streamBufferSize: 1 }).pipe(
-    Stream.runForEach((change) =>
-      Effect.sync(() => {
-        if (change.sequence <= sequence) return;
-        if (change.sequence === sequence + 1)
-          invalidation.changed(change.repositoryIds, change.kind);
-        else invalidation.changed();
+  const watching = Promise.withResolvers<void>();
+  let sequence: number | undefined;
+  let silence = setTimeout(close, silenceDeadlineMilliseconds);
+  subscribe(
+    EnvironmentSessionApi.watch,
+    undefined,
+    (change) => {
+      clearTimeout(silence);
+      silence = setTimeout(close, silenceDeadlineMilliseconds);
+      if (sequence === undefined) {
         sequence = change.sequence;
-      }),
-    ),
-    Effect.ignore,
-  );
+        watching.resolve();
+        return;
+      }
+      if (change.sequence <= sequence) return;
+      if (change.sequence === sequence + 1)
+        invalidation.changed(change.repositoryIds, change.kind);
+      else invalidation.changed();
+      sequence = change.sequence;
+    },
+    new AbortController().signal,
+  )
+    .catch(() => undefined)
+    .finally(() => {
+      clearTimeout(silence);
+      watching.reject(unavailable);
+      close();
+    });
+  return watching.promise;
 }
 
-function connectionFailure(
-  error: ProtocolMismatch | RpcClientError.RpcClientError,
-): EnvironmentConnectionFailure {
-  if (error._tag === "ProtocolMismatch")
-    return new EnvironmentProtocolMismatch({
-      serverProtocol: error.serverProtocol,
+async function* streamRequest(
+  input: unknown,
+  credits: ReturnType<typeof createCredits>,
+) {
+  if (!(await credits.opened)) return;
+  yield input;
+  while (await credits.next()) yield null;
+}
+
+function discardingAfterClose(socket: WebSocket) {
+  return {
+    get readyState() {
+      return socket.readyState === WebSocket.CONNECTING
+        ? WebSocket.CONNECTING
+        : WebSocket.OPEN;
+    },
+    addEventListener: socket.addEventListener.bind(socket),
+    removeEventListener: socket.removeEventListener.bind(socket),
+    send: (data: Parameters<WebSocket["send"]>[0]) => {
+      if (socket.readyState === WebSocket.OPEN) socket.send(data);
+    },
+  };
+}
+
+function createCredits() {
+  let available = 0;
+  let open = true;
+  let waiting: ((granted: boolean) => void) | undefined;
+  const opened = Promise.withResolvers<boolean>();
+  const settle = (granted: boolean) => {
+    const resolve = waiting;
+    waiting = undefined;
+    resolve?.(granted);
+  };
+  return {
+    opened: opened.promise,
+    open: () => opened.resolve(true),
+    grant: () => {
+      available += 1;
+      settle(true);
+    },
+    close: () => {
+      open = false;
+      opened.resolve(false);
+      settle(false);
+    },
+    next: () => {
+      if (!open) return Promise.resolve(false);
+      if (available > 0) {
+        available -= 1;
+        return Promise.resolve(true);
+      }
+      return new Promise<boolean>((resolve) => {
+        waiting = (granted) => {
+          if (granted) available -= 1;
+          resolve(granted);
+        };
+      });
+    },
+  };
+}
+
+async function beforeClose<Value>(
+  request: Promise<Value>,
+  closed: Promise<SocketClosed>,
+) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await new Promise<Value>((resolve, reject) => {
+      timer = setTimeout(
+        () => reject(unavailable),
+        greetingDeadlineMilliseconds,
+      );
+      request.then(resolve, reject);
+      closed.then(reject);
     });
-  const reason = error.reason;
-  if (
-    reason._tag === "SocketCloseError" &&
-    reason.code === unauthorizedCloseCode
-  ) {
-    const failure = decodeAuthorizationFailure({ _tag: reason.closeReason });
-    if (Option.isSome(failure))
-      return new EnvironmentAccessDenied({ failure: failure.value });
+  } finally {
+    clearTimeout(timer);
   }
-  return new EnvironmentUnavailable();
+}
+
+function requestFailure(
+  error: unknown,
+  signal: AbortSignal | undefined,
+): RequestFailure<unknown> {
+  if (signal?.aborted) return { _tag: "Cancelled" };
+  if (error instanceof ORPCError && error.code === "Rejected")
+    return { _tag: "Rejected", failure: error.data };
+  return unanswered;
+}
+
+function connectionFailure(error: unknown): EnvironmentConnectionFailure {
+  const reason = error as Partial<RequestFailure<unknown> | SocketClosed>;
+  const mismatch =
+    reason._tag === "Rejected"
+      ? ProtocolMismatch.safeParse(reason.failure)
+      : undefined;
+  if (mismatch?.success)
+    return {
+      _tag: "EnvironmentProtocolMismatch",
+      serverProtocol: mismatch.data.serverProtocol,
+    };
+  if (reason._tag === "SocketClosed" && reason.code === unauthorizedCloseCode) {
+    const failure = EnvironmentAuthorizationFailure.safeParse({
+      _tag: reason.reason,
+    });
+    if (failure.success)
+      return { _tag: "EnvironmentAccessDenied", failure: failure.data };
+  }
+  return unavailable;
 }

@@ -38,7 +38,7 @@ export type EnvironmentRequests = <Route extends EnvironmentRoute>(
 export type EnvironmentSubscriptions = <Route extends EnvironmentStreamRoute>(
   route: Route,
   input: RouteInput<Route>,
-  accept: (value: StreamValue<Route>) => void,
+  accept: (value: StreamValue<Route>) => void | Promise<void>,
   signal: AbortSignal,
 ) => Promise<void>;
 

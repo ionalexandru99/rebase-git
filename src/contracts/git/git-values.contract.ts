@@ -1,34 +1,24 @@
-import { Schema } from "effect";
+import { z } from "zod";
 
-export const RepositoryId = Schema.String.check(Schema.isUUID(4));
-export type RepositoryId = typeof RepositoryId.Type;
+export const RepositoryId = z.uuidv4();
+export type RepositoryId = z.infer<typeof RepositoryId>;
 
-export const ObjectId = Schema.String.check(
-  Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
-);
-export type ObjectId = typeof ObjectId.Type;
-export const isObjectId = Schema.is(ObjectId);
+export const ObjectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
+export type ObjectId = z.infer<typeof ObjectId>;
+export const isObjectId = (value: unknown): value is ObjectId =>
+  ObjectId.safeParse(value).success;
 
-export const RepositoryPath = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(4_096),
-);
-export type RepositoryPath = typeof RepositoryPath.Type;
+export const RepositoryPath = z.string().min(1).max(4_096);
+export type RepositoryPath = z.infer<typeof RepositoryPath>;
 
-export const RemoteUrl = Schema.String.check(
-  Schema.isMaxLength(4_096),
-  Schema.isPattern(/^[^\s-]\S*$/),
-);
-export type RemoteUrl = typeof RemoteUrl.Type;
+export const RemoteUrl = z
+  .string()
+  .max(4_096)
+  .regex(/^[^\s-]\S*$/);
+export type RemoteUrl = z.infer<typeof RemoteUrl>;
 
-export const RefName = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(1_024),
-);
-export type RefName = typeof RefName.Type;
+export const RefName = z.string().min(1).max(1_024);
+export type RefName = z.infer<typeof RefName>;
 
-export const RemoteName = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(255),
-);
-export type RemoteName = typeof RemoteName.Type;
+export const RemoteName = z.string().min(1).max(255);
+export type RemoteName = z.infer<typeof RemoteName>;

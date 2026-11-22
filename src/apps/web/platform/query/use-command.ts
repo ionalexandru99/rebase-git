@@ -8,6 +8,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { type RefObject, useRef } from "react";
+import { z } from "zod";
 import type { CommandProgressUpdate } from "#contracts/command-progress/command-progress.contract.ts";
 import type {
   EnvironmentRoute,
@@ -199,8 +200,7 @@ function targetsRepository(route: EnvironmentRoute) {
 }
 
 function requestHas(route: EnvironmentRoute, field: string) {
-  const request = route.payloadSchema as { readonly fields?: object };
-  return request.fields !== undefined && field in request.fields;
+  return route.request instanceof z.ZodObject && field in route.request.shape;
 }
 
 async function prepare<Input>(

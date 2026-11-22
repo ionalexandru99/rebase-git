@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
@@ -9,47 +9,40 @@ import {
   RepositoryPath,
 } from "#contracts/git/git-values.contract.ts";
 
-export const SettledDay = Schema.String.check(
-  Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/),
-);
-export type SettledDay = typeof SettledDay.Type;
+export const SettledDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+export type SettledDay = z.infer<typeof SettledDay>;
 
 const SettlingScope = {
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
 };
 
-export const SettleBranches = Schema.Struct({
+export const SettleBranches = z.object({
   ...SettlingScope,
-  names: Schema.Array(RefName).check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(1_000),
-  ),
-  settled: Schema.Boolean,
+  names: z.array(RefName).min(1).max(1_000).readonly(),
+  settled: z.boolean(),
 });
-export type SettleBranches = typeof SettleBranches.Type;
+export type SettleBranches = z.infer<typeof SettleBranches>;
 
 export const defaultDeleteSettledAfter = 3;
 
-export const BranchSettings = Schema.Struct({
-  autoSettle: Schema.Boolean,
-  deleteSettledAfter: Schema.Int.check(
-    Schema.isBetween({ minimum: 0, maximum: 365 }),
-  ),
+export const BranchSettings = z.object({
+  autoSettle: z.boolean(),
+  deleteSettledAfter: z.int().min(0).max(365),
 });
-export type BranchSettings = typeof BranchSettings.Type;
+export type BranchSettings = z.infer<typeof BranchSettings>;
 
 export const BranchSettlingApi = {
   settle: repositoryCommand("repositories/branches/settle", {
     request: SettleBranches,
-    success: Schema.Struct({}),
+    success: z.object({}),
   }),
   settings: repositoryQuery("repositories/branch-settings", {
-    request: Schema.Struct(SettlingScope),
+    request: z.object(SettlingScope),
     success: BranchSettings,
   }),
   saveSettings: repositoryCommand("repositories/branch-settings/save", {
-    request: Schema.Struct({ ...SettlingScope, ...BranchSettings.fields }),
+    request: z.object({ ...SettlingScope, ...BranchSettings.shape }),
     success: BranchSettings,
   }),
 };

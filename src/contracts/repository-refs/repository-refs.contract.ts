@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import { SettledDay } from "#contracts/branch-settling/branch-settling.contract.ts";
 import {
   repositoryCommand,
@@ -13,71 +13,71 @@ import {
   RepositoryPath,
 } from "#contracts/git/git-values.contract.ts";
 
-export const RepositoryHead = Schema.Struct({
-  branch: Schema.optional(RefName),
+export const RepositoryHead = z.object({
+  branch: RefName.optional(),
   commit: ObjectId,
 });
-export type RepositoryHead = typeof RepositoryHead.Type;
+export type RepositoryHead = z.infer<typeof RepositoryHead>;
 
-export const RepositoryWorktree = Schema.Struct({
+export const RepositoryWorktree = z.object({
   head: RepositoryHead,
-  main: Schema.Boolean,
+  main: z.boolean(),
   path: RepositoryPath,
-  locked: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(1_024))),
-  missing: Schema.optionalKey(Schema.Boolean),
+  locked: z.string().max(1_024).exactOptional(),
+  missing: z.boolean().exactOptional(),
 });
-export type RepositoryWorktree = typeof RepositoryWorktree.Type;
+export type RepositoryWorktree = z.infer<typeof RepositoryWorktree>;
 
-export const BranchUpstream = Schema.Struct({
-  ahead: Schema.Natural,
-  behind: Schema.Natural,
-  gone: Schema.Boolean,
+export const BranchUpstream = z.object({
+  ahead: z.int().nonnegative(),
+  behind: z.int().nonnegative(),
+  gone: z.boolean(),
   name: RefName,
 });
-export type BranchUpstream = typeof BranchUpstream.Type;
+export type BranchUpstream = z.infer<typeof BranchUpstream>;
 
-export const LocalBranch = Schema.Struct({
+export const LocalBranch = z.object({
   name: RefName,
-  settled: Schema.optional(SettledDay),
-  target: Schema.optional(ObjectId),
-  upstream: Schema.optional(BranchUpstream),
-  worktreePath: Schema.optional(RepositoryPath),
+  settled: SettledDay.optional(),
+  target: ObjectId.optional(),
+  upstream: BranchUpstream.optional(),
+  worktreePath: RepositoryPath.optional(),
 });
-export type LocalBranch = typeof LocalBranch.Type;
+export type LocalBranch = z.infer<typeof LocalBranch>;
 
-export const RemoteBranch = Schema.Struct({
-  name: RefName,
-  remote: RemoteName,
-  target: Schema.optional(ObjectId),
-});
-export type RemoteBranch = typeof RemoteBranch.Type;
-
-export const RemoteDefaultBranch = Schema.Struct({
+export const RemoteBranch = z.object({
   name: RefName,
   remote: RemoteName,
+  target: ObjectId.optional(),
 });
-export type RemoteDefaultBranch = typeof RemoteDefaultBranch.Type;
+export type RemoteBranch = z.infer<typeof RemoteBranch>;
 
-export const RepositoryTag = Schema.Struct({
+export const RemoteDefaultBranch = z.object({
   name: RefName,
-  target: Schema.optional(ObjectId),
-  object: Schema.optional(ObjectId),
+  remote: RemoteName,
 });
-export type RepositoryTag = typeof RepositoryTag.Type;
+export type RemoteDefaultBranch = z.infer<typeof RemoteDefaultBranch>;
 
-export const RepositoryRefsTruncation = Schema.Struct({
-  branches: Schema.Boolean,
-  remoteBranches: Schema.Boolean,
-  tags: Schema.Boolean,
+export const RepositoryTag = z.object({
+  name: RefName,
+  target: ObjectId.optional(),
+  object: ObjectId.optional(),
 });
-export type RepositoryRefsTruncation = typeof RepositoryRefsTruncation.Type;
+export type RepositoryTag = z.infer<typeof RepositoryTag>;
 
-export const RepositoryRefs = Schema.Struct({
-  remoteProviders: Schema.optionalKey(
-    Schema.Array(
-      Schema.Struct({
+export const RepositoryRefsTruncation = z.object({
+  branches: z.boolean(),
+  remoteBranches: z.boolean(),
+  tags: z.boolean(),
+});
+export type RepositoryRefsTruncation = z.infer<typeof RepositoryRefsTruncation>;
+
+export const RepositoryRefs = z.object({
+  remoteProviders: z
+    .array(
+      z.object({
         remote: RemoteName,
-        provider: Schema.Literals([
+        provider: z.enum([
           "github",
           "gitlab",
           "bitbucket",
@@ -89,68 +89,78 @@ export const RepositoryRefs = Schema.Struct({
           "git",
         ]),
       }),
-    ).check(Schema.isMaxLength(256)),
-  ),
-  branches: Schema.Array(LocalBranch).check(Schema.isMaxLength(10_000)),
-  logicalRepositoryId: Schema.optionalKey(RepositoryId),
-  remoteBranches: Schema.Array(RemoteBranch).check(Schema.isMaxLength(20_000)),
-  remoteDefaultBranches: Schema.optionalKey(
-    Schema.Array(RemoteDefaultBranch).check(Schema.isMaxLength(256)),
-  ),
+    )
+    .max(256)
+    .readonly()
+    .exactOptional(),
+  branches: z.array(LocalBranch).max(10_000).readonly(),
+  logicalRepositoryId: RepositoryId.exactOptional(),
+  remoteBranches: z.array(RemoteBranch).max(20_000).readonly(),
+  remoteDefaultBranches: z
+    .array(RemoteDefaultBranch)
+    .max(256)
+    .readonly()
+    .exactOptional(),
   repositoryId: RepositoryId,
-  tags: Schema.Array(RepositoryTag).check(Schema.isMaxLength(10_000)),
+  tags: z.array(RepositoryTag).max(10_000).readonly(),
   truncated: RepositoryRefsTruncation,
-  worktrees: Schema.Array(RepositoryWorktree).check(Schema.isMaxLength(256)),
+  worktrees: z.array(RepositoryWorktree).max(256).readonly(),
 });
-export type RepositoryRefs = typeof RepositoryRefs.Type;
+export type RepositoryRefs = z.infer<typeof RepositoryRefs>;
 
-export const RepositoryRefTarget = Schema.Union([
-  Schema.TaggedStruct("LocalBranch", { name: RefName }),
-  Schema.TaggedStruct("RemoteBranch", { name: RefName, remote: RemoteName }),
-  Schema.TaggedStruct("Tag", { name: RefName }),
+export const RepositoryRefTarget = z.discriminatedUnion("_tag", [
+  z.object({ _tag: z.literal("LocalBranch"), name: RefName }),
+  z.object({
+    _tag: z.literal("RemoteBranch"),
+    name: RefName,
+    remote: RemoteName,
+  }),
+  z.object({ _tag: z.literal("Tag"), name: RefName }),
 ]);
-export type RepositoryRefTarget = typeof RepositoryRefTarget.Type;
+export type RepositoryRefTarget = z.infer<typeof RepositoryRefTarget>;
 
-export const CheckoutRepositoryRef = Schema.Struct({
+export const CheckoutRepositoryRef = z.object({
   repositoryId: RepositoryId,
   target: RepositoryRefTarget,
   worktreePath: RepositoryPath,
 });
-export type CheckoutRepositoryRef = typeof CheckoutRepositoryRef.Type;
+export type CheckoutRepositoryRef = z.infer<typeof CheckoutRepositoryRef>;
 
-export const RepositoryCheckedOut = Schema.Struct({
+export const RepositoryCheckedOut = z.object({
   head: RepositoryHead,
-  stash: Schema.Literals(["none", "restored", "kept"]),
+  stash: z.enum(["none", "restored", "kept"]),
   worktreePath: RepositoryPath,
 });
-export type RepositoryCheckedOut = typeof RepositoryCheckedOut.Type;
+export type RepositoryCheckedOut = z.infer<typeof RepositoryCheckedOut>;
 
-export const RefMissing = Schema.TaggedStruct("RefMissing", {
+export const RefMissing = z.object({
+  _tag: z.literal("RefMissing"),
   name: RefName,
 });
-export type RefMissing = typeof RefMissing.Type;
-export const BranchCheckedOutElsewhere = Schema.TaggedStruct(
-  "BranchCheckedOutElsewhere",
-  {
-    name: RefName,
-    worktreePath: RepositoryPath,
-  },
-);
-export const CheckoutRejected = Schema.TaggedStruct("CheckoutRejected", {
-  reason: Schema.Literals(["LocalChanges", "StashFailed"]),
+export type RefMissing = z.infer<typeof RefMissing>;
+export const BranchCheckedOutElsewhere = z.object({
+  _tag: z.literal("BranchCheckedOutElsewhere"),
+  name: RefName,
+  worktreePath: RepositoryPath,
+});
+export const CheckoutRejected = z.object({
+  _tag: z.literal("CheckoutRejected"),
+  reason: z.enum(["LocalChanges", "StashFailed"]),
 });
 
-export const RepositoryCheckoutFailure = Schema.Union([
+export const RepositoryCheckoutFailure = z.discriminatedUnion("_tag", [
   RefMissing,
   BranchCheckedOutElsewhere,
   CheckoutRejected,
 ]);
-export type RepositoryCheckoutFailure = typeof RepositoryCheckoutFailure.Type;
+export type RepositoryCheckoutFailure = z.infer<
+  typeof RepositoryCheckoutFailure
+>;
 
-export const ReadRepositoryRefs = Schema.Struct({
+export const ReadRepositoryRefs = z.object({
   repositoryId: RepositoryId,
 });
-export type ReadRepositoryRefs = typeof ReadRepositoryRefs.Type;
+export type ReadRepositoryRefs = z.infer<typeof ReadRepositoryRefs>;
 
 export const RepositoryRefsApi = {
   read: route("repositories/refs/read", {

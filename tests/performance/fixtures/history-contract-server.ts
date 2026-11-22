@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import {
   EnvironmentPairingExchanged,
   environmentPairingExchangePath,
@@ -41,9 +41,7 @@ try {
               method: "POST",
             },
           );
-          return Schema.decodeUnknownSync(EnvironmentPairingExchanged)(
-            await response.json(),
-          );
+          return EnvironmentPairingExchanged.parse(await response.json());
         });
         yield* Effect.sync(() => {
           globalThis.gc?.();

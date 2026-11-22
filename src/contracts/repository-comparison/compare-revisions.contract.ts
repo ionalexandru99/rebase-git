@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   CommitFile,
   InspectCommitDiff,
@@ -15,40 +15,39 @@ import { RepositoryRefTarget } from "#contracts/repository-refs/repository-refs.
 
 export const maximumComparisonCommits = 1_000;
 
-export const ComparisonSide = Schema.Union([
+export const ComparisonSide = z.discriminatedUnion("_tag", [
   RepositoryRefTarget,
-  Schema.TaggedStruct("Commit", { oid: ObjectId }),
+  z.object({ _tag: z.literal("Commit"), oid: ObjectId }),
 ]);
-export type ComparisonSide = typeof ComparisonSide.Type;
-export const isComparisonSide = Schema.is(ComparisonSide);
+export type ComparisonSide = z.infer<typeof ComparisonSide>;
+export const isComparisonSide = (value: unknown): value is ComparisonSide =>
+  ComparisonSide.safeParse(value).success;
 
-export const CompareRevisions = Schema.Struct({
+export const CompareRevisions = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
   from: ComparisonSide,
   to: ComparisonSide,
 });
-export type CompareRevisions = typeof CompareRevisions.Type;
+export type CompareRevisions = z.infer<typeof CompareRevisions>;
 
-export const ComparisonCommit = Schema.Struct({
+export const ComparisonCommit = z.object({
   oid: ObjectId,
-  parentOid: Schema.NullOr(ObjectId),
-  subject: Schema.String.check(Schema.isMaxLength(1_024)),
+  parentOid: ObjectId.nullable(),
+  subject: z.string().max(1_024),
 });
-export type ComparisonCommit = typeof ComparisonCommit.Type;
+export type ComparisonCommit = z.infer<typeof ComparisonCommit>;
 
-export const Comparison = Schema.Struct({
+export const Comparison = z.object({
   from: ObjectId,
   to: ObjectId,
-  base: Schema.NullOr(ObjectId),
-  files: Schema.Array(CommitFile),
-  truncated: Schema.Boolean,
-  commits: Schema.Array(ComparisonCommit).check(
-    Schema.isMaxLength(maximumComparisonCommits),
-  ),
-  commitsComplete: Schema.Boolean,
+  base: ObjectId.nullable(),
+  files: z.array(CommitFile).readonly(),
+  truncated: z.boolean(),
+  commits: z.array(ComparisonCommit).max(maximumComparisonCommits).readonly(),
+  commitsComplete: z.boolean(),
 });
-export type Comparison = typeof Comparison.Type;
+export type Comparison = z.infer<typeof Comparison>;
 
 export const CompareApi = {
   compare: repositoryQuery("repositories/compare", {

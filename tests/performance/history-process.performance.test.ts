@@ -4,16 +4,17 @@ import { readFile } from "node:fs/promises";
 import { arch, cpus, platform, release, totalmem } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
+import { createORPCClient } from "@orpc/client";
+import { RPCLink } from "@orpc/client/websocket";
 import { expect, test } from "@playwright/test";
-import { Effect, Exit, Scope, Stream } from "effect";
-import { RpcClient, RpcSerialization } from "effect/rpc";
-import { Socket } from "effect/socket";
 import {
-  EnvironmentRpc,
+  EnvironmentSessionApi,
   environmentLivePath,
   environmentProtocol,
   environmentSubprotocol,
 } from "#contracts/environment-connection/environment-rpc.contract.ts";
+import { RepositoryHistoryApi } from "#contracts/repository-history/repository-history.contract.ts";
+import { environmentSubscriptions } from "#web/platform/environment/environment-connection.ts";
 
 const execute = promisify(execFile);
 const corpusPath = process.env.HISTORY_PROCESS_CORPUS_PATH;
@@ -96,30 +97,21 @@ test("prepared corpus stays within server and Git process budgets", async () => 
     `${started.origin.replace("http://", "ws://")}${environmentLivePath}`,
     [environmentSubprotocol, started.credential],
   );
-  const rpcScope = Effect.runSync(Scope.make());
   try {
     await new Promise<void>((resolveOpen, reject) => {
       socket.onopen = () => resolveOpen();
       socket.onerror = () => reject(new Error("WebSocket failed"));
     });
-    const client = await Effect.runPromise(
-      Effect.gen(function* () {
-        const transport = yield* Socket.fromWebSocket(Effect.succeed(socket));
-        const protocol = yield* RpcClient.makeProtocolSocket().pipe(
-          Effect.provideService(Socket.Socket, transport),
-        );
-        return yield* RpcClient.make(EnvironmentRpc).pipe(
-          Effect.provideService(RpcClient.Protocol, protocol),
-        );
-      }).pipe(
-        Effect.provideService(Scope.Scope, rpcScope),
-        Effect.provideService(
-          RpcSerialization.RpcSerialization,
-          RpcSerialization.json,
-        ),
-      ),
+    const procedures = createORPCClient<
+      Readonly<Record<string, (input: unknown) => Promise<unknown>>>
+    >(new RPCLink({ websocket: socket }));
+    const subscribe = environmentSubscriptions(
+      procedures,
+      () => socket.readyState === WebSocket.OPEN,
     );
-    await Effect.runPromise(client.Hello({ protocol: environmentProtocol }));
+    await procedures[EnvironmentSessionApi.hello._tag]?.({
+      protocol: environmentProtocol,
+    });
     let received = 0;
     let batches = 0;
     let wireBytes = 0;
@@ -128,30 +120,26 @@ test("prepared corpus stays within server and Git process budgets", async () => 
     const countWireBytes = (event: MessageEvent) => {
       if (typeof event.data === "string")
         wireBytes += Buffer.byteLength(event.data);
+      else if (event.data instanceof ArrayBuffer)
+        wireBytes += event.data.byteLength;
     };
     socket.addEventListener("message", countWireBytes);
-    await Effect.runPromise(
-      client
-        .SynchronizeHistory(
-          {
-            repositoryId: started.repositoryId,
-            knownTips: [],
-            shallowOids: [],
-          },
-          { streamBufferSize: 1 },
-        )
-        .pipe(
-          Stream.runForEach((update) =>
-            Effect.sync(() => {
-              if (update._tag === "RepositoryHistoryTips")
-                snapshotRoots = update.rootOids;
-              else {
-                received += update.commits.length;
-                batches += 1;
-              }
-            }),
-          ),
-        ),
+    await subscribe(
+      RepositoryHistoryApi.synchronize,
+      {
+        repositoryId: started.repositoryId,
+        knownTips: [],
+        shallowOids: [],
+      },
+      (update) => {
+        if (update._tag === "RepositoryHistoryTips")
+          snapshotRoots = update.rootOids;
+        else {
+          received += update.commits.length;
+          batches += 1;
+        }
+      },
+      new AbortController().signal,
     );
     socket.removeEventListener("message", countWireBytes);
     await sample();
@@ -203,7 +191,6 @@ test("prepared corpus stays within server and Git process budgets", async () => 
     expect(metrics.maximumGitRssBytes).toBeLessThan(256 * 1_048_576);
   } finally {
     clearInterval(timer);
-    await Effect.runPromise(Scope.close(rpcScope, Exit.void));
     socket.close();
     child.kill("SIGTERM");
     await closed;

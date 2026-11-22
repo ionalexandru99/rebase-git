@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
@@ -9,148 +9,145 @@ import {
 } from "#contracts/git/git-values.contract.ts";
 import { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 
-const Revision = Schema.String.check(Schema.isMaxLength(128));
-export const ChangeSection = Schema.Literals(["unstaged", "staged"]);
-export type ChangeSection = typeof ChangeSection.Type;
-export const ChangesScope = Schema.Struct({
+const Revision = z.string().max(128);
+export const ChangeSection = z.enum(["unstaged", "staged"]);
+export type ChangeSection = z.infer<typeof ChangeSection>;
+export const ChangesScope = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
-  amend: Schema.Boolean,
+  amend: z.boolean(),
 });
-export type ChangesScope = typeof ChangesScope.Type;
-export const ChangedLines = Schema.NullOr(
-  Schema.Struct({ added: Schema.Number, removed: Schema.Number }),
-);
-export type ChangedLines = typeof ChangedLines.Type;
-export const ChangedFile = Schema.Struct({
+export type ChangesScope = z.infer<typeof ChangesScope>;
+export const ChangedLines = z
+  .object({ added: z.number(), removed: z.number() })
+  .nullable();
+export type ChangedLines = z.infer<typeof ChangedLines>;
+export const ChangedFile = z.object({
   path: RepositoryPath,
-  previousPath: Schema.NullOr(RepositoryPath),
-  status: Schema.Literals(["A", "M", "D", "R", "T", "U", "?"]),
+  previousPath: RepositoryPath.nullable(),
+  status: z.enum(["A", "M", "D", "R", "T", "U", "?"]),
   lines: ChangedLines,
-  lfs: Schema.Boolean,
+  lfs: z.boolean(),
 });
-export type ChangedFile = typeof ChangedFile.Type;
-export const RepositoryChanges = Schema.Struct({
+export type ChangedFile = z.infer<typeof ChangedFile>;
+export const RepositoryChanges = z.object({
   revision: Revision,
-  head: Schema.NullOr(Schema.String),
-  message: Schema.String,
-  unstaged: Schema.Array(ChangedFile),
-  staged: Schema.Array(ChangedFile),
-  renamesLimited: Schema.Boolean,
+  head: z.string().nullable(),
+  message: z.string(),
+  unstaged: z.array(ChangedFile).readonly(),
+  staged: z.array(ChangedFile).readonly(),
+  renamesLimited: z.boolean(),
 });
-export type RepositoryChanges = typeof RepositoryChanges.Type;
-export const ViewedChange = Schema.Struct({
+export type RepositoryChanges = z.infer<typeof RepositoryChanges>;
+export const ViewedChange = z.object({
   section: ChangeSection,
   path: RepositoryPath,
 });
-export type ViewedChange = typeof ViewedChange.Type;
-export const ReadChangeDiff = Schema.Struct({
-  ...ChangesScope.fields,
-  ...ViewedChange.fields,
-  whole: Schema.optional(Schema.Boolean),
+export type ViewedChange = z.infer<typeof ViewedChange>;
+export const ReadChangeDiff = z.object({
+  ...ChangesScope.shape,
+  ...ViewedChange.shape,
+  whole: z.boolean().optional(),
 });
-export type ReadChangeDiff = typeof ReadChangeDiff.Type;
-export const ChangesWritten = Schema.Struct({
+export type ReadChangeDiff = z.infer<typeof ReadChangeDiff>;
+export const ChangesWritten = z.object({
   changes: RepositoryChanges,
-  diff: Schema.NullOr(ChangeDiff),
+  diff: ChangeDiff.nullable(),
 });
-export type ChangesWritten = typeof ChangesWritten.Type;
-export const ChangeSelection = Schema.Union([
-  Schema.TaggedStruct("All", {}),
-  Schema.TaggedStruct("Files", {
-    paths: Schema.Array(RepositoryPath).check(
-      Schema.isMinLength(1),
-      Schema.isMaxLength(1000),
-    ),
+export type ChangesWritten = z.infer<typeof ChangesWritten>;
+export const ChangeSelection = z.discriminatedUnion("_tag", [
+  z.object({ _tag: z.literal("All") }),
+  z.object({
+    _tag: z.literal("Files"),
+    paths: z.array(RepositoryPath).min(1).max(1000).readonly(),
   }),
-  Schema.TaggedStruct("Lines", {
+  z.object({
+    _tag: z.literal("Lines"),
     path: RepositoryPath,
     revision: Revision,
-    lines: Schema.Array(
-      Schema.String.check(Schema.isPattern(/^[+-][1-9][0-9]*$/)),
-    ).check(Schema.isMinLength(1), Schema.isMaxLength(10000)),
+    lines: z
+      .array(z.string().regex(/^[+-][1-9][0-9]*$/))
+      .min(1)
+      .max(10000)
+      .readonly(),
   }),
 ]);
-export type ChangeSelection = typeof ChangeSelection.Type;
-export const MutateChanges = Schema.Struct({
-  ...ChangesScope.fields,
+export type ChangeSelection = z.infer<typeof ChangeSelection>;
+export const MutateChanges = z.object({
+  ...ChangesScope.shape,
   revision: Revision,
   section: ChangeSection,
-  action: Schema.Literals(["stage", "unstage", "discard"]),
+  action: z.enum(["stage", "unstage", "discard"]),
   selection: ChangeSelection,
-  viewed: Schema.optionalKey(ViewedChange),
+  viewed: ViewedChange.exactOptional(),
 });
-export type MutateChanges = typeof MutateChanges.Type;
-const Tree = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40,64}$/));
-const ChangesSnapshot = Schema.Struct({ index: Tree, worktree: Tree });
-export const DiscardedChanges = Schema.Struct({
+export type MutateChanges = z.infer<typeof MutateChanges>;
+const Tree = z.string().regex(/^[0-9a-f]{40,64}$/);
+const ChangesSnapshot = z.object({ index: Tree, worktree: Tree });
+export const DiscardedChanges = z.object({
   before: ChangesSnapshot,
   after: ChangesSnapshot,
 });
-export type DiscardedChanges = typeof DiscardedChanges.Type;
-export const ChangesMutated = Schema.Struct({
-  ...ChangesWritten.fields,
-  discarded: Schema.NullOr(DiscardedChanges),
+export type DiscardedChanges = z.infer<typeof DiscardedChanges>;
+export const ChangesMutated = z.object({
+  ...ChangesWritten.shape,
+  discarded: DiscardedChanges.nullable(),
 });
-export type ChangesMutated = typeof ChangesMutated.Type;
-export const UndoDiscard = Schema.Struct({
-  ...ChangesScope.fields,
+export type ChangesMutated = z.infer<typeof ChangesMutated>;
+export const UndoDiscard = z.object({
+  ...ChangesScope.shape,
   discarded: DiscardedChanges,
-  viewed: Schema.optionalKey(ViewedChange),
+  viewed: ViewedChange.exactOptional(),
 });
-export type UndoDiscard = typeof UndoDiscard.Type;
-export const CommitChanges = Schema.Struct({
-  ...ChangesScope.fields,
+export type UndoDiscard = z.infer<typeof UndoDiscard>;
+export const CommitChanges = z.object({
+  ...ChangesScope.shape,
   revision: Revision,
-  message: Schema.String.check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(32000),
-  ),
-  viewed: Schema.optionalKey(ViewedChange),
+  message: z.string().min(1).max(32000),
+  viewed: ViewedChange.exactOptional(),
 });
-export type CommitChanges = typeof CommitChanges.Type;
+export type CommitChanges = z.infer<typeof CommitChanges>;
 export const maximumIgnoredPaths = 1000;
-export const IgnoreTarget = Schema.Literals(["repository", "local"]);
-export type IgnoreTarget = typeof IgnoreTarget.Type;
-export const IgnorePaths = Schema.Struct({
-  ...ChangesScope.fields,
-  target: Schema.NullOr(IgnoreTarget),
-  paths: Schema.Array(RepositoryPath).check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(maximumIgnoredPaths),
-  ),
-  untrack: Schema.Boolean,
-  viewed: Schema.optionalKey(ViewedChange),
+export const IgnoreTarget = z.enum(["repository", "local"]);
+export type IgnoreTarget = z.infer<typeof IgnoreTarget>;
+export const IgnorePaths = z.object({
+  ...ChangesScope.shape,
+  target: IgnoreTarget.nullable(),
+  paths: z.array(RepositoryPath).min(1).max(maximumIgnoredPaths).readonly(),
+  untrack: z.boolean(),
+  viewed: ViewedChange.exactOptional(),
 });
-export type IgnorePaths = typeof IgnorePaths.Type;
-export const IgnoreTracked = Schema.TaggedStruct("IgnoreTracked", {
+export type IgnorePaths = z.infer<typeof IgnorePaths>;
+export const IgnoreTracked = z.object({
+  _tag: z.literal("IgnoreTracked"),
   path: RepositoryPath,
-  count: Schema.Number,
+  count: z.number(),
 });
-export type IgnoreTracked = typeof IgnoreTracked.Type;
+export type IgnoreTracked = z.infer<typeof IgnoreTracked>;
 
 export function ignoreTracked(path: string, count: number): IgnoreTracked {
   return { _tag: "IgnoreTracked", path, count };
 }
-export const ReadIgnoreRule = Schema.Struct({
+export const ReadIgnoreRule = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
   path: RepositoryPath,
-  includeTracked: Schema.Boolean,
+  includeTracked: z.boolean(),
 });
-export type ReadIgnoreRule = typeof ReadIgnoreRule.Type;
-export const IgnoreRule = Schema.Struct({
-  pattern: Schema.String.check(Schema.isMaxLength(4096)),
-  file: Schema.String.check(Schema.isMaxLength(4096)),
-  line: Schema.Int,
-  inWorktree: Schema.Boolean,
+export type ReadIgnoreRule = z.infer<typeof ReadIgnoreRule>;
+export const IgnoreRule = z.object({
+  pattern: z.string().max(4096),
+  file: z.string().max(4096),
+  line: z.int(),
+  inWorktree: z.boolean(),
 });
-export type IgnoreRule = typeof IgnoreRule.Type;
-export const ChangesFailure = Schema.TaggedStruct("ChangesFailed", {
-  reason: Schema.Literals(["Stale", "Conflict", "Unsupported"]),
-  detail: Schema.String.check(Schema.isMaxLength(2048)),
+export type IgnoreRule = z.infer<typeof IgnoreRule>;
+export const ChangesFailure = z.object({
+  _tag: z.literal("ChangesFailed"),
+  reason: z.enum(["Stale", "Conflict", "Unsupported"]),
+  detail: z.string().max(2048),
 });
-export type ChangesFailure = typeof ChangesFailure.Type;
+export type ChangesFailure = z.infer<typeof ChangesFailure>;
 
 export function changesFailed(
   reason: ChangesFailure["reason"],
@@ -183,11 +180,11 @@ export const RepositoryChangesApi = {
   ignore: repositoryCommand("repositories/changes/ignore", {
     request: IgnorePaths,
     success: ChangesWritten,
-    failure: Schema.Union([ChangesFailure, IgnoreTracked]),
+    failure: z.discriminatedUnion("_tag", [ChangesFailure, IgnoreTracked]),
   }),
   ignoreRule: repositoryQuery("repositories/changes/ignore-rule", {
     request: ReadIgnoreRule,
-    success: Schema.NullOr(IgnoreRule),
+    success: IgnoreRule.nullable(),
   }),
   commit: repositoryCommand("repositories/changes/commit", {
     request: CommitChanges,

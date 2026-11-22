@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
@@ -20,55 +20,51 @@ const TagScope = {
   worktreePath: RepositoryPath,
 };
 
-const TagMessage = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(65_536),
-);
+const TagMessage = z.string().min(1).max(65_536);
 
-export const CreateRepositoryTag = Schema.Struct({
+export const CreateRepositoryTag = z.object({
   ...TagScope,
   name: RefName,
   target: ObjectId,
-  message: Schema.optional(TagMessage),
+  message: TagMessage.optional(),
 });
-export type CreateRepositoryTag = typeof CreateRepositoryTag.Type;
+export type CreateRepositoryTag = z.infer<typeof CreateRepositoryTag>;
 
-export const DeleteRepositoryTag = Schema.Struct({
+export const DeleteRepositoryTag = z.object({
   ...TagScope,
   name: RefName,
-  local: Schema.optional(Schema.Struct({ object: ObjectId })),
-  remote: Schema.optional(
-    Schema.Struct({ remote: RemoteName, object: ObjectId }),
-  ),
+  local: z.object({ object: ObjectId }).optional(),
+  remote: z.object({ remote: RemoteName, object: ObjectId }).optional(),
 });
-export type DeleteRepositoryTag = typeof DeleteRepositoryTag.Type;
+export type DeleteRepositoryTag = z.infer<typeof DeleteRepositoryTag>;
 
-export const RepositoryTagDeleted = Schema.Struct({
+export const RepositoryTagDeleted = z.object({
   name: RefName,
 });
-export type RepositoryTagDeleted = typeof RepositoryTagDeleted.Type;
+export type RepositoryTagDeleted = z.infer<typeof RepositoryTagDeleted>;
 
-export const ReadRepositoryTag = Schema.Struct({
+export const ReadRepositoryTag = z.object({
   ...TagScope,
   name: RefName,
 });
-export type ReadRepositoryTag = typeof ReadRepositoryTag.Type;
+export type ReadRepositoryTag = z.infer<typeof ReadRepositoryTag>;
 
-export const RepositoryTagAnnotation = Schema.Struct({
+export const RepositoryTagAnnotation = z.object({
   name: RefName,
   object: ObjectId,
   target: ObjectId,
-  tagger: Schema.Struct({
-    name: Schema.String.check(Schema.isMaxLength(512)),
-    date: Schema.String.check(Schema.isMaxLength(64)),
+  tagger: z.object({
+    name: z.string().max(512),
+    date: z.string().max(64),
   }),
-  message: Schema.String.check(Schema.isMaxLength(65_536)),
-  signed: Schema.Boolean,
+  message: z.string().max(65_536),
+  signed: z.boolean(),
 });
-export type RepositoryTagAnnotation = typeof RepositoryTagAnnotation.Type;
+export type RepositoryTagAnnotation = z.infer<typeof RepositoryTagAnnotation>;
 
-export const TagRejected = Schema.TaggedStruct("TagRejected", {
-  reason: Schema.Literals([
+export const TagRejected = z.object({
+  _tag: z.literal("TagRejected"),
+  reason: z.enum([
     "InvalidName",
     "Exists",
     "MessageRequired",
@@ -76,7 +72,7 @@ export const TagRejected = Schema.TaggedStruct("TagRejected", {
     "RemoteDiffers",
   ]),
 });
-export type TagRejected = typeof TagRejected.Type;
+export type TagRejected = z.infer<typeof TagRejected>;
 
 export const RepositoryTagsApi = {
   create: repositoryCommand("repositories/tags/create", {
@@ -87,7 +83,7 @@ export const RepositoryTagsApi = {
   delete: repositoryCommand("repositories/tags/delete", {
     request: DeleteRepositoryTag,
     success: RepositoryTagDeleted,
-    failure: Schema.Union([RefMissing, TagRejected]),
+    failure: z.discriminatedUnion("_tag", [RefMissing, TagRejected]),
   }),
   annotation: repositoryQuery("repositories/tags/annotation", {
     request: ReadRepositoryTag,

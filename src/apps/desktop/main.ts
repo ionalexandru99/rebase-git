@@ -1,7 +1,6 @@
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Schema } from "effect";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import electronUpdater, { type AppUpdater } from "electron-updater";
 import {
@@ -248,9 +247,7 @@ function registerApplicationUpdaterIpc(
   ipcMain.handle(
     applicationUpdaterIpc.selectReleaseChannel,
     trusted((_event, value: unknown) =>
-      updater.selectReleaseChannel(
-        Schema.decodeUnknownSync(ReleaseChannel)(value),
-      ),
+      updater.selectReleaseChannel(ReleaseChannel.parse(value)),
     ),
   );
   ipcMain.handle(

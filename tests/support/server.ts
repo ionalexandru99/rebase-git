@@ -1,8 +1,10 @@
 import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect, Exit, Schema, Scope } from "effect";
-import { RpcClientError, RpcTest } from "effect/rpc";
+import { createORPCClient, ORPCError } from "@orpc/client";
+import { RPCLink } from "@orpc/client/websocket";
+import { createRouterClient } from "@orpc/server";
+import { Effect, Exit, Scope } from "effect";
 import { onTestFinished } from "vite-plus/test";
 import WebSocket from "ws";
 import { EnvironmentAuthorizationApi } from "#contracts/environment-authorization/environment-authorization.contract.ts";
@@ -13,14 +15,14 @@ import type {
   RouteSuccess,
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
-  EnvironmentRpc,
+  EnvironmentSessionApi,
   environmentLivePath,
   environmentProtocol,
   environmentSubprotocol,
 } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import { exchangeEnvironmentPairing } from "#desktop/app/desktop-application.ts";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
-import { environmentRpcHandlers } from "#server/adapters/environment-transport/environment-socket.ts";
+import { environmentRouter } from "#server/adapters/environment-transport/environment-socket.ts";
 import {
   createLocalGitCommandRunner,
   type GitCommand,
@@ -39,8 +41,8 @@ import type { RepositoryCoordination } from "#server/repository/repository-coord
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 import {
   connectEnvironment,
+  type EnvironmentConnection,
   type EnvironmentCredential,
-  environmentRequests,
 } from "#web/platform/environment/environment-connection.ts";
 import type { EnvironmentRequests } from "#web/platform/query/environment-context.tsx";
 import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation.ts";
@@ -53,9 +55,14 @@ export type RoutesClient<Api extends Routes> = {
   ) => Effect.Effect<RouteSuccess<Api[Name]>, RouteFailure<Api[Name]>>;
 };
 
-type Procedures = Record<
-  string,
-  (input: unknown) => Effect.Effect<unknown, unknown>
+type Procedures = Readonly<
+  Record<
+    string,
+    (
+      input: unknown,
+      options?: { readonly signal?: AbortSignal },
+    ) => Promise<unknown>
+  >
 >;
 
 const testContext = {
@@ -96,18 +103,14 @@ export function openTestEnvironment(overrides: EnvironmentOverrides = {}) {
   return openInTestScope(
     Effect.gen(function* () {
       const dependencies = yield* acquireTestDependencies(overrides);
-      const handlers = yield* environmentRpcHandlers(
-        {
-          authorization: dependencies.authorization,
-          environmentId: "00000000-0000-4000-8000-000000000001",
-          events: dependencies.events,
-          features: yield* environmentFeatures(dependencies),
-        },
-        testContext,
-      );
-      const procedures = (yield* RpcTest.makeClient(EnvironmentRpc).pipe(
-        Effect.provide(handlers),
-      )) as unknown as Procedures;
+      const router = environmentRouter({
+        environmentId: "00000000-0000-4000-8000-000000000001",
+        events: dependencies.events,
+        features: yield* environmentFeatures(dependencies),
+      });
+      const procedures = createRouterClient(router, {
+        context: testContext,
+      }) as unknown as Procedures;
       return {
         ...dependencies,
         remember: (path: string) =>
@@ -159,19 +162,24 @@ export function openTestServer(overrides: EnvironmentOverrides = {}) {
       const owner = yield* Effect.promise(() =>
         exchangePairing(server.origin, server.pairingUrl, "Owner"),
       );
-      const connect = (
+      const connect = async (
         credential: EnvironmentCredential,
         invalidation = unchanged,
-      ) =>
-        Effect.runPromise(
-          connectEnvironment(server.origin, credential, invalidation).pipe(
-            Scope.provide(scope),
-          ),
+      ): Promise<EnvironmentConnection> => {
+        const connection = await connectEnvironment(
+          server.origin,
+          credential,
+          invalidation,
         );
+        Effect.runSync(
+          Scope.addFinalizer(scope, Effect.sync(connection.close)),
+        );
+        return connection;
+      };
       const requests = (credential: EnvironmentCredential) => {
         const connection = connect(credential);
         return (async (route, input, options) =>
-          environmentRequests((await connection).rpc)(
+          (await connection).requests(
             route,
             input,
             options,
@@ -213,7 +221,8 @@ export async function exchangePairing(
 }
 
 export type SocketHello =
-  | { readonly _tag: "Answered"; readonly message: unknown }
+  | { readonly _tag: "Answered"; readonly greeting: unknown }
+  | { readonly _tag: "Rejected"; readonly failure: unknown }
   | { readonly _tag: "Closed"; readonly code: number; readonly reason: string };
 
 export function helloOverSocket(
@@ -236,25 +245,26 @@ export function helloOverSocket(
         : [environmentSubprotocol, credential],
       { headers },
     );
+    const procedures = createORPCClient<Procedures>(
+      new RPCLink({ websocket: socket as unknown as globalThis.WebSocket }),
+    );
     socket.once("error", rejectHello);
     socket.once("close", (code, reason) =>
       resolveHello({ _tag: "Closed", code, reason: reason.toString() }),
     );
     socket.once("open", () =>
-      socket.send(
-        JSON.stringify({
-          _tag: "Request",
-          id: "1",
-          tag: "Hello",
-          payload: { protocol },
-          headers: [],
-        }),
+      procedures[EnvironmentSessionApi.hello._tag]?.({ protocol }).then(
+        (greeting) => {
+          resolveHello({ _tag: "Answered", greeting });
+          socket.close();
+        },
+        (error) => {
+          if (error instanceof ORPCError && error.code === "Rejected")
+            resolveHello({ _tag: "Rejected", failure: error.data });
+          socket.close();
+        },
       ),
     );
-    socket.once("message", (data) => {
-      resolveHello({ _tag: "Answered", message: JSON.parse(data.toString()) });
-      socket.close();
-    });
   });
 }
 
@@ -266,22 +276,22 @@ function callRoute(
   const call = procedures[route._tag];
   if (call === undefined)
     return Effect.die(new Error(`No handler serves ${route._tag}.`));
-  return call(input).pipe(
-    Effect.catchIf(
-      (error) => error instanceof RpcClientError.RpcClientError,
-      Effect.die,
+  return Effect.tryPromise({
+    try: (signal) => call(input, { signal }),
+    catch: (error) => error,
+  }).pipe(
+    Effect.map(overTheWire),
+    Effect.catch((error) =>
+      error instanceof ORPCError && error.code === "Rejected"
+        ? Effect.fail(overTheWire(error.data))
+        : Effect.die(error),
     ),
-    Effect.map((value) => overTheWire(route.successSchema, value)),
-    Effect.mapError((failure) => overTheWire(route.errorSchema, failure)),
   );
 }
 
-function overTheWire(schema: Schema.Top, value: unknown) {
-  const codec = schema as Schema.Codec<unknown, unknown>;
-  const encoded = JSON.stringify(Schema.encodeUnknownSync(codec)(value));
-  return Schema.decodeUnknownSync(codec)(
-    encoded === undefined ? undefined : JSON.parse(encoded),
-  );
+function overTheWire(value: unknown) {
+  const encoded = JSON.stringify(value);
+  return encoded === undefined ? undefined : JSON.parse(encoded);
 }
 
 function acquireTestDependencies(overrides: EnvironmentOverrides) {

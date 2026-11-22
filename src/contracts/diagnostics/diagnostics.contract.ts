@@ -1,128 +1,129 @@
-import { Schema } from "effect";
-import { Rpc } from "effect/rpc";
-import { route } from "#contracts/environment-connection/environment-route.contract.ts";
+import { z } from "zod";
+import {
+  route,
+  streamRoute,
+} from "#contracts/environment-connection/environment-route.contract.ts";
 import { RepositoryId } from "#contracts/git/git-values.contract.ts";
 
-export const DiagnosticsPeriod = Schema.Literals(["5m", "15m", "1h"]);
-export type DiagnosticsPeriod = typeof DiagnosticsPeriod.Type;
+export const DiagnosticsPeriod = z.enum(["5m", "15m", "1h"]);
+export type DiagnosticsPeriod = z.infer<typeof DiagnosticsPeriod>;
 
-const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
-const Milliseconds = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0));
-const Percent = Schema.Number.check(
-  Schema.isBetween({ minimum: 0, maximum: 100 }),
-);
+const Count = z.int().min(0);
+const Milliseconds = z.number().min(0);
+const Percent = z.number().min(0).max(100);
 
-export const DiagnosticsProcess = Schema.Struct({
+export const DiagnosticsProcess = z.object({
   pid: Count,
-  parentPid: Schema.NullOr(Count),
-  kind: Schema.Literals(["Server", "Monitor", "Git", "Process"]),
-  name: Schema.String,
-  command: Schema.String,
-  repositoryId: Schema.optionalKey(RepositoryId),
-  stoppable: Schema.Boolean,
+  parentPid: Count.nullable(),
+  kind: z.enum(["Server", "Monitor", "Git", "Process"]),
+  name: z.string(),
+  command: z.string(),
+  repositoryId: RepositoryId.exactOptional(),
+  stoppable: z.boolean(),
   cpu: Percent,
   memory: Count,
   startedAt: Milliseconds,
 });
-export type DiagnosticsProcess = typeof DiagnosticsProcess.Type;
+export type DiagnosticsProcess = z.infer<typeof DiagnosticsProcess>;
 
-export const DiagnosticsMonitor = Schema.Union([
-  Schema.TaggedStruct("Running", {}),
-  Schema.TaggedStruct("Starting", {}),
-  Schema.TaggedStruct("Unavailable", { detail: Schema.String }),
+export const DiagnosticsMonitor = z.discriminatedUnion("_tag", [
+  z.object({ _tag: z.literal("Running") }),
+  z.object({ _tag: z.literal("Starting") }),
+  z.object({ _tag: z.literal("Unavailable"), detail: z.string() }),
 ]);
-export type DiagnosticsMonitor = typeof DiagnosticsMonitor.Type;
+export type DiagnosticsMonitor = z.infer<typeof DiagnosticsMonitor>;
 
-export const DiagnosticsFootprint = Schema.Struct({
-  cpu: Schema.NullOr(Percent),
-  cpuPeak: Schema.NullOr(Percent),
-  memory: Schema.NullOr(Count),
-  memoryPeak: Schema.NullOr(Count),
+export const DiagnosticsFootprint = z.object({
+  cpu: Percent.nullable(),
+  cpuPeak: Percent.nullable(),
+  memory: Count.nullable(),
+  memoryPeak: Count.nullable(),
   processes: Count,
   gitRuns: Count,
   gitFailures: Count,
 });
-export type DiagnosticsFootprint = typeof DiagnosticsFootprint.Type;
+export type DiagnosticsFootprint = z.infer<typeof DiagnosticsFootprint>;
 
-export const DiagnosticsTimeline = Schema.Struct({
+export const DiagnosticsTimeline = z.object({
   bucketMilliseconds: Milliseconds,
-  cpu: Schema.Array(Schema.NullOr(Percent)),
-  gitRuns: Schema.Array(Count),
-  gitFailures: Schema.Array(Count),
+  cpu: z.array(Percent.nullable()).readonly(),
+  gitRuns: z.array(Count).readonly(),
+  gitFailures: z.array(Count).readonly(),
 });
-export type DiagnosticsTimeline = typeof DiagnosticsTimeline.Type;
+export type DiagnosticsTimeline = z.infer<typeof DiagnosticsTimeline>;
 
-export const DiagnosticsDuration = Schema.Struct({
-  name: Schema.String,
-  repositoryId: Schema.optionalKey(RepositoryId),
+export const DiagnosticsDuration = z.object({
+  name: z.string(),
+  repositoryId: RepositoryId.exactOptional(),
   runs: Count,
   longest: Milliseconds,
   typical: Milliseconds,
 });
-export type DiagnosticsDuration = typeof DiagnosticsDuration.Type;
+export type DiagnosticsDuration = z.infer<typeof DiagnosticsDuration>;
 
-export const DiagnosticsWatcher = Schema.Struct({
+export const DiagnosticsWatcher = z.object({
   repositoryId: RepositoryId,
-  failure: Schema.optionalKey(Schema.String),
+  failure: z.string().exactOptional(),
 });
-export type DiagnosticsWatcher = typeof DiagnosticsWatcher.Type;
+export type DiagnosticsWatcher = z.infer<typeof DiagnosticsWatcher>;
 
-export const DiagnosticsServer = Schema.Struct({
-  platform: Schema.String,
-  architecture: Schema.String,
+export const DiagnosticsServer = z.object({
+  platform: z.string(),
+  architecture: z.string(),
   startedAt: Milliseconds,
-  gitVersion: Schema.NullOr(Schema.String),
-  dataFolder: Schema.String,
+  gitVersion: z.string().nullable(),
+  dataFolder: z.string(),
 });
-export type DiagnosticsServer = typeof DiagnosticsServer.Type;
+export type DiagnosticsServer = z.infer<typeof DiagnosticsServer>;
 
-export const DiagnosticsSample = Schema.TaggedStruct("Sample", {
+export const DiagnosticsSample = z.object({
+  _tag: z.literal("Sample"),
   sampledAt: Milliseconds,
   monitor: DiagnosticsMonitor,
   footprint: DiagnosticsFootprint,
   timeline: DiagnosticsTimeline,
-  processes: Schema.Array(DiagnosticsProcess),
-  slowestGit: Schema.Array(DiagnosticsDuration),
-  slowestRequests: Schema.Array(DiagnosticsDuration),
-  watchers: Schema.Array(DiagnosticsWatcher),
+  processes: z.array(DiagnosticsProcess).readonly(),
+  slowestGit: z.array(DiagnosticsDuration).readonly(),
+  slowestRequests: z.array(DiagnosticsDuration).readonly(),
+  watchers: z.array(DiagnosticsWatcher).readonly(),
   server: DiagnosticsServer,
 });
-export type DiagnosticsSample = typeof DiagnosticsSample.Type;
+export type DiagnosticsSample = z.infer<typeof DiagnosticsSample>;
 
-export const DiagnosticsError = Schema.Struct({
-  kind: Schema.Literals(["Server", "Git", "Watcher", "Monitor"]),
-  title: Schema.String,
-  where: Schema.String,
-  detail: Schema.String,
-  repositoryId: Schema.optionalKey(RepositoryId),
+export const DiagnosticsError = z.object({
+  kind: z.enum(["Server", "Git", "Watcher", "Monitor"]),
+  title: z.string(),
+  where: z.string(),
+  detail: z.string(),
+  repositoryId: RepositoryId.exactOptional(),
   count: Count,
   lastSeen: Milliseconds,
 });
-export type DiagnosticsError = typeof DiagnosticsError.Type;
+export type DiagnosticsError = z.infer<typeof DiagnosticsError>;
 
-export const DiagnosticsErrors = Schema.TaggedStruct("Errors", {
-  errors: Schema.Array(DiagnosticsError),
+export const DiagnosticsErrors = z.object({
+  _tag: z.literal("Errors"),
+  errors: z.array(DiagnosticsError).readonly(),
 });
-export type DiagnosticsErrors = typeof DiagnosticsErrors.Type;
+export type DiagnosticsErrors = z.infer<typeof DiagnosticsErrors>;
 
-export const DiagnosticsEvent = Schema.Union([
+export const DiagnosticsEvent = z.discriminatedUnion("_tag", [
   DiagnosticsSample,
   DiagnosticsErrors,
 ]);
-export type DiagnosticsEvent = typeof DiagnosticsEvent.Type;
+export type DiagnosticsEvent = z.infer<typeof DiagnosticsEvent>;
 
 export const DiagnosticsApi = {
-  watch: Rpc.make("diagnostics/watch", {
-    payload: Schema.Struct({ period: DiagnosticsPeriod }),
+  watch: streamRoute("diagnostics/watch", {
+    request: z.object({ period: DiagnosticsPeriod }),
     success: DiagnosticsEvent,
-    stream: true,
   }),
   stop: route("diagnostics/stop", {
-    request: Schema.Struct({ pid: Count }),
-    success: Schema.Struct({}),
+    request: z.object({ pid: Count }),
+    success: z.object({}),
   }),
   watchAgain: route("diagnostics/watch-again", {
-    request: Schema.Struct({ repositoryId: RepositoryId }),
-    success: Schema.Struct({}),
+    request: z.object({ repositoryId: RepositoryId }),
+    success: z.object({}),
   }),
 };
