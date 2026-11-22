@@ -190,6 +190,19 @@ export function remoteLocation(address: string) {
     : { host: match[1].toLowerCase(), path: match[2] };
 }
 
+export function remotePath(address: string) {
+  const location = remoteLocation(address);
+  return (
+    location && {
+      host: location.host,
+      parts: location.path
+        .replace(/^\/+|\/+$/g, "")
+        .replace(/\.git$/, "")
+        .split("/"),
+    }
+  );
+}
+
 type Provider = NonNullable<
   RepositoryRefs["remoteProviders"]
 >[number]["provider"];

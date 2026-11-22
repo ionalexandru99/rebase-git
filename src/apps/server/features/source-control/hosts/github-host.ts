@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
-import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
+import { remotePath } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
   avatarUrl,
   cloneableRepository,
@@ -213,12 +213,9 @@ const decodeRepositoryPage = decodeHostJson(
 );
 
 function githubRepository(remoteUrl: string) {
-  const location = remoteLocation(remoteUrl);
-  if (location?.host !== "github.com") return undefined;
-  const [owner, name, ...rest] = location.path
-    .replace(/^\/+|\/+$/g, "")
-    .replace(/\.git$/, "")
-    .split("/");
+  const remote = remotePath(remoteUrl);
+  if (remote?.host !== "github.com") return undefined;
+  const [owner, name, ...rest] = remote.parts;
   return owner === undefined ||
     name === undefined ||
     rest.length > 0 ||

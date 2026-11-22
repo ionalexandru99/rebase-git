@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { HostRepositories } from "#contracts/source-control/source-control.contract.ts";
-import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
+import { remotePath } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
   avatarUrl,
   cloneableRepository,
@@ -238,18 +238,15 @@ function signedInAccounts(output: string): readonly GitHostAccount[] {
 }
 
 function gitlabProject(remoteUrl: string): GitLabProject | undefined {
-  const location = remoteLocation(remoteUrl);
-  const path = location?.path.replace(/^\/+|\/+$/g, "").replace(/\.git$/, "");
-  return location === undefined ||
-    location.host === "" ||
-    path === undefined ||
-    !path.includes("/")
-    ? undefined
-    : {
-        id: `${location.host}/${path}`.toLowerCase(),
-        host: location.host,
-        path,
-      };
+  const remote = remotePath(remoteUrl);
+  if (remote === undefined || remote.host === "" || remote.parts.length < 2)
+    return undefined;
+  const path = remote.parts.join("/");
+  return {
+    id: `${remote.host}/${path}`.toLowerCase(),
+    host: remote.host,
+    path,
+  };
 }
 
 function mergeRequestsQuery(branches: number) {

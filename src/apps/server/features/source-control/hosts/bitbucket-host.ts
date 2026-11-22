@@ -7,7 +7,7 @@ import {
   bitbucketApiTokenScopes,
   type SourceControlApi,
 } from "#contracts/source-control/source-control.contract.ts";
-import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
+import { remotePath } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
   type AvatarAuthor,
   avatarUrl,
@@ -325,17 +325,10 @@ async function withChecks(
 function bitbucketRepository(
   remoteUrl: string,
 ): BitbucketRepository | undefined {
-  const location = remoteLocation(remoteUrl);
-  if (
-    location?.host !== "bitbucket.org" &&
-    location?.host !== "ssh.bitbucket.org"
-  )
+  const remote = remotePath(remoteUrl);
+  if (remote?.host !== "bitbucket.org" && remote?.host !== "ssh.bitbucket.org")
     return undefined;
-  const parts = location.path
-    .replace(/^\/+|\/+$/g, "")
-    .replace(/\.git$/, "")
-    .split("/");
-  const [workspace, slug, ...rest] = parts;
+  const [workspace, slug, ...rest] = remote.parts;
   return workspace && slug && rest.length === 0
     ? { id: `${workspace}/${slug}`.toLowerCase(), workspace, slug }
     : undefined;
