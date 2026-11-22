@@ -20,7 +20,6 @@ type StorageAccess = <Value>(
 ) => Promise<Value>;
 
 export interface EnvironmentContext {
-  readonly database: NodeSQLiteDatabase;
   readonly serverSecret: string;
   readonly read: StorageAccess;
   readonly write: StorageAccess;
@@ -54,7 +53,6 @@ function createEnvironmentContext(
   let writes: Promise<unknown> = Promise.resolve();
 
   return {
-    database: drizzleDatabase,
     serverSecret,
     read: (message, operation) =>
       storageOperation(message, () => operation(drizzleDatabase)),
