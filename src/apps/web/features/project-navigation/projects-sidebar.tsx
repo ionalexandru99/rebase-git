@@ -7,20 +7,29 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { type JSX, useState } from "react";
+import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
 import { Input } from "#web/components/ui/input.tsx";
-import type {
-  ProjectNavigationRepository,
-  ProjectNavigationRepositoryItem,
-  ProjectNavigationState,
-} from "#web/features/project-navigation/project-navigation.ts";
-import { filterEnvironmentRepositories } from "#web/features/project-navigation/project-navigation-state.ts";
 import { RepositoryBadge } from "#web/features/repository-catalog/repository-badge.tsx";
 import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button.tsx";
 import {
   type EnvironmentStatus,
   useEnvironment,
 } from "#web/platform/query/environment-context.tsx";
+
+export type OpenRepository = Pick<
+  RepositoryCatalogEntry,
+  "color" | "id" | "name"
+>;
+
+export interface ProjectsNavigation {
+  readonly openRepositories: readonly OpenRepository[];
+  readonly selectedRepositoryId: string | undefined;
+  readonly sidebarCollapsed: boolean;
+  readonly workspaceView: "open-project" | "repository";
+}
+
+type RepositoryAction = (repository: OpenRepository) => void;
 
 export function ProjectsSidebar({
   closeRepository,
@@ -32,31 +41,21 @@ export function ProjectsSidebar({
   openRepositorySettings,
   selectRepository,
 }: {
-  readonly closeRepository: (
-    environmentId: string,
-    repository: ProjectNavigationRepository,
-  ) => void;
+  readonly closeRepository: RepositoryAction;
   readonly collapse: () => void;
   readonly expand: () => void;
-  readonly navigation: ProjectNavigationState;
+  readonly navigation: ProjectsNavigation;
   readonly openProject: () => void;
   readonly openSettings: () => void;
-  readonly openRepositorySettings: (
-    environmentId: string,
-    repository: ProjectNavigationRepository,
-  ) => void;
-  readonly selectRepository: (
-    environmentId: string,
-    repository: ProjectNavigationRepository,
-  ) => void;
+  readonly openRepositorySettings: RepositoryAction;
+  readonly selectRepository: RepositoryAction;
 }): JSX.Element {
   const [filterQuery, setFilterQuery] = useState("");
   const { status: environmentStatus } = useEnvironment();
-  const projects = navigation.environments.flatMap((environment) =>
-    filterEnvironmentRepositories(environment, filterQuery).map(
-      (repository) => ({ environmentId: environment.id, repository }),
-    ),
-  );
+  const projects =
+    environmentStatus.connectionState === "PairingRequired"
+      ? []
+      : filterRepositories(navigation.openRepositories, filterQuery);
 
   return (
     <nav
@@ -105,25 +104,16 @@ function ExpandedProjectsSidebar({
   selectRepository,
   setFilterQuery,
 }: {
-  readonly closeRepository: (
-    environmentId: string,
-    repository: ProjectNavigationRepository,
-  ) => void;
+  readonly closeRepository: RepositoryAction;
   readonly collapse: () => void;
   readonly environmentStatus: EnvironmentStatus;
   readonly filterQuery: string;
-  readonly navigation: ProjectNavigationState;
+  readonly navigation: ProjectsNavigation;
   readonly openProject: () => void;
   readonly openSettings: () => void;
-  readonly openRepositorySettings: (
-    environmentId: string,
-    repository: ProjectNavigationRepository,
-  ) => void;
-  readonly projects: readonly SidebarProject[];
-  readonly selectRepository: (
-    environmentId: string,
-    repository: ProjectNavigationRepository,
-  ) => void;
+  readonly openRepositorySettings: RepositoryAction;
+  readonly projects: readonly OpenRepository[];
+  readonly selectRepository: RepositoryAction;
   readonly setFilterQuery: (query: string) => void;
 }) {
   return (
@@ -177,7 +167,7 @@ function ExpandedProjectsSidebar({
           >
             {environmentStatus.status}
           </span>
-          {projects.map(({ environmentId, repository }) => (
+          {projects.map((repository) => (
             <div
               className={`group grid h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)_1.875rem_1.875rem] items-center rounded-control pr-1.5 pl-2.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${navigation.selectedRepositoryId === repository.id ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
               key={repository.id}
@@ -190,8 +180,8 @@ function ExpandedProjectsSidebar({
                 }
                 aria-label={`Open ${repository.name}`}
                 className="grid h-full min-w-0 grid-cols-[1.875rem_minmax(0,1fr)] items-center gap-2.5 text-left text-body outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-40"
-                disabled={repository.disabled}
-                onClick={() => selectRepository(environmentId, repository)}
+                disabled={environmentStatus.availability !== "available"}
+                onClick={() => selectRepository(repository)}
                 type="button"
               >
                 <RepositoryBadge
@@ -203,12 +193,12 @@ function ExpandedProjectsSidebar({
               </button>
               <RepositorySettingsButton
                 name={repository.name}
-                onOpen={() => openRepositorySettings(environmentId, repository)}
+                onOpen={() => openRepositorySettings(repository)}
               />
               <button
                 aria-label={`Close ${repository.name}`}
                 className="grid size-7.5 place-items-center rounded-control text-muted-foreground outline-none hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
-                onClick={() => closeRepository(environmentId, repository)}
+                onClick={() => closeRepository(repository)}
                 type="button"
               >
                 <IconX aria-hidden="true" className="size-4" />
@@ -233,14 +223,11 @@ function CollapsedProjectsSidebar({
 }: {
   readonly environmentStatus: EnvironmentStatus;
   readonly expand: () => void;
-  readonly navigation: ProjectNavigationState;
+  readonly navigation: ProjectsNavigation;
   readonly openProject: () => void;
   readonly openSettings: () => void;
-  readonly projects: readonly SidebarProject[];
-  readonly selectRepository: (
-    environmentId: string,
-    repository: ProjectNavigationRepository,
-  ) => void;
+  readonly projects: readonly OpenRepository[];
+  readonly selectRepository: RepositoryAction;
 }) {
   return (
     <>
@@ -269,16 +256,16 @@ function CollapsedProjectsSidebar({
         <span className="sr-only" role="status">
           {environmentStatus.status}
         </span>
-        {projects.map(({ environmentId, repository }) => (
+        {projects.map((repository) => (
           <button
             aria-current={
               isCurrentProject(navigation, repository.id) ? "page" : undefined
             }
             aria-label={repository.name}
             className={`rounded-control outline-none hover:brightness-125 focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-40 ${navigation.selectedRepositoryId === repository.id ? "ring-[1.5px] ring-sidebar-accent-foreground ring-offset-2 ring-offset-sidebar" : ""}`}
-            disabled={repository.disabled}
+            disabled={environmentStatus.availability !== "available"}
             key={repository.id}
-            onClick={() => selectRepository(environmentId, repository)}
+            onClick={() => selectRepository(repository)}
             type="button"
           >
             <RepositoryBadge
@@ -294,13 +281,20 @@ function CollapsedProjectsSidebar({
   );
 }
 
-interface SidebarProject {
-  readonly environmentId: string;
-  readonly repository: ProjectNavigationRepositoryItem;
+function filterRepositories(
+  repositories: readonly OpenRepository[],
+  query: string,
+) {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  return normalizedQuery.length === 0
+    ? repositories
+    : repositories.filter(({ name }) =>
+        name.toLocaleLowerCase().includes(normalizedQuery),
+      );
 }
 
 function isCurrentProject(
-  navigation: ProjectNavigationState,
+  navigation: ProjectsNavigation,
   repositoryId: string,
 ) {
   return (

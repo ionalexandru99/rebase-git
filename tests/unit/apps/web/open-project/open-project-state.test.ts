@@ -1,30 +1,26 @@
 import { describe, expect, it } from "vite-plus/test";
-import { hostRepositories } from "#tests-support/fixtures.ts";
-import type { OpenProjectEnvironment } from "#web/features/open-project/open-project-model.ts";
+import { catalogEntry, hostRepositories } from "#tests-support/fixtures.ts";
 import {
   cloneGroups,
   formatLastOpened,
   projectItems,
 } from "#web/features/open-project/open-project-state.ts";
 
-const TestEnvironmentIcon = (() =>
-  null) as unknown as OpenProjectEnvironment["icon"];
-
 describe("open project state", () => {
   it("matches repository names and paths", () => {
-    const environments = environmentFixtures();
+    const repositories = repositoryFixtures();
 
-    expect(projectNames(projectItems(environments, "WORK"))).toEqual([
+    expect(projectNames(projectItems(repositories, "WORK"))).toEqual([
       "workbench",
     ]);
-    expect(projectNames(projectItems(environments, "/srv"))).toEqual([
+    expect(projectNames(projectItems(repositories, "/srv"))).toEqual([
       "ci-images",
       "infrastructure",
     ]);
   });
 
   it("lists every project once, most recently opened first", () => {
-    const projects = projectItems(environmentFixtures(), "");
+    const projects = projectItems(repositoryFixtures(), "");
 
     expect(projectNames(projects)).toEqual([
       "rebase-git",
@@ -32,22 +28,7 @@ describe("open project state", () => {
       "api-experiments",
       "ci-images",
       "infrastructure",
-      "never-opened",
     ]);
-  });
-
-  it("keeps projects of an unavailable Environment but disables them", () => {
-    const environments = environmentFixtures().map((environment) =>
-      environment.id === "build"
-        ? { ...environment, availability: "unavailable" as const }
-        : environment,
-    );
-
-    expect(
-      projectNames(
-        projectItems(environments, "").filter((item) => item.disabled),
-      ),
-    ).toEqual(["ci-images", "infrastructure"]);
   });
 
   it("drops the signed-in owner and tags only the minority visibility", () => {
@@ -111,75 +92,38 @@ describe("open project state", () => {
   });
 });
 
-function environmentFixtures(): readonly OpenProjectEnvironment[] {
+function repositoryFixtures() {
   return [
-    {
-      availability: "available",
-      icon: TestEnvironmentIcon,
-      iconColor: "#7c8cff",
-      id: "local",
-      name: "Local Environment",
-      repositories: [
-        {
-          color: "blue",
-          environmentId: "local",
-          id: "workbench",
-          lastOpenedAt: "2026-08-22T10:00:00Z",
-          name: "workbench",
-          path: "~/Personal/workbench",
-        },
-        {
-          color: "blue",
-          environmentId: "local",
-          id: "rebase",
-          lastOpenedAt: "2026-08-24T12:00:00Z",
-          name: "rebase-git",
-          path: "~/Code/rebase-git",
-        },
-        {
-          color: "blue",
-          environmentId: "local",
-          id: "never",
-          name: "never-opened",
-          path: "~/Code/never-opened",
-        },
-        {
-          color: "blue",
-          environmentId: "local",
-          id: "api",
-          lastOpenedAt: "2026-08-21T10:00:00Z",
-          name: "api-experiments",
-          path: "~/Code/api-experiments",
-        },
-      ],
-      status: "Connected",
-    },
-    {
-      availability: "available",
-      icon: TestEnvironmentIcon,
-      iconColor: "#d39a59",
-      id: "build",
-      name: "Build server",
-      repositories: [
-        {
-          color: "blue",
-          environmentId: "build",
-          id: "infrastructure",
-          lastOpenedAt: "2026-08-19T10:00:00Z",
-          name: "infrastructure",
-          path: "/srv/git/infrastructure",
-        },
-        {
-          color: "blue",
-          environmentId: "build",
-          id: "ci",
-          lastOpenedAt: "2026-08-20T10:00:00Z",
-          name: "ci-images",
-          path: "/srv/git/ci-images",
-        },
-      ],
-      status: "Connected",
-    },
+    catalogEntry({
+      id: "workbench",
+      lastOpenedAt: "2026-08-22T10:00:00Z",
+      name: "workbench",
+      path: "~/Personal/workbench",
+    }),
+    catalogEntry({
+      id: "rebase",
+      lastOpenedAt: "2026-08-24T12:00:00Z",
+      name: "rebase-git",
+      path: "~/Code/rebase-git",
+    }),
+    catalogEntry({
+      id: "api",
+      lastOpenedAt: "2026-08-21T10:00:00Z",
+      name: "api-experiments",
+      path: "~/Code/api-experiments",
+    }),
+    catalogEntry({
+      id: "infrastructure",
+      lastOpenedAt: "2026-08-19T10:00:00Z",
+      name: "infrastructure",
+      path: "/srv/git/infrastructure",
+    }),
+    catalogEntry({
+      id: "ci",
+      lastOpenedAt: "2026-08-20T10:00:00Z",
+      name: "ci-images",
+      path: "/srv/git/ci-images",
+    }),
   ];
 }
 

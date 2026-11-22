@@ -26,10 +26,7 @@ import {
   filterDirectoryEntries,
   folderName,
 } from "#web/features/repository-folder-picker/repository-folder-picker-state.ts";
-import {
-  type EnvironmentAvailability,
-  useEnvironment,
-} from "#web/platform/query/environment-context.tsx";
+import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 
 const actionLabels: Record<FolderAction, string> = {
   Open: "Open repository",
@@ -216,39 +213,24 @@ export function RepositoryFolderBrowser({
 }
 
 export function RepositoryFolderPicker({
-  environments,
   onOpenChange,
   onRepositoryOpened,
   open,
 }: {
-  readonly environments: readonly {
-    readonly availability: EnvironmentAvailability;
-    readonly id: string;
-    readonly status: string;
-  }[];
   readonly onOpenChange: (open: boolean) => void;
-  readonly onRepositoryOpened: (
-    environmentId: string,
-    repository: RepositoryCatalogEntry,
-  ) => void;
+  readonly onRepositoryOpened: (repository: RepositoryCatalogEntry) => void;
   readonly open: boolean;
 }): JSX.Element | null {
-  const environment =
-    environments.find(({ availability }) => availability === "available") ??
-    environments[0];
-  if (environment === undefined) return null;
+  const { availability, connectionState, status } = useEnvironment().status;
+  if (connectionState === "PairingRequired") return null;
   return (
     <FolderDialog onOpenChange={onOpenChange} open={open}>
       <RepositoryFolderBrowser
-        key={environment.id}
-        environment={{
-          available: environment.availability === "available",
-          status: environment.status,
-        }}
+        environment={{ available: availability === "available", status }}
         purpose={{
           _tag: "Open",
           onRepositoryOpened: (repository) => {
-            onRepositoryOpened(environment.id, repository);
+            onRepositoryOpened(repository);
             onOpenChange(false);
           },
         }}

@@ -23,7 +23,7 @@ export function RepositorySelectionProvider({
   readonly children: ReactNode;
 }) {
   const { connected, readable, writable } = useEnvironment();
-  const { selectedRepositoryId, workspaceView } = navigation.projects;
+  const { selectedRepositoryId, workspaceView } = navigation;
   const selected = useCatalogRepository(selectedRepositoryId);
   const repository = workspaceView === "repository" ? selected : undefined;
   const preferredWorktreePath =

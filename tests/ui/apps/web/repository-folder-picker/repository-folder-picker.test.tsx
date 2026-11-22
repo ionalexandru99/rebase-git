@@ -65,9 +65,6 @@ async function renderPicker() {
   const opened = vi.fn();
   await render(
     <RepositoryFolderPicker
-      environments={[
-        { availability: "available", id: "local", status: "Available" },
-      ]}
       onOpenChange={() => {}}
       onRepositoryOpened={opened}
       open
