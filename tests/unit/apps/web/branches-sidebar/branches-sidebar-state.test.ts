@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { sidebarRows } from "#tests-support/branches-sidebar-rows.ts";
 import {
   branchScenarioRefs,
   mainPath,
@@ -8,7 +9,6 @@ import {
 import {
   type BranchesSidebarItem,
   branchesSidebarItems,
-  buildBranchesSidebarRows,
   defaultExpandedSections,
   firstDockedIndex,
   selectRefRows,
@@ -18,7 +18,7 @@ import {
 
 describe("branches sidebar state", () => {
   it("expands local branches by default and keeps remotes and tags collapsed", () => {
-    const rows = buildBranchesSidebarRows(
+    const rows = sidebarRows(
       branchScenarioRefs(),
       mainPath,
       defaultExpandedSections,
@@ -58,7 +58,7 @@ describe("branches sidebar state", () => {
   });
 
   it("docks every section after Local, with drafts staying in their own section", () => {
-    const rows = buildBranchesSidebarRows(
+    const rows = sidebarRows(
       branchScenarioRefs(),
       mainPath,
       defaultExpandedSections,
@@ -67,24 +67,29 @@ describe("branches sidebar state", () => {
     const docked = (items: readonly BranchesSidebarItem[]) =>
       items.slice(firstDockedIndex(items)).map((item) => item.id);
 
-    expect(docked(branchesSidebarItems(rows, "branches"))).toEqual([
+    expect(
+      docked(branchesSidebarItems(rows, "branches", undefined, false)),
+    ).toEqual([
       "section:remote:origin",
       "section:remote:upstream",
       "section:tags",
     ]);
-    expect(docked(branchesSidebarItems(rows, "tags")).slice(-2)).toEqual([
-      "section:tags",
-      "ref-draft",
-    ]);
+    expect(
+      docked(branchesSidebarItems(rows, "tags", undefined, false)).slice(-2),
+    ).toEqual(["section:tags", "ref-draft"]);
 
-    const remotes = buildBranchesSidebarRows(
+    const remotes = sidebarRows(
       branchScenarioRefs(),
       mainPath,
       defaultExpandedSections,
       "",
       "remote",
     );
-    expect(firstDockedIndex(branchesSidebarItems(remotes, undefined))).toBe(0);
+    expect(
+      firstDockedIndex(
+        branchesSidebarItems(remotes, undefined, undefined, false),
+      ),
+    ).toBe(0);
   });
 
   it("moves settled branches out of Local into a Settled section docked above the remotes", () => {
@@ -97,14 +102,14 @@ describe("branches sidebar state", () => {
           : branch,
       ),
     };
-    const rows = buildBranchesSidebarRows(
+    const rows = sidebarRows(
       refs,
       mainPath,
       toggleSection(defaultExpandedSections, "settled"),
       "",
     );
 
-    const items = branchesSidebarItems(rows, undefined);
+    const items = branchesSidebarItems(rows, undefined, undefined, false);
     const dock = firstDockedIndex(items);
     expect(items.slice(0, dock).map((item) => item.id)).toEqual([
       "section:branches",
@@ -118,9 +123,7 @@ describe("branches sidebar state", () => {
     ]);
     expect(rows[3]).toMatchObject({ count: 1, scope: "settled" });
     const localRows = (expanded: ReadonlySet<string>) =>
-      buildBranchesSidebarRows(refs, mainPath, expanded, "", "local").map(
-        (row) => row.id,
-      );
+      sidebarRows(refs, mainPath, expanded, "", "local").map((row) => row.id);
     expect(localRows(defaultExpandedSections)).toEqual([
       "section:branches",
       "ref:branches:main",
@@ -133,7 +136,7 @@ describe("branches sidebar state", () => {
   });
 
   it("keeps the active branch ahead of branches in other worktrees", () => {
-    const rows = buildBranchesSidebarRows(
+    const rows = sidebarRows(
       branchScenarioRefs(),
       topicPath,
       defaultExpandedSections,
@@ -148,7 +151,7 @@ describe("branches sidebar state", () => {
   });
 
   it("expands matching sections and hides empty ones while filtering", () => {
-    const rows = buildBranchesSidebarRows(
+    const rows = sidebarRows(
       branchScenarioRefs(),
       mainPath,
       defaultExpandedSections,
@@ -165,7 +168,7 @@ describe("branches sidebar state", () => {
 
   it("shows only the selected ref scope and expands its sections", () => {
     expect(
-      buildBranchesSidebarRows(
+      sidebarRows(
         branchScenarioRefs(),
         mainPath,
         defaultExpandedSections,
@@ -180,7 +183,7 @@ describe("branches sidebar state", () => {
     ]);
 
     expect(
-      buildBranchesSidebarRows(
+      sidebarRows(
         branchScenarioRefs(),
         mainPath,
         defaultExpandedSections,
@@ -195,7 +198,7 @@ describe("branches sidebar state", () => {
       "ref:remote:upstream:release",
     ]);
 
-    const tags = buildBranchesSidebarRows(
+    const tags = sidebarRows(
       branchScenarioRefs(),
       mainPath,
       defaultExpandedSections,
@@ -209,7 +212,7 @@ describe("branches sidebar state", () => {
     expect(tags[0]).toMatchObject({ expanded: true });
 
     expect(
-      buildBranchesSidebarRows(
+      sidebarRows(
         branchScenarioRefs(),
         mainPath,
         defaultExpandedSections,
@@ -220,7 +223,7 @@ describe("branches sidebar state", () => {
   });
 
   it("selects local branches or tags by Ctrl and Shift without mixing the two", () => {
-    const rows = buildBranchesSidebarRows(
+    const rows = sidebarRows(
       branchScenarioRefs(),
       mainPath,
       new Set(["branches", "remote:origin", "tags"]),
@@ -249,7 +252,7 @@ describe("branches sidebar state", () => {
   });
 
   it("steps through rows without wrapping and toggles sections", () => {
-    const rows = buildBranchesSidebarRows(
+    const rows = sidebarRows(
       branchScenarioRefs(),
       mainPath,
       toggleSection(defaultExpandedSections, "tags"),
@@ -276,7 +279,7 @@ describe("branches sidebar state", () => {
       list = [reflog, wip],
       drafting = false,
     ) =>
-      buildBranchesSidebarRows(
+      sidebarRows(
         branchScenarioRefs(),
         mainPath,
         defaultExpandedSections,

@@ -66,7 +66,7 @@ describe("merge actions", () => {
     await expect
       .element(screen.getByRole("menuitem", { name: /^Merge into main/ }))
       .toBeVisible();
-    await userEvent.keyboard("{ArrowDown}{ArrowRight}");
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{ArrowRight}");
     await expect
       .element(screen.getByRole("menuitem", { name: /^Merge(?! into)/ }))
       .toMatchTextContent("merge commit");

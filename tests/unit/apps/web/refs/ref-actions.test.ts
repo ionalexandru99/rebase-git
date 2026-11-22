@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { sidebarRows } from "#tests-support/branches-sidebar-rows.ts";
 import {
   commitId,
   mainAndTopicWorktrees,
@@ -9,10 +10,7 @@ import {
   upstream,
 } from "#tests-support/fixtures.ts";
 import { everyAction, runAction } from "#web/components/ui/action-menu.tsx";
-import {
-  type BranchesSidebarRefRow,
-  buildBranchesSidebarRows,
-} from "#web/features/branches-sidebar/branches-sidebar-state.ts";
+import type { BranchesSidebarRefRow } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 import {
   type RefActionHandlers,
   refActions,
@@ -61,9 +59,11 @@ describe("ref actions", () => {
   it("never offers deleting a differently named upstream such as a shared main", () => {
     expect(Object.keys(reasons("tracked"))).toEqual([
       "checkout",
+      "showReflog",
       "newBranch",
       "newWorktree",
       "rename",
+      "settle",
       "deleteLocal",
     ]);
   });
@@ -110,6 +110,7 @@ describe("ref actions", () => {
           refs(),
           { writable: true },
           {
+            settle: handlers.settle,
             editing: {
               ...handlers.editing,
               deletion: { request: (deletion) => requested.push(deletion) },
@@ -196,6 +197,7 @@ describe("ref actions", () => {
       newBranch: "Read only",
       newWorktree: "Read only",
       rename: "Read only",
+      settle: "Read only",
     });
     expect(reasons("release", false)).toMatchObject({ delete: "Read only" });
   });
@@ -209,7 +211,7 @@ function reasons(
   ],
 ) {
   const repository = { ...refs(), remoteProviders };
-  const row = buildBranchesSidebarRows(
+  const row = sidebarRows(
     repository,
     mainPath,
     new Set(["branches", "remote:origin", "tags"]),
@@ -262,6 +264,13 @@ function pullAction(name: string, { ahead }: { readonly ahead: number }) {
 
 const handlers: RefActionHandlers = {
   checkout: () => undefined,
+  compare: () => undefined,
+  merge: () => undefined,
+  rebase: () => undefined,
+  reset: () => undefined,
+  showReflog: () => undefined,
+  pullRequests: () => [],
+  settle: () => undefined,
   pull: undefined,
   pushTags: { pushing: false, run: () => undefined },
   editing: {

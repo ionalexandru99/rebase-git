@@ -7,7 +7,12 @@ import {
   linearHistory,
 } from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
-import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
+import { noCommitGraphActions } from "#tests-support/workspace-actions.ts";
+import {
+  CommitGraph,
+  type CommitGraphScope,
+} from "#web/features/commit-graph/commit-graph.tsx";
+import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope.ts";
 import { saveRepositoryHistoryOrder } from "#web/features/repository-history/history-order.ts";
 import type { HistorySnapshot } from "#web/features/repository-history/history-worker-protocol.ts";
 
@@ -33,7 +38,6 @@ export async function renderGraph(
         reader={history}
         repositoryName="rebase-test"
         roots={roots}
-        historyIdentity={graphHistoryIdentity}
       />
     </div>,
   );
@@ -74,9 +78,31 @@ export function history(count: number) {
 
 export function CommitGraphFixture({
   reader,
+  roots,
+  historyScope,
   ...props
-}: Omit<ComponentProps<typeof CommitGraph>, "history"> & {
+}: Partial<
+  Omit<ComponentProps<typeof CommitGraph>, "history" | "historyScope">
+> & {
   readonly reader: FakeRepositoryHistory | undefined;
+  readonly repositoryName: string;
+  readonly roots: CommitGraphScope["roots"];
+  readonly historyScope?: Partial<Omit<CommitGraphScope, "roots">>;
 }) {
-  return <CommitGraph {...props} history={reader} />;
+  return (
+    <CommitGraph
+      {...noCommitGraphActions}
+      {...props}
+      history={reader}
+      historyScope={{
+        identity: graphHistoryIdentity,
+        roots,
+        scope: automaticHistoryScope,
+        selections: [],
+        toggleRef: () => undefined,
+        reset: undefined,
+        ...historyScope,
+      }}
+    />
+  );
 }

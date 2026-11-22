@@ -147,13 +147,15 @@ describe("commit graph states", () => {
     const screen = await render(
       <div style={{ height: 520, width: 900 }}>
         <CommitGraphFixture
-          onRemoveHistoryRef={remove}
-          onResetHistoryScope={reset}
           reader={reader}
           repositoryName="rebase-test"
           roots={[{ name: "main", oid: first.oid, type: "branch" }]}
-          scope={{ _tag: "Custom", selections: [selection] }}
-          selections={[selection]}
+          historyScope={{
+            scope: { _tag: "Custom", selections: [selection] },
+            selections: [selection],
+            toggleRef: remove,
+            reset,
+          }}
         />
       </div>,
     );
@@ -213,12 +215,14 @@ describe("commit graph states", () => {
     const screen = await render(
       <div style={{ height: 520, width: 900 }}>
         <CommitGraphFixture
-          onResetHistoryScope={vi.fn()}
           reader={reader}
           repositoryName="rebase-test"
           roots={[{ name: "main", oid: commits[0]?.oid ?? "", type: "branch" }]}
-          scope={{ _tag: "Custom", selections }}
-          selections={selections}
+          historyScope={{
+            scope: { _tag: "Custom", selections },
+            selections,
+            reset: vi.fn(),
+          }}
         />
       </div>,
     );

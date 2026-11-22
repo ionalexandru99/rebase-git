@@ -189,18 +189,19 @@ function Workspace({
                       toolbarActions={syncActions}
                       toolbarInset={!panelState.open}
                       remoteProviders={refs?.remoteProviders}
-                      historyIdentity={{
-                        environmentId,
-                        repositoryId: scope.logicalRepositoryId,
+                      historyScope={{
+                        identity: {
+                          environmentId,
+                          repositoryId: scope.logicalRepositoryId,
+                        },
+                        roots: resolved?.roots,
+                        scope: resolved?.scope ?? automaticHistoryScope,
+                        selections: resolved?.selections ?? [],
+                        toggleRef: historyScope.toggleRef,
+                        reset: historyScope.reset,
                       }}
-                      onRemoveHistoryRef={historyScope.toggleRef}
-                      onRevealHistoryRef={historyScope.toggleRef}
-                      onResetHistoryScope={historyScope.reset}
                       history={history}
                       repositoryName={name}
-                      roots={resolved?.roots}
-                      scope={resolved?.scope ?? automaticHistoryScope}
-                      selections={resolved?.selections ?? []}
                     />
                   </main>
                 </TerminalSplit>

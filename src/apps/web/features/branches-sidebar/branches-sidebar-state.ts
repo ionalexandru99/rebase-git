@@ -114,8 +114,6 @@ export const defaultExpandedSections: ReadonlySet<string> = new Set([
   localBranchesSectionId,
 ]);
 
-const noStashes: BranchesSidebarStashes = { list: [], drafting: false };
-
 export function remoteSectionId(remote: string): string {
   return `remote:${remote}`;
 }
@@ -125,9 +123,9 @@ export function buildBranchesSidebarRows(
   activeWorktreePath: string,
   expandedSections: ReadonlySet<string>,
   query: string,
-  scope: BranchesSidebarScope = "all",
-  tree?: BranchesSidebarTreeOptions,
-  stashes: BranchesSidebarStashes = noStashes,
+  scope: BranchesSidebarScope,
+  tree: BranchesSidebarTreeOptions,
+  stashes: BranchesSidebarStashes,
 ): readonly BranchesSidebarRow[] {
   const matches = createMatcher(query);
   const searching = query.trim().length > 0;
@@ -278,7 +276,7 @@ export function buildBranchesSidebarRows(
     );
     return [
       header,
-      ...(tree?.view === "tree"
+      ...(tree.view === "tree"
         ? buildBranchTree(refRows, tree.folders, searching)
         : refRows),
     ];
@@ -292,8 +290,8 @@ export function refSectionId(kind: RefKind) {
 export function branchesSidebarItems(
   rows: readonly BranchesSidebarRow[],
   draftSectionId: string | undefined,
-  detailsRowId?: string,
-  stashDraft = false,
+  detailsRowId: string | undefined,
+  stashDraft: boolean,
 ): readonly BranchesSidebarItem[] {
   const items: BranchesSidebarItem[] = rows.flatMap(
     (row): BranchesSidebarItem[] =>

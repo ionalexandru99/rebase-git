@@ -76,29 +76,17 @@ export interface RefActionAccess {
 
 export interface RefActionHandlers {
   readonly checkout: (target: RepositoryRefTarget) => void;
-  readonly compare?:
-    | ((target: RepositoryRefTarget) => RefAction | undefined)
-    | undefined;
-  readonly merge?:
-    | ((target: RepositoryRefTarget) => RefAction | undefined)
-    | undefined;
-  readonly rebase?:
-    | ((target: RepositoryRefTarget) => RefAction | undefined)
-    | undefined;
-  readonly reset?:
-    | ((target: RepositoryRefTarget) => RefAction | undefined)
-    | undefined;
-  readonly showReflog?: ((branch: string) => void) | undefined;
-  readonly pullRequests?:
-    | ((target: RepositoryRefTarget) => readonly RefAction[])
-    | undefined;
+  readonly compare: (target: RepositoryRefTarget) => RefAction | undefined;
+  readonly merge: (target: RepositoryRefTarget) => RefAction | undefined;
+  readonly rebase: (target: RepositoryRefTarget) => RefAction | undefined;
+  readonly reset: (target: RepositoryRefTarget) => RefAction | undefined;
+  readonly showReflog: (branch: string) => void;
+  readonly pullRequests: (target: RepositoryRefTarget) => readonly RefAction[];
   readonly pull:
     | { readonly pulling: boolean; readonly run: (branch: string) => void }
     | undefined;
   readonly pushTags: TagPushHandler | undefined;
-  readonly settle?:
-    | ((names: readonly string[], settled: boolean) => void)
-    | undefined;
+  readonly settle: (names: readonly string[], settled: boolean) => void;
   readonly editing: Pick<RefEditing, "draft" | "startRename"> & {
     readonly deletion: Pick<RefEditing["deletion"], "request">;
   };
@@ -130,11 +118,11 @@ export function refActions(
   const readOnly = writable ? undefined : "Read only";
   const target = row.target;
   const startPoint = refStartPoint(target, refs);
-  const mergeAction = merge?.(target);
-  const rebaseAction = rebase?.(target);
-  const resetAction = reset?.(target);
-  const compareAction = compare?.(target);
-  const pullRequestActions = pullRequests?.(target) ?? [];
+  const mergeAction = merge(target);
+  const rebaseAction = rebase(target);
+  const resetAction = reset(target);
+  const compareAction = compare(target);
+  const pullRequestActions = pullRequests(target);
   const remove = (
     fields: Omit<ActionFields, "group" | "run">,
     deletion: RefDeletion | undefined,
@@ -164,7 +152,7 @@ export function refActions(
     row.upstream === undefined
       ? []
       : [pullAction(target.name, holder !== undefined, row.upstream, pull)]),
-    ...(showReflog === undefined || target._tag !== "LocalBranch"
+    ...(target._tag !== "LocalBranch"
       ? []
       : [
           action({
@@ -329,7 +317,7 @@ function settleActions(
   readOnly: string | undefined,
   settle: RefActionHandlers["settle"],
 ): readonly RefAction[] {
-  if (settle === undefined || branches.length === 0) return [];
+  if (branches.length === 0) return [];
   const active = branches.filter((branch) => branch.settled === undefined);
   const settled = active.length === 0;
   return [

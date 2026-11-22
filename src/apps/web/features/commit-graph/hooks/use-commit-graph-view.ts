@@ -40,23 +40,22 @@ export function useCommitGraphView({
   onActiveCommitChange,
 }: {
   readonly history: RepositoryHistory | undefined;
-  readonly historyIdentity:
-    | { readonly environmentId: string; readonly repositoryId: string }
-    | undefined;
+  readonly historyIdentity: {
+    readonly environmentId: string;
+    readonly repositoryId: string;
+  };
   readonly roots: readonly RepositoryHistoryRefTarget[] | undefined;
   readonly scrollRef: RefObject<HTMLTableElement | null>;
   readonly viewportRef: RefObject<CommitGraphViewportHandle | null>;
-  readonly onRevealHistoryRef: ((target: HistorySelection) => void) | undefined;
-  readonly onActiveCommitChange:
-    | ((oid: string | undefined) => void)
-    | undefined;
+  readonly onRevealHistoryRef: (target: HistorySelection) => void;
+  readonly onActiveCommitChange: (oid: string | undefined) => void;
 }) {
   const [expanded, setExpanded] = useState<
     ReadonlyMap<string, readonly string[]>
   >(new Map());
   const order = useRepositoryHistoryOrder(
-    historyIdentity?.environmentId,
-    historyIdentity?.repositoryId,
+    historyIdentity.environmentId,
+    historyIdentity.repositoryId,
   );
   const snapshot = useStore(history ?? emptyHistory);
   const [pageSize, setPageSize] = useState(12);
@@ -222,7 +221,7 @@ export function useCommitGraphView({
     const root = target.root;
     if (follow && root !== undefined) return;
     const selection = root === undefined ? undefined : historyLabelTarget(root);
-    if (selection !== undefined) onRevealHistoryRef?.(selection);
+    if (selection !== undefined) onRevealHistoryRef(selection);
     if (target.expanded.length > 0)
       setExpanded((previous) => {
         const next = new Map(previous);

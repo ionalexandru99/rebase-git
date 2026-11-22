@@ -29,8 +29,6 @@ export interface BranchCardBranch {
   readonly row: BranchesSidebarRefRow;
 }
 
-const noPullRequests: readonly PullRequest[] = [];
-
 export type BranchCardHandle = PreviewCard.Handle<BranchCardBranch>;
 
 export function createBranchCardHandle(): BranchCardHandle {
@@ -69,7 +67,7 @@ export function BranchCard({
   readonly history: Pick<RepositoryHistory, "ask"> | undefined;
   readonly linking: string | undefined;
   readonly onLinkingEnd: () => void;
-  readonly pullRequests: PullRequests | undefined;
+  readonly pullRequests: PullRequests;
   readonly remoteBranches: readonly RemoteBranch[];
 }) {
   return (
@@ -101,12 +99,10 @@ export function BranchCard({
               >
                 <BranchCardBody
                   history={history}
-                  kind={pullRequests?.kind ?? "PullRequest"}
+                  kind={pullRequests.kind}
                   linking={linking === payload.row.name}
                   onLinked={() => handle.close()}
-                  pullRequests={
-                    pullRequests?.forBranch(payload.row.name) ?? noPullRequests
-                  }
+                  pullRequests={pullRequests.forBranch(payload.row.name)}
                   remoteBranches={remoteBranches}
                   row={payload.row}
                 />

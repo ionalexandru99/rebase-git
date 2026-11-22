@@ -8,6 +8,7 @@ import {
   type SaveStash,
   type StashTarget,
 } from "#contracts/repository-stashes/repository-stashes.contract.ts";
+import { BranchesSidebarFixture } from "#tests-support/branches-sidebar-fixture.tsx";
 import {
   fakeRequests,
   idleOperation,
@@ -25,7 +26,6 @@ import {
   worktree,
 } from "#tests-support/fixtures.ts";
 import { render, testChanges } from "#tests-support/render.tsx";
-import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
 import { WorkingChanges } from "#web/features/working-changes/working-changes.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
@@ -183,7 +183,7 @@ async function renderStashes() {
     >
       <div style={{ display: "flex", height: 640 }}>
         <div style={{ width: 320 }}>
-          <BranchesSidebar onOpenStash={opened} />
+          <BranchesSidebarFixture onOpenStash={opened} />
         </div>
         <div style={{ width: 960 }}>
           <WorkingChanges

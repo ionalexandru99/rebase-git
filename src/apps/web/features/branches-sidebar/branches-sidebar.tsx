@@ -105,7 +105,6 @@ import { useListener } from "#web/lib/listener-bus.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import { useCommand } from "#web/platform/query/use-command.ts";
 
-const noSelectedRefs: ReadonlySet<string> = new Set();
 const noPullRequests: readonly PullRequest[] = [];
 const noRemoteBranches: readonly RemoteBranch[] = [];
 const noSelectedRows: ReadonlySet<string> = new Set();
@@ -117,26 +116,26 @@ export function BranchesSidebar({
   rebase,
   reset,
   compare,
-  onBranchRenamed = () => undefined,
-  onToggleHistoryRef = () => undefined,
+  onBranchRenamed,
+  onToggleHistoryRef,
   onShowReflog,
-  onOpenStash = () => undefined,
-  selectedHistoryRefKeys = noSelectedRefs,
+  onOpenStash,
+  selectedHistoryRefKeys,
 }: {
-  readonly history?: Pick<RepositoryHistory, "ask"> | undefined;
-  readonly merge?: MergeActions | undefined;
-  readonly pullRequests?: PullRequests | undefined;
-  readonly rebase?: RebaseActions | undefined;
-  readonly reset?: ResetActions | undefined;
-  readonly compare?: CompareActions | undefined;
-  readonly onBranchRenamed?: (rename: {
+  readonly history: Pick<RepositoryHistory, "ask"> | undefined;
+  readonly merge: MergeActions;
+  readonly pullRequests: PullRequests;
+  readonly rebase: Pick<RebaseActions, "actionFor" | "inspect">;
+  readonly reset: Pick<ResetActions, "actionFor">;
+  readonly compare: Pick<CompareActions, "actionFor">;
+  readonly onBranchRenamed: (rename: {
     readonly name: string;
     readonly newName: string;
   }) => void;
-  readonly onToggleHistoryRef?: (target: RepositoryRefTarget) => void;
-  readonly onShowReflog?: (branch: string) => void;
-  readonly onOpenStash?: (oid: string) => void;
-  readonly selectedHistoryRefKeys?: ReadonlySet<string>;
+  readonly onToggleHistoryRef: (target: RepositoryRefTarget) => void;
+  readonly onShowReflog: (branch: string) => void;
+  readonly onOpenStash: (oid: string) => void;
+  readonly selectedHistoryRefKeys: ReadonlySet<string>;
 }): JSX.Element {
   const activeWorktreePath = useRepositoryScope()?.worktreePath ?? "";
   const repositoryRefs = useScopedRepositoryRefs();
@@ -280,19 +279,16 @@ export function BranchesSidebar({
           { activeWorktreePath, writable: editing.writable },
           {
             checkout: onSelectRef,
-            compare: compare?.actionFor,
-            merge: merge?.actionFor,
-            rebase: rebase?.actionFor,
-            reset: reset?.actionFor,
+            compare: compare.actionFor,
+            merge: merge.actionFor,
+            rebase: rebase.actionFor,
+            reset: reset.actionFor,
             showReflog: onShowReflog,
-            pullRequests:
-              pullRequests === undefined
-                ? undefined
-                : (target) =>
-                    pullRequests.actionsFor(target, () => {
-                      setLinking(row.name);
-                      branchCard.open(branchCardTriggerId(row.id));
-                    }),
+            pullRequests: (target) =>
+              pullRequests.actionsFor(target, () => {
+                setLinking(row.name);
+                branchCard.open(branchCardTriggerId(row.id));
+              }),
             pull: pull.allowed
               ? {
                   pulling: pull.pulling,
@@ -519,12 +515,12 @@ export function BranchesSidebar({
           setActiveRowId(
             next.size === 0 || next.has(row.id) ? row.id : [...next].at(-1),
           );
-          merge?.inspect(row.target);
-          rebase?.inspect(row.target);
+          merge.inspect(row.target);
+          rebase.inspect(row.target);
         }}
         onToggleHistory={() => onToggleHistoryRef(row.target)}
         pullRequests={
-          row.target._tag === "LocalBranch" && pullRequests !== undefined
+          row.target._tag === "LocalBranch"
             ? pullRequests.forBranch(row.name)
             : noPullRequests
         }

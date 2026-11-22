@@ -35,7 +35,7 @@ interface CommitAccess {
 }
 
 interface CommitActionHandlers {
-  readonly openDetails?: ((oid: string) => void) | undefined;
+  readonly openDetails: (oid: string) => void;
   readonly compare: Action | undefined;
   readonly cherryPick: Action | undefined;
   readonly merge: Action | undefined;
@@ -62,13 +62,13 @@ export function useCommitActions({
 }: {
   readonly history: Pick<RepositoryHistory, "ask"> | undefined;
   readonly scope: HistoryScopeQuery | undefined;
-  readonly cherryPick?: Pick<CherryPick, "action"> | undefined;
-  readonly merge?: MergeActions | undefined;
-  readonly rebase?: Pick<RebaseActions, "actionFor"> | undefined;
-  readonly rewrite?: Pick<RewriteCommits, "actions"> | undefined;
-  readonly reset?: Pick<ResetActions, "actionFor"> | undefined;
-  readonly compare?: CompareActions | undefined;
-  readonly onOpenDetails?: ((oid: string) => void) | undefined;
+  readonly cherryPick: Pick<CherryPick, "action">;
+  readonly merge: Pick<MergeActions, "actionFor">;
+  readonly rebase: Pick<RebaseActions, "actionFor">;
+  readonly rewrite: Pick<RewriteCommits, "actions">;
+  readonly reset: Pick<ResetActions, "actionFor">;
+  readonly compare: CompareActions;
+  readonly onOpenDetails: (oid: string) => void;
 }) {
   const scope = useRepositoryScope();
   const errorToast = useErrorToast();
@@ -86,14 +86,14 @@ export function useCommitActions({
       openDetails: onOpenDetails,
       compare:
         selected.length === 2
-          ? compare?.pairFor(selected)
-          : compare?.actionFor(oid),
-      cherryPick: cherryPick?.action(),
-      merge: merge?.actionFor(oid),
-      rebase: rebase?.actionFor(oid),
+          ? compare.pairFor(selected)
+          : compare.actionFor(oid),
+      cherryPick: cherryPick.action(),
+      merge: merge.actionFor(oid),
+      rebase: rebase.actionFor(oid),
       revert: revert.actionFor(selected),
-      rewrite: rewrite?.actions() ?? [],
-      reset: reset?.actionFor(oid),
+      rewrite: rewrite.actions(),
+      reset: reset.actionFor(oid),
       create: createRefActions(oid, access),
       readCommit: async (commit) =>
         (await history?.ask({ _tag: "Commits", oids: [commit] }))?.[0],
@@ -227,16 +227,12 @@ function commitActions(
         .catch(() => errorToast.show(id)),
   });
   return [
-    ...(openDetails === undefined
-      ? []
-      : [
-          {
-            id: "openDetails",
-            label: "Open details",
-            enabled: connected && readable,
-            run: () => openDetails(oid),
-          },
-        ]),
+    {
+      id: "openDetails",
+      label: "Open details",
+      enabled: connected && readable,
+      run: () => openDetails(oid),
+    },
     ...(compare === undefined ? [] : [compare]),
     ...[cherryPick, merge, rebase, revert, ...rewrite, reset].filter(
       (action) => action !== undefined,
