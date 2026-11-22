@@ -953,6 +953,32 @@ describe("explaining ignored paths through Git", () => {
   });
 });
 
+describe("clean filters when reading change diffs", () => {
+  it("normalizes CRLF line endings when core.autocrlf is enabled", async () => {
+    const f = await fixture();
+    await f.git("config", "core.autocrlf", "true");
+    await writeFile(join(f.directory, "file.txt"), "one\r\nTWO\r\nthree\r\n");
+
+    const diff = await f.diff("unstaged", false, "file.txt");
+
+    expect(diff.after).toBe("one\nTWO\nthree\n");
+  });
+
+  it("applies a configured Git clean driver on an unstaged LF file", async () => {
+    const f = await fixture();
+    await f.git("config", "filter.unset.clean", "tr a-z A-Z");
+    await writeFile(
+      join(f.directory, ".gitattributes"),
+      "file.txt filter=unset\n",
+    );
+    await writeFile(join(f.directory, "file.txt"), "one\ntwo\nthree\n");
+
+    const diff = await f.diff("unstaged", false, "file.txt");
+
+    expect(diff.after).toBe("ONE\nTWO\nTHREE\n");
+  });
+});
+
 async function caseInsensitiveFileSystem() {
   const directory = await mkdtemp(join(tmpdir(), "rebase-case-"));
   try {

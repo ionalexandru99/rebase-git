@@ -28,10 +28,6 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
   return Effect.gen(function* () {
     const directory = scope.worktreePath;
     const { head, indexPath } = yield* readHeadAndIndexPath(git, directory);
-    if (scope.amend && head === null)
-      return yield* Effect.fail(
-        changesFailed("Unsupported", "There is no commit to amend."),
-      );
     const base = yield* comparisonBase(git, directory, head, scope.amend);
     const [status, unstagedLines, stagedDiff, index, message] =
       yield* Effect.all(
@@ -134,6 +130,47 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
   });
 }
 
+export function readComparisonBase(git: GitCommandRunner, scope: ChangesScope) {
+  return Effect.gen(function* () {
+    const directory = scope.worktreePath;
+    const head = (yield* runRepositoryGit(
+      git,
+      directory,
+      ["rev-parse", "--verify", "--quiet", "HEAD"],
+      { exitCodes: [0, 1] },
+    )).trim();
+    return yield* comparisonBase(
+      git,
+      directory,
+      head === "" ? null : head,
+      scope.amend,
+    );
+  });
+}
+
+export function readStagedPreviousPath(
+  git: GitCommandRunner,
+  directory: string,
+  base: string,
+  path: string,
+) {
+  return runRepositoryGit(git, directory, [
+    "diff",
+    "--cached",
+    "--find-renames",
+    `-l${renameLimit}`,
+    "--raw",
+    "-z",
+    base,
+  ]).pipe(
+    Effect.map(
+      (output) =>
+        stagedFiles(output).find((file) => file.path === path)?.previousPath ??
+        null,
+    ),
+  );
+}
+
 function readHeadAndIndexPath(git: GitCommandRunner, directory: string) {
   return runRepositoryGit(
     git,
@@ -177,6 +214,10 @@ function comparisonBase(
   amend: boolean,
 ) {
   return Effect.gen(function* () {
+    if (amend && head === null)
+      return yield* Effect.fail(
+        changesFailed("Unsupported", "There is no commit to amend."),
+      );
     if (head !== null && !amend) return head;
     if (head !== null) {
       const parents = (yield* runRepositoryGit(git, directory, [

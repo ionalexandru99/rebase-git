@@ -37,7 +37,11 @@ import {
 } from "#server/features/repository-changes/git/ignore-paths.ts";
 import { planChanges } from "#server/features/repository-changes/git/mutate-changes.ts";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff.ts";
-import { readChanges } from "#server/features/repository-changes/git/read-changes.ts";
+import {
+  readChanges,
+  readComparisonBase,
+  readStagedPreviousPath,
+} from "#server/features/repository-changes/git/read-changes.ts";
 import type { GitLfs } from "#server/features/repository-lfs/git-lfs.ts";
 import { atRebaseEditStop } from "#server/repository/repository-coordination.ts";
 
@@ -54,11 +58,17 @@ export function readRepositoryChangeDiff(
 ) {
   return Effect.gen(function* () {
     yield* safeChangePath(command.worktreePath, command.path);
-    const { snapshot, base } = yield* readChanges(git, command);
-    return yield* readChangeDiff(git, command, {
-      base,
-      previousPath: previousPathOf(snapshot, command),
-    });
+    const base = yield* readComparisonBase(git, command);
+    const previousPath =
+      command.section === "unstaged"
+        ? null
+        : yield* readStagedPreviousPath(
+            git,
+            command.worktreePath,
+            base,
+            command.path,
+          );
+    return yield* readChangeDiff(git, command, { base, previousPath });
   });
 }
 
@@ -244,13 +254,6 @@ function conflictedPaths(snapshot: RepositoryChanges) {
         .map((file) => file.path),
     ),
   ];
-}
-
-function previousPathOf(snapshot: RepositoryChanges, viewed: ViewedChange) {
-  return (
-    snapshot[viewed.section].find((file) => file.path === viewed.path)
-      ?.previousPath ?? null
-  );
 }
 
 function verifyChanges(
