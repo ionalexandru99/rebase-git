@@ -314,8 +314,39 @@ describe("application shell", () => {
     connected.disconnect();
 
     await expect.element(commit).toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Open rebase-test" }))
+      .toBeDisabled();
     await commit.click();
     await expect.element(commit).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("filters open projects by name", async () => {
+    const connected = await connectedSession();
+    await render(
+      <ApplicationShell
+        desktopUpdates={undefined}
+        productVersion="test"
+        repositoryFilesystem={undefined}
+        session={connected.session}
+      />,
+    );
+    await page
+      .getByRole("main", { name: "Open project" })
+      .getByRole("option")
+      .filter({ hasText: "rebase-test" })
+      .first()
+      .click();
+    const sidebarProject = page.getByRole("button", {
+      name: "Open rebase-test",
+    });
+    const filter = page.getByRole("textbox", { name: "Filter projects" });
+
+    await filter.fill("payments");
+    await expect.element(sidebarProject).not.toBeInTheDocument();
+
+    await filter.fill(" REBASE ");
+    await expect.element(sidebarProject).toBeVisible();
   });
 });
 

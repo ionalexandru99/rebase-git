@@ -1,17 +1,15 @@
-import { IconDeviceLaptop } from "@tabler/icons-react";
 import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
-import type { OpenProjectEnvironment } from "#web/features/open-project/open-project-model.ts";
 import {
   cloneGroups,
   projectItems,
   urlSource,
 } from "#web/features/open-project/open-project-state.ts";
-import { localEnvironment } from "#web/features/project-navigation/local-environment.ts";
 import { useRepositoryCatalog } from "#web/features/repository-catalog/use-repository-catalog.ts";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 
 const noHosts = [] as const;
+const noProjects = [] as const;
 const projectsShownWithoutQuery = 10;
 
 export function useOpenProjectResults(
@@ -19,14 +17,18 @@ export function useOpenProjectResults(
   showAllProjects: boolean,
   collapsedGroupIds: ReadonlySet<string>,
 ) {
-  const environments = useOpenProjectEnvironments();
+  const { repositories } = useRepositoryCatalog();
+  const { availability, connectionState } = useEnvironment().status;
   const hosts = useEnvironmentQuery(SourceControlApi.cloneable, undefined, {
     changes: "none",
     refetchOnWindowFocus: false,
   });
   const groups = cloneGroups(hosts.data ?? noHosts, query);
   const pastedUrl = urlSource(query);
-  const matchingProjects = projectItems(environments, query);
+  const matchingProjects =
+    connectionState === "PairingRequired"
+      ? noProjects
+      : projectItems(repositories, query);
   const projects =
     showAllProjects || query.trim().length > 0
       ? matchingProjects
@@ -35,7 +37,7 @@ export function useOpenProjectResults(
     ...(pastedUrl === undefined
       ? []
       : [{ key: pastedUrl.key, source: pastedUrl }]),
-    ...projects.filter((item) => !item.disabled),
+    ...(availability === "available" ? projects : []),
     ...groups
       .filter(({ id }) => !collapsedGroupIds.has(id))
       .flatMap(({ sources }) =>
@@ -45,7 +47,6 @@ export function useOpenProjectResults(
   const hasCloneSources = groups.some(({ sources }) => sources.length > 0);
 
   return {
-    environments,
     projects,
     hiddenProjectCount: matchingProjects.length - projects.length,
     groups,
@@ -53,29 +54,4 @@ export function useOpenProjectResults(
     keyboardItems,
     hasCloneSources,
   };
-}
-
-function useOpenProjectEnvironments(): readonly OpenProjectEnvironment[] {
-  const { repositories } = useRepositoryCatalog();
-  const { availability, connectionState, status } = useEnvironment().status;
-  return connectionState === "PairingRequired"
-    ? []
-    : [
-        {
-          availability,
-          icon: IconDeviceLaptop,
-          iconColor: "var(--primary)",
-          id: localEnvironment.id,
-          name: localEnvironment.name,
-          repositories: repositories.map((repository) => ({
-            color: repository.color,
-            environmentId: localEnvironment.id,
-            id: repository.id,
-            lastOpenedAt: repository.lastOpenedAt,
-            name: repository.name,
-            path: repository.path,
-          })),
-          status,
-        },
-      ];
 }

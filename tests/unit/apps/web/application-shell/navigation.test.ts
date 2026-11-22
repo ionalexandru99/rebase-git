@@ -1,55 +1,100 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import { catalogEntry } from "#tests-support/fixtures.ts";
 import {
   initialNavigation,
+  type Navigation,
   reduceNavigation,
 } from "#web/app/shell/use-navigation.ts";
-import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation.ts";
 
-const repository: ProjectNavigationRepository = {
-  color: "blue",
-  id: "payments",
-  name: "payments",
-};
+const payments = catalogEntry({ id: "payments", name: "payments" });
+const worker = catalogEntry({ id: "worker", name: "worker" });
 
 describe("shell navigation", () => {
   it("opens a repository in place of its settings", () => {
     const settings = reduceNavigation(initialNavigation(), {
       type: "show-repository-settings",
-      repositoryId: repository.id,
+      repositoryId: payments.id,
     });
 
     const opened = reduceNavigation(settings, {
       type: "open-repository",
-      repository,
+      repository: payments,
     });
 
-    expect(opened.repositorySettingsId).toBeUndefined();
-    expect(opened.projects).toMatchObject({
-      selectedRepositoryId: repository.id,
+    expect(opened).toMatchObject({
+      openRepositories: [payments],
+      repositorySettingsId: undefined,
+      selectedRepositoryId: payments.id,
       workspaceView: "repository",
     });
-    expect(opened.projects.environments[0]?.repositories).toEqual([repository]);
+  });
+
+  it("selects an open repository without adding it again", () => {
+    const state = openAll(payments, worker);
+
+    const selected = reduceNavigation(state, {
+      type: "open-repository",
+      repository: payments,
+    });
+
+    expect(selected).toMatchObject({
+      openRepositories: [payments, worker],
+      selectedRepositoryId: payments.id,
+    });
+  });
+
+  it("shows Open project without clearing the selected repository", () => {
+    const state = openAll(payments);
+
+    const openProject = reduceNavigation(state, { type: "show-open-project" });
+
+    expect(openProject).toMatchObject({
+      openRepositories: [payments],
+      selectedRepositoryId: payments.id,
+      workspaceView: "open-project",
+    });
   });
 
   it("closes the settings of a repository that leaves the sidebar", () => {
-    const opened = reduceNavigation(initialNavigation(), {
-      type: "open-repository",
-      repository,
-    });
-    const settings = reduceNavigation(opened, {
+    const settings = reduceNavigation(openAll(payments), {
       type: "show-repository-settings",
-      repositoryId: repository.id,
+      repositoryId: payments.id,
     });
 
     const closed = reduceNavigation(settings, {
       type: "close-repository",
-      repositoryId: repository.id,
+      repositoryId: payments.id,
     });
 
-    expect(closed.repositorySettingsId).toBeUndefined();
-    expect(closed.projects).toMatchObject({
+    expect(closed).toMatchObject({
+      openRepositories: [],
+      repositorySettingsId: undefined,
       selectedRepositoryId: undefined,
       workspaceView: "open-project",
     });
   });
+
+  it("closes another repository without clearing the selection", () => {
+    const closed = reduceNavigation(openAll(worker, payments), {
+      type: "close-repository",
+      repositoryId: worker.id,
+    });
+
+    expect(closed).toMatchObject({
+      openRepositories: [payments],
+      selectedRepositoryId: payments.id,
+      workspaceView: "repository",
+    });
+  });
 });
+
+function openAll(
+  ...repositories: readonly RepositoryCatalogEntry[]
+): Navigation {
+  return repositories.reduce(
+    (navigation, repository) =>
+      reduceNavigation(navigation, { type: "open-repository", repository }),
+    initialNavigation(),
+  );
+}

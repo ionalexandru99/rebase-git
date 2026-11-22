@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import type { OpenProjectRepository } from "#web/features/open-project/open-project-model.ts";
+import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import {
   formatLastOpened,
   type OpenProjectRepositoryItem,
@@ -10,6 +10,7 @@ import { useNow } from "#web/lib/age-label.ts";
 
 export function ProjectList({
   activeKey,
+  disabled,
   hiddenCount,
   items,
   onActivate,
@@ -18,11 +19,12 @@ export function ProjectList({
   onShowAll,
 }: {
   readonly activeKey: string | undefined;
+  readonly disabled: boolean;
   readonly hiddenCount: number;
   readonly items: readonly OpenProjectRepositoryItem[];
   readonly onActivate: (key: string) => void;
-  readonly onOpen: (repository: OpenProjectRepository) => void;
-  readonly onOpenSettings: (repository: OpenProjectRepository) => void;
+  readonly onOpen: (repository: RepositoryCatalogEntry) => void;
+  readonly onOpenSettings: (repository: RepositoryCatalogEntry) => void;
   readonly onShowAll: () => void;
 }): JSX.Element | null {
   const now = useNow();
@@ -37,13 +39,13 @@ export function ProjectList({
         <div
           className="group grid h-11 min-w-0 grid-cols-[minmax(0,1fr)_1.75rem] items-center rounded-control px-2.5 hover:bg-accent has-[[aria-expanded=true]]:bg-accent data-[active=true]:bg-accent data-[available=false]:opacity-40"
           data-active={activeKey === item.key}
-          data-available={!item.disabled}
+          data-available={!disabled}
           key={item.key}
         >
           <button
             aria-selected={activeKey === item.key}
             className="grid h-full min-w-0 grid-cols-[1.875rem_minmax(0,1fr)_auto] items-center gap-[.7rem] text-left outline-none disabled:pointer-events-none"
-            disabled={item.disabled}
+            disabled={disabled}
             id={openProjectItemId(item.key)}
             onClick={() => onOpen(item.repository)}
             onFocus={() => onActivate(item.key)}
@@ -65,9 +67,7 @@ export function ProjectList({
               </span>
             </span>
             <span className="text-meta text-muted-foreground">
-              {item.repository.lastOpenedAt === undefined
-                ? null
-                : formatLastOpened(item.repository.lastOpenedAt, now)}
+              {formatLastOpened(item.repository.lastOpenedAt, now)}
             </span>
           </button>
           <RepositorySettingsButton

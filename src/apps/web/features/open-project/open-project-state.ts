@@ -1,11 +1,8 @@
+import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import type {
   GitHostKind,
   HostRepositories,
 } from "#contracts/source-control/source-control.contract.ts";
-import type {
-  OpenProjectEnvironment,
-  OpenProjectRepository,
-} from "#web/features/open-project/open-project-model.ts";
 
 const repositoryNameCollator = new Intl.Collator(undefined, {
   numeric: true,
@@ -13,30 +10,22 @@ const repositoryNameCollator = new Intl.Collator(undefined, {
 });
 
 export interface OpenProjectRepositoryItem {
-  readonly disabled: boolean;
   readonly key: string;
-  readonly repository: OpenProjectRepository;
+  readonly repository: RepositoryCatalogEntry;
 }
 
 export function projectItems(
-  environments: readonly OpenProjectEnvironment[],
+  repositories: readonly RepositoryCatalogEntry[],
   query: string,
 ): readonly OpenProjectRepositoryItem[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  return environments
-    .flatMap((environment) =>
-      environment.repositories
-        .filter(
-          (repository) =>
-            repository.name.toLocaleLowerCase().includes(normalizedQuery) ||
-            repository.path.toLocaleLowerCase().includes(normalizedQuery),
-        )
-        .map((repository) => ({
-          disabled: environment.availability !== "available",
-          key: `project:${environment.id}:${repository.id}`,
-          repository,
-        })),
+  return repositories
+    .filter(
+      (repository) =>
+        repository.name.toLocaleLowerCase().includes(normalizedQuery) ||
+        repository.path.toLocaleLowerCase().includes(normalizedQuery),
     )
+    .map((repository) => ({ key: `project:${repository.id}`, repository }))
     .sort(compareRecentRepositories);
 }
 
@@ -77,8 +66,8 @@ function compareRecentRepositories(
   right: OpenProjectRepositoryItem,
 ): number {
   const recency =
-    new Date(right.repository.lastOpenedAt ?? 0).getTime() -
-    new Date(left.repository.lastOpenedAt ?? 0).getTime();
+    new Date(right.repository.lastOpenedAt).getTime() -
+    new Date(left.repository.lastOpenedAt).getTime();
   return (
     recency ||
     repositoryNameCollator.compare(left.repository.name, right.repository.name)

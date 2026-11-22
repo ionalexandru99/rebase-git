@@ -6,12 +6,12 @@ import {
   useRef,
   useState,
 } from "react";
+import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import { cloneDestinationId } from "#web/features/open-project/clone-line.tsx";
 import {
   HostRepositoriesGroup,
   UrlGroup,
 } from "#web/features/open-project/clone-sources.tsx";
-import type { OpenProjectRepository } from "#web/features/open-project/open-project-model.ts";
 import { OpenProjectToolbar } from "#web/features/open-project/open-project-toolbar.tsx";
 import {
   OpenProjectSectionHeading,
@@ -19,7 +19,6 @@ import {
   ProjectList,
 } from "#web/features/open-project/project-list.tsx";
 import { useOpenProjectResults } from "#web/features/open-project/use-open-project-results.ts";
-import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation.ts";
 import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/repository-folder-browser.tsx";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 
@@ -28,14 +27,12 @@ export function OpenProjectScreen({
   onOpenSettings,
   onRepositoryRemembered,
 }: {
-  readonly onOpenRepository: (repository: ProjectNavigationRepository) => void;
-  readonly onRepositoryRemembered: (
-    repository: ProjectNavigationRepository,
-  ) => void;
+  readonly onOpenRepository: (repository: RepositoryCatalogEntry) => void;
+  readonly onRepositoryRemembered: (repository: RepositoryCatalogEntry) => void;
   readonly onOpenSettings: (repositoryId: string) => void;
 }): JSX.Element {
   const environmentStatus = useEnvironment().status;
-  const browseAvailable = environmentStatus.availability === "available";
+  const available = environmentStatus.availability === "available";
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [showAllProjects, setShowAllProjects] = useState(false);
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<
@@ -46,7 +43,6 @@ export function OpenProjectScreen({
   const [expandedKey, setExpandedKey] = useState<string>();
   const inputRef = useRef<HTMLInputElement>(null);
   const {
-    environments,
     projects,
     hiddenProjectCount,
     groups,
@@ -75,12 +71,10 @@ export function OpenProjectScreen({
       ?.scrollIntoView({ block: "nearest" });
   }, [activeKey]);
 
-  const openRepository = (repository: OpenProjectRepository) =>
-    onOpenRepository(repository);
-  const openSettings = (repository: OpenProjectRepository) =>
+  const openSettings = (repository: RepositoryCatalogEntry) =>
     onOpenSettings(repository.id);
   const onBrowse = () => {
-    if (browseAvailable) setFolderPickerOpen(true);
+    if (available) setFolderPickerOpen(true);
   };
   const setGroupCollapsed = (groupId: string, collapsed: boolean) =>
     setCollapsedGroupIds((current) => {
@@ -109,7 +103,7 @@ export function OpenProjectScreen({
       const activeItem = keyboardItems.find((item) => item.key === activeKey);
       if (activeItem === undefined) return;
       event.preventDefault();
-      if (!("source" in activeItem)) openRepository(activeItem.repository);
+      if (!("source" in activeItem)) onOpenRepository(activeItem.repository);
       else if (expandedKey !== activeItem.key) setExpandedKey(activeItem.key);
       else document.getElementById(cloneDestinationId(activeItem.key))?.focus();
       return;
@@ -147,7 +141,7 @@ export function OpenProjectScreen({
           activeDescendant={
             activeKey === undefined ? undefined : openProjectItemId(activeKey)
           }
-          browseAvailable={browseAvailable}
+          browseAvailable={available}
           inputRef={inputRef}
           onBrowse={onBrowse}
           onChange={handleQueryChange}
@@ -174,10 +168,11 @@ export function OpenProjectScreen({
             )}
             <ProjectList
               activeKey={activeKey}
+              disabled={!available}
               hiddenCount={hiddenProjectCount}
               items={projects}
               onActivate={setActiveKey}
-              onOpen={openRepository}
+              onOpen={onOpenRepository}
               onOpenSettings={openSettings}
               onShowAll={() => {
                 setShowAllProjects(true);
@@ -210,11 +205,8 @@ export function OpenProjectScreen({
         ) : null}
       </div>
       <RepositoryFolderPicker
-        environments={environments}
         onOpenChange={setFolderPickerOpen}
-        onRepositoryOpened={(_, repository) =>
-          onRepositoryRemembered(repository)
-        }
+        onRepositoryOpened={onRepositoryRemembered}
         open={folderPickerOpen}
       />
     </main>

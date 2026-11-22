@@ -1,21 +1,11 @@
 import { useReducer } from "react";
-import { localEnvironment } from "#web/features/project-navigation/local-environment.ts";
 import type {
-  ProjectNavigationRepository,
-  ProjectNavigationState,
-} from "#web/features/project-navigation/project-navigation.ts";
-import {
-  openProjectRepository,
-  removeProjectRepository,
-  setEnvironmentAvailability,
-  setProjectSidebarCollapsed,
-  showOpenProject,
-} from "#web/features/project-navigation/project-navigation-state.ts";
+  OpenRepository,
+  ProjectsNavigation,
+} from "#web/features/project-navigation/projects-sidebar.tsx";
 import type { SettingsSectionId } from "#web/features/settings/settings-sections.ts";
-import type { EnvironmentStatus } from "#web/platform/query/environment-context.tsx";
 
-export interface Navigation {
-  readonly projects: ProjectNavigationState;
+export interface Navigation extends ProjectsNavigation {
   readonly settingsSection: SettingsSectionId | undefined;
   readonly repositorySettingsId: string | undefined;
   readonly openProjectRequest: number;
@@ -24,10 +14,7 @@ export interface Navigation {
 
 export type NavigationAction =
   | { readonly type: "show-open-project" }
-  | {
-      readonly type: "open-repository";
-      readonly repository: ProjectNavigationRepository;
-    }
+  | { readonly type: "open-repository"; readonly repository: OpenRepository }
   | { readonly type: "close-repository"; readonly repositoryId: string }
   | {
       readonly type: "switch-worktree";
@@ -62,19 +49,6 @@ export function worktreePathFor(
   return worktreePaths.get(repository.id) ?? repository.path;
 }
 
-export function visibleProjects(
-  projects: ProjectNavigationState,
-  status: EnvironmentStatus,
-): ProjectNavigationState {
-  return status.connectionState === "PairingRequired"
-    ? { ...projects, environments: [] }
-    : setEnvironmentAvailability(
-        projects,
-        localEnvironment.id,
-        status.availability,
-      );
-}
-
 export function reduceNavigation(
   navigation: Navigation,
   action: NavigationAction,
@@ -83,16 +57,12 @@ export function reduceNavigation(
     case "show-open-project":
       return {
         ...navigation,
-        projects: showOpenProject(navigation.projects),
+        workspaceView: "open-project",
         repositorySettingsId: undefined,
         openProjectRequest: navigation.openProjectRequest + 1,
       };
     case "open-repository":
-      return {
-        ...navigation,
-        projects: openRepository(navigation.projects, action.repository),
-        repositorySettingsId: undefined,
-      };
+      return openRepository(navigation, action.repository);
     case "close-repository":
       return closeRepository(navigation, action.repositoryId);
     case "switch-worktree":
@@ -104,15 +74,9 @@ export function reduceNavigation(
         ),
       };
     case "collapse-sidebar":
-      return navigation.projects.sidebarCollapsed === action.collapsed
+      return navigation.sidebarCollapsed === action.collapsed
         ? navigation
-        : {
-            ...navigation,
-            projects: setProjectSidebarCollapsed(
-              navigation.projects,
-              action.collapsed,
-            ),
-          };
+        : { ...navigation, sidebarCollapsed: action.collapsed };
     case "show-settings":
       return { ...navigation, settingsSection: action.section };
     case "show-repository-settings":
@@ -121,27 +85,40 @@ export function reduceNavigation(
 }
 
 function openRepository(
-  projects: ProjectNavigationState,
-  repository: ProjectNavigationRepository,
-) {
-  return openProjectRepository(
-    setEnvironmentAvailability(projects, localEnvironment.id, "available"),
-    localEnvironment.id,
-    repository,
+  navigation: Navigation,
+  repository: OpenRepository,
+): Navigation {
+  const alreadyOpen = navigation.openRepositories.some(
+    ({ id }) => id === repository.id,
   );
+  return {
+    ...navigation,
+    openRepositories: alreadyOpen
+      ? navigation.openRepositories
+      : [...navigation.openRepositories, repository],
+    selectedRepositoryId: repository.id,
+    workspaceView: "repository",
+    repositorySettingsId: undefined,
+  };
 }
 
 function closeRepository(
   navigation: Navigation,
   repositoryId: string,
 ): Navigation {
+  const selectedRepositoryClosed =
+    navigation.selectedRepositoryId === repositoryId;
   return {
     ...navigation,
-    projects: removeProjectRepository(
-      navigation.projects,
-      localEnvironment.id,
-      repositoryId,
+    openRepositories: navigation.openRepositories.filter(
+      ({ id }) => id !== repositoryId,
     ),
+    selectedRepositoryId: selectedRepositoryClosed
+      ? undefined
+      : navigation.selectedRepositoryId,
+    workspaceView: selectedRepositoryClosed
+      ? "open-project"
+      : navigation.workspaceView,
     repositorySettingsId:
       navigation.repositorySettingsId === repositoryId
         ? undefined
@@ -151,18 +128,10 @@ function closeRepository(
 
 export function initialNavigation(): Navigation {
   return {
-    projects: {
-      environments: [
-        {
-          availability: "connecting",
-          id: localEnvironment.id,
-          repositories: [],
-        },
-      ],
-      selectedRepositoryId: undefined,
-      sidebarCollapsed: false,
-      workspaceView: "open-project",
-    },
+    openRepositories: [],
+    selectedRepositoryId: undefined,
+    sidebarCollapsed: false,
+    workspaceView: "open-project",
     settingsSection: undefined,
     repositorySettingsId: undefined,
     openProjectRequest: 0,

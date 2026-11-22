@@ -1,4 +1,4 @@
-import { type JSX, type ReactNode, useMemo, useState } from "react";
+import { type JSX, type ReactNode, useState } from "react";
 import type { RepositoryFilesystemHost } from "#contracts/desktop-host/desktop-host.contract.ts";
 import type { DesktopUpdates } from "#contracts/desktop-updates/desktop-updates.contract.ts";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
@@ -13,13 +13,14 @@ import {
   type Navigate,
   type Navigation,
   useNavigation,
-  visibleProjects,
 } from "#web/app/shell/use-navigation.ts";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace.tsx";
 import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { OpenProjectScreen } from "#web/features/open-project/open-project-screen.tsx";
-import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation.ts";
-import { ProjectsSidebar } from "#web/features/project-navigation/projects-sidebar.tsx";
+import {
+  type OpenRepository,
+  ProjectsSidebar,
+} from "#web/features/project-navigation/projects-sidebar.tsx";
 import {
   catalogWith,
   useCatalogRepository,
@@ -65,36 +66,27 @@ function Shell({
 }: ApplicationShellProps): JSX.Element {
   const { navigation, navigate } = useNavigation();
   const { openRepository, showRepository } = useRepositoryOpening(navigate);
-  const projects = visibleProjects(
-    navigation.projects,
-    useEnvironment().status,
-  );
   const repositorySettingsId = useCatalogRepository(
     navigation.repositorySettingsId,
   )?.id;
-  const repositories = useMemo(
-    () =>
-      navigation.projects.environments.flatMap(
-        ({ repositories }) => repositories,
-      ),
-    [navigation.projects.environments],
-  );
   const openGitSettings = () =>
     navigate({ type: "show-settings", section: "source-control" });
   const openNotifiedRepository = (repositoryId: string) => {
-    const repository = repositories.find(({ id }) => id === repositoryId);
+    const repository = navigation.openRepositories.find(
+      ({ id }) => id === repositoryId,
+    );
     if (repository !== undefined) openRepository(repository);
   };
   return (
     <NotificationsProvider
       currentRepositoryId={
-        navigation.projects.workspaceView === "repository"
-          ? navigation.projects.selectedRepositoryId
+        navigation.workspaceView === "repository"
+          ? navigation.selectedRepositoryId
           : undefined
       }
       openGitSettings={openGitSettings}
       openRepository={openNotifiedRepository}
-      repositories={repositories}
+      repositories={navigation.openRepositories}
     >
       <RepositorySelectionProvider navigation={navigation} navigate={navigate}>
         <PanelSessions
@@ -110,23 +102,23 @@ function Shell({
             }
             sidebar={(panel) => (
               <ProjectsSidebar
-                closeRepository={(_, { id }) =>
+                closeRepository={({ id }) =>
                   navigate({ type: "close-repository", repositoryId: id })
                 }
                 collapse={panel.collapse}
                 expand={panel.expand}
-                navigation={projects}
+                navigation={navigation}
                 openProject={() => navigate({ type: "show-open-project" })}
                 openSettings={() =>
                   navigate({ type: "show-settings", section: "general" })
                 }
-                openRepositorySettings={(_, { id }) =>
+                openRepositorySettings={({ id }) =>
                   navigate({
                     type: "show-repository-settings",
                     repositoryId: id,
                   })
                 }
-                selectRepository={(_, repository) => openRepository(repository)}
+                selectRepository={openRepository}
               />
             )}
             repositorySettings={
@@ -163,7 +155,7 @@ function Shell({
               )
             }
           >
-            {projects.workspaceView === "open-project" ? (
+            {navigation.workspaceView === "open-project" ? (
               <OpenProjectScreen
                 key={navigation.openProjectRequest}
                 onOpenRepository={openRepository}
@@ -188,9 +180,9 @@ function useRepositoryOpening(navigate: Navigate) {
     answers: catalogWith,
   });
   const available = status.availability === "available";
-  const showRepository = (repository: ProjectNavigationRepository) =>
+  const showRepository = (repository: OpenRepository) =>
     navigate({ type: "open-repository", repository });
-  const openRepository = (repository: ProjectNavigationRepository) => {
+  const openRepository = (repository: OpenRepository) => {
     if (!available) return;
     showRepository(repository);
     void recordOpened({ repositoryId: repository.id });
@@ -240,10 +232,7 @@ function PanelSessions({
 }) {
   const { environmentId, connected, writable } = useEnvironment();
   const environment = { environmentId, connected, writable, visible };
-  const { environments } = navigation.projects;
-  const repositoryIds = environments.flatMap(({ repositories }) =>
-    repositories.map(({ id }) => id),
-  );
+  const repositoryIds = navigation.openRepositories.map(({ id }) => id);
   return (
     <WorkspacePanel.Sessions
       environment={environment}
