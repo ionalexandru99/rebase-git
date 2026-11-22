@@ -29,6 +29,23 @@ export interface RepositoryAccess {
   }) => Promise<void>;
 }
 
+export interface WorktreeLocation {
+  readonly root: string;
+  readonly gitDirectory: string;
+  readonly commonDirectory: string;
+}
+
+export interface WorktreeLocations {
+  readonly read: (directory: string) => Promise<WorktreeLocation>;
+  readonly forget: (directory: string) => void;
+}
+
+export function createWorktreeLocations(
+  git: GitCommandRunner,
+): WorktreeLocations {
+  return cacheByGitEntry((directory) => readWorktreeLocation(git, directory));
+}
+
 export function createRepositoryAccess(
   catalog: {
     readonly find: (
@@ -36,10 +53,8 @@ export function createRepositoryAccess(
     ) => Promise<RepositoryCatalogEntry | undefined>;
   },
   git: GitCommandRunner,
+  locations: WorktreeLocations,
 ): RepositoryAccess {
-  const locations = cacheByGitEntry((directory) =>
-    readWorktreeLocation(git, directory),
-  );
   const repository = async (repositoryId: string) => {
     const entry = await catalog.find(repositoryId);
     if (entry === undefined)
@@ -89,16 +104,23 @@ export function createRepositoryAccess(
   };
 }
 
-async function readWorktreeLocation(git: GitCommandRunner, directory: string) {
+async function readWorktreeLocation(
+  git: GitCommandRunner,
+  directory: string,
+): Promise<WorktreeLocation> {
   const output = await runRepositoryGit(git, directory, [
     "rev-parse",
     "--path-format=absolute",
     "--show-toplevel",
+    "--absolute-git-dir",
     "--git-common-dir",
   ]);
-  const [root = "", commonDirectory = ""] = output.trimEnd().split("\n");
+  const [root = "", gitDirectory = "", commonDirectory = ""] = output
+    .trimEnd()
+    .split("\n");
   return {
     root: await canonicalizePath(root),
+    gitDirectory: await canonicalizePath(gitDirectory),
     commonDirectory: await canonicalizePath(commonDirectory),
   };
 }

@@ -1,12 +1,10 @@
-import { realpath } from "node:fs/promises";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type { RepositoryOperation } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
-  cacheByGitEntry,
   type GitCommandRunner,
   isGitFailed,
-  runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
+import type { WorktreeLocations } from "#server/repository/repository-access.ts";
 import {
   type GitDirectories,
   readRepositoryOperation,
@@ -42,11 +40,15 @@ export interface RepositoryCoordination {
 
 export function createRepositoryCoordination(
   git: GitCommandRunner,
+  locations: WorktreeLocations,
 ): RepositoryCoordination {
   const withLock = createKeyedLock();
-  const directories = cacheByGitEntry((directory) =>
-    resolveGitDirectories(git, directory),
-  );
+  const directories = (directory: string) =>
+    locations.read(directory).catch((error: unknown) => {
+      throw isGitFailed(error)
+        ? repositoryRejected("GitFailed", error.detail)
+        : error;
+    });
   const forgetOnError = async <Value>(
     directory: string,
     operation: () => Promise<Value>,
@@ -54,7 +56,7 @@ export function createRepositoryCoordination(
     try {
       return await operation();
     } catch (error) {
-      directories.forget(directory);
+      locations.forget(directory);
       throw error;
     }
   };
@@ -62,7 +64,7 @@ export function createRepositoryCoordination(
     run: (directory, policy, operation) =>
       forgetOnError(directory, async () => {
         const { refs, worktree } = policy.locks;
-        const paths = await directories.read(directory);
+        const paths = await directories(directory);
         const guarded = async () => {
           await requireCompatibleWrite(git, directory, paths, policy);
           return operation();
@@ -77,11 +79,7 @@ export function createRepositoryCoordination(
       }),
     operation: (directory) =>
       forgetOnError(directory, async () =>
-        readRepositoryOperation(
-          git,
-          directory,
-          await directories.read(directory),
-        ),
+        readRepositoryOperation(git, directory, await directories(directory)),
       ),
   };
 }
@@ -125,37 +123,4 @@ async function requireCompatibleWrite(
     "Incompatible",
     `Cannot ${name} while ${state.kind === "unknown" ? "an unrecognized Git operation is" : `${state.kind} is`} in progress.`,
   );
-}
-
-async function resolveGitDirectories(
-  git: GitCommandRunner,
-  directory: string,
-): Promise<GitDirectories> {
-  let output: string;
-  try {
-    output = await runRepositoryGit(git, directory, [
-      "rev-parse",
-      "--path-format=absolute",
-      "--absolute-git-dir",
-      "--git-common-dir",
-    ]);
-  } catch (error) {
-    throw isGitFailed(error)
-      ? repositoryRejected("GitFailed", error.detail)
-      : error;
-  }
-  const [gitDirectory = "", commonDirectory = ""] = output
-    .trimEnd()
-    .split("\n");
-  try {
-    return {
-      gitDirectory: await realpath(gitDirectory),
-      commonDirectory: await realpath(commonDirectory),
-    };
-  } catch {
-    throw repositoryRejected(
-      "GitFailed",
-      "Could not resolve the worktree's Git directories.",
-    );
-  }
 }
