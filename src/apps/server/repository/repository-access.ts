@@ -79,9 +79,7 @@ export function createRepositoryAccess(
     repository,
     worktrees: async (repositoryPath) => {
       try {
-        return await canonicalizeWorktrees(
-          await readWorktrees(git, repositoryPath),
-        );
+        return await readWorktrees(git, repositoryPath);
       } catch {
         throw worktreesUnreadable();
       }
@@ -132,12 +130,12 @@ function hasGitEntry(directory: string) {
   );
 }
 
-function canonicalizePath(path: string) {
+export function canonicalizePath(path: string) {
   return realpathNative(path).catch(() => resolve(path));
 }
 
 export async function readWorktrees(git: GitCommandRunner, directory: string) {
-  return parseWorktreeList(
+  const worktrees = parseWorktreeList(
     await runRepositoryGit(
       git,
       directory,
@@ -145,11 +143,6 @@ export async function readWorktrees(git: GitCommandRunner, directory: string) {
       { timeoutMilliseconds: 15_000 },
     ),
   );
-}
-
-export function canonicalizeWorktrees(
-  worktrees: readonly RepositoryWorktree[],
-) {
   return Promise.all(
     worktrees.map((worktree) =>
       realpathNative(worktree.path).then(

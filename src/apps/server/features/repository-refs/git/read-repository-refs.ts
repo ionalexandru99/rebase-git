@@ -2,7 +2,6 @@ import { SettledDay } from "#contracts/branch-settling/branch-settling.contract.
 import type {
   LocalBranch,
   RepositoryRefs,
-  RepositoryWorktree,
 } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   type GitCommandRunner,
@@ -17,7 +16,7 @@ import {
   tagFromRecord,
 } from "#server/features/repository-refs/git/parse-for-each-ref.ts";
 import {
-  canonicalizeWorktrees,
+  canonicalizePath,
   readWorktrees,
 } from "#server/repository/repository-access.ts";
 
@@ -32,22 +31,20 @@ export async function readRepositoryRefs(
     readonly path: string;
   },
 ): Promise<RepositoryRefs> {
-  const [branches, remoteBranches, tags, rawWorktrees, config] =
-    await Promise.all([
+  const [branches, remoteBranches, tags, worktrees, config] = await Promise.all(
+    [
       listRefs(git, repository.path, "refs/heads", "-committerdate"),
       listRefs(git, repository.path, "refs/remotes", "refname"),
       listRefs(git, repository.path, "refs/tags", "-creatordate"),
       readWorktrees(git, repository.path),
       readRefsConfig(git, repository.path),
-    ]);
-  const worktrees = await canonicalizeWorktrees(rawWorktrees);
+    ],
+  );
   return fitRepositoryRefs({
     remoteProviders: remoteProvidersFromConfig(config),
     branches: withSettlements(
-      canonicalizeBranchWorktrees(
+      await canonicalizeBranchWorktrees(
         branches.flatMap(withDefined(localBranchFromRecord)),
-        rawWorktrees,
-        worktrees,
       ),
       branchSettlements(config),
     ),
@@ -87,25 +84,16 @@ async function listRefs(
   );
 }
 
-function canonicalizeBranchWorktrees(
-  branches: readonly LocalBranch[],
-  rawWorktrees: readonly RepositoryWorktree[],
-  canonicalWorktrees: readonly RepositoryWorktree[],
-) {
-  const canonicalByRawPath = new Map(
-    rawWorktrees.map((worktree, index) => [
-      worktree.path,
-      canonicalWorktrees[index]?.path ?? worktree.path,
-    ]),
-  );
-  return branches.map((branch) =>
-    branch.worktreePath === undefined
-      ? branch
-      : {
-          ...branch,
-          worktreePath:
-            canonicalByRawPath.get(branch.worktreePath) ?? branch.worktreePath,
-        },
+function canonicalizeBranchWorktrees(branches: readonly LocalBranch[]) {
+  return Promise.all(
+    branches.map(async (branch) =>
+      branch.worktreePath === undefined
+        ? branch
+        : {
+            ...branch,
+            worktreePath: await canonicalizePath(branch.worktreePath),
+          },
+    ),
   );
 }
 

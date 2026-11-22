@@ -33,10 +33,7 @@ import {
   readWorktreeFolder,
   setWorktreeFolder,
 } from "#server/features/repository-worktrees/worktree-folder.ts";
-import {
-  canonicalizeWorktrees,
-  readWorktrees,
-} from "#server/repository/repository-access.ts";
+import { readWorktrees } from "#server/repository/repository-access.ts";
 import type { RepositoryWritePolicy } from "#server/repository/repository-coordination.ts";
 
 const worktreeCommand = { ...refCommand, timeoutMilliseconds: 300_000 };
@@ -80,7 +77,7 @@ export async function readWorktreeStatus(
   git: GitCommandRunner,
   directory: string,
 ): Promise<RepositoryWorktreeStatus> {
-  const worktrees = (await listWorktrees(git, directory)).filter(
+  const worktrees = (await readWorktrees(git, directory)).filter(
     (worktree) => worktree.missing !== true,
   );
   return {
@@ -240,12 +237,8 @@ async function findTarget(
   git: GitCommandRunner,
   command: Omit<WorktreeTarget, "repositoryId">,
 ) {
-  const worktrees = await listWorktrees(git, command.worktreePath);
+  const worktrees = await readWorktrees(git, command.worktreePath);
   return worktrees.find((worktree) => worktree.path === command.target);
-}
-
-async function listWorktrees(git: GitCommandRunner, directory: string) {
-  return canonicalizeWorktrees(await readWorktrees(git, directory));
 }
 
 async function commitsOnNoBranch(
