@@ -23,7 +23,7 @@ import {
 } from "#web/features/reflog/reflog-list.tsx";
 import { createRefActions } from "#web/features/refs/ref-actions.ts";
 import {
-  activeHead,
+  useActiveHead,
   useScopedRepositoryRefs,
 } from "#web/features/refs/repository-refs.ts";
 import type { ResetActions } from "#web/features/reset/reset-actions.tsx";
@@ -53,10 +53,7 @@ export function ReflogPanel({
   const [ref, setRef] = useState<ReflogRef>(requested);
   useEffect(() => setRef(requested), [requested]);
   const { refs } = useScopedRepositoryRefs();
-  const current =
-    refs === undefined || scope === undefined
-      ? undefined
-      : activeHead(refs, scope.worktreePath);
+  const current = useActiveHead();
   const reflog = useEnvironmentQuery(
     RepositoryReflogApi.read,
     scope === undefined

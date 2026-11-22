@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
-import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
+import type { RepositoryHead } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
 import { Input } from "#web/components/ui/input.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
+import { useOperationStart } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { PlanList } from "#web/features/rebase/plan-list.tsx";
 import { useChangedFileCount } from "#web/features/rebase/rebase-actions.ts";
 import {
@@ -23,21 +24,18 @@ import {
 } from "#web/features/rebase/rebase-plan.ts";
 import { useEnvironmentQueries } from "#web/platform/query/environment-query.ts";
 import type { RepositoryScope } from "#web/platform/query/repository-scope.tsx";
-import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 export function PlanEditor({
   scope,
   history,
   head,
   target,
-  blocked,
   close,
 }: {
   readonly scope: RepositoryScope;
   readonly history: PlanHistory;
-  readonly head: string;
+  readonly head: RepositoryHead;
   readonly target: RebasePlanTarget;
-  readonly blocked: string | undefined;
   readonly close: () => void;
 }) {
   const [loaded, setLoaded] = useState<LoadedPlan>({ _tag: "Loading" });
@@ -47,18 +45,10 @@ export function PlanEditor({
   const errorToast = useErrorToast();
   const subject = useRef<HTMLInputElement>(null);
   const changed = useChangedFileCount(true);
-  const command = useCommand(RepositoryOperationsApi.start, {
-    answers: (value, { repositoryId, worktreePath }) => [
-      answer(
-        RepositoryOperationsApi.read,
-        { repositoryId, worktreePath },
-        value.operation,
-      ),
-    ],
-  });
+  const command = useOperationStart("Rebasing…");
   useEffect(() => {
     let live = true;
-    void loadPlan(history, head, target).then((result) => {
+    void loadPlan(history, head.commit, target).then((result) => {
       if (!live) return;
       setLoaded(result);
       if (result._tag === "Ready") setRows(result.rows);
@@ -66,7 +56,7 @@ export function PlanEditor({
     return () => {
       live = false;
     };
-  }, [history, head, target]);
+  }, [history, head.commit, target]);
 
   const messages = usePlanMessages(scope, rows, edits);
   const owner = messageOwner(rows, selected);
@@ -75,14 +65,14 @@ export function PlanEditor({
     ownerCommit === undefined ? undefined : messages.values[ownerCommit];
   const problem = planProblem(rows, messages.values);
   const status =
-    blocked ??
-    (command.running
-      ? "Rebasing…"
-      : messages.loading
-        ? "Loading messages…"
-        : changed === undefined
-          ? "Checking changes…"
-          : undefined);
+    head.branch === undefined
+      ? "Detached HEAD"
+      : (command.blocked ??
+        (messages.loading
+          ? "Loading messages…"
+          : changed === undefined
+            ? "Checking changes…"
+            : undefined));
   const select = (index: number) =>
     setSelected(Math.max(0, Math.min(rows.length - 1, index)));
   const editMessage = (next: string) => {
@@ -91,7 +81,7 @@ export function PlanEditor({
   const start = async () => {
     if (loaded._tag !== "Ready" || status !== undefined || problem) return;
     const result = await command.run({
-      expectedHead: head,
+      expectedHead: head.commit,
       operation: {
         _tag: "Rebase",
         onto: { ref: target.from ? null : target.ref, commit: loaded.onto },

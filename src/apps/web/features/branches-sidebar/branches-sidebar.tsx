@@ -78,7 +78,7 @@ import {
 } from "#web/features/refs/ref-kinds.ts";
 import { RefEditField } from "#web/features/refs/ref-name-field.tsx";
 import {
-  activeHead,
+  useActiveHead,
   useRefActivation,
   useScopedRepositoryRefs,
 } from "#web/features/refs/repository-refs.ts";
@@ -135,6 +135,7 @@ export function BranchesSidebar({
 }): JSX.Element {
   const activeWorktreePath = useRepositoryScope()?.worktreePath ?? "";
   const repositoryRefs = useScopedRepositoryRefs();
+  const activeBranch = useActiveHead()?.branch;
   const activation = useRefActivation(repositoryRefs);
   const pull = usePull();
   const tagPush = useTagPush();
@@ -457,11 +458,7 @@ export function BranchesSidebar({
       return stashDraft.selection === undefined ? null : (
         <StashNameField
           commands={stashCommands}
-          initialName={`WIP on ${
-            (refs === undefined
-              ? undefined
-              : activeHead(refs, activeWorktreePath)?.branch) ?? "(no branch)"
-          }`}
+          initialName={`WIP on ${activeBranch ?? "(no branch)"}`}
           onDone={() => {
             stashDraft.cancel();
             focusTree();

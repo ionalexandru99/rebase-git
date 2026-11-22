@@ -4,11 +4,7 @@ import { useRef, useState } from "react";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
-import {
-  type CherryPickResult,
-  type RepositoryOperation,
-  RepositoryOperationsApi,
-} from "#contracts/repository-operations/repository-operations.contract.ts";
+import type { CherryPickResult } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
 import {
   ContextMenuContent,
@@ -18,12 +14,7 @@ import {
   ContextMenuSubmenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
-import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
-import {
-  activeHead,
-  useScopedRepositoryRefs,
-} from "#web/features/refs/repository-refs.ts";
+import { useOperationStart } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import type { HistoryScopeQuery } from "#web/features/repository-history/history-view.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
@@ -32,7 +23,6 @@ import {
   type RepositoryScope,
   useRepositoryScope,
 } from "#web/platform/query/repository-scope.tsx";
-import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 interface CherryPickPlan {
   readonly commits: readonly RepositoryCommit[];
@@ -49,25 +39,12 @@ export function useCherryPick(
   history: Pick<RepositoryHistory, "ask"> | undefined,
 ) {
   const repository = useRepositoryScope();
-  const { refs } = useScopedRepositoryRefs();
-  const operation = useOperation(repository, false).data;
+  const start = useOperationStart("Cherry-picking…");
+  const { head } = start;
   const panel = useWorkspacePanel();
   const errorToast = useErrorToast();
-  const head =
-    refs === undefined || repository === undefined
-      ? undefined
-      : activeHead(refs, repository.worktreePath);
   const [plan, setPlan] = useState<CherryPickPlan>();
   const request = useRef(0);
-  const start = useCommand(RepositoryOperationsApi.start, {
-    answers: (value, { repositoryId, worktreePath }) => [
-      answer(
-        RepositoryOperationsApi.read,
-        { repositoryId, worktreePath },
-        value.operation,
-      ),
-    ],
-  });
   const changes = useEnvironmentQuery(
     RepositoryChangesApi.read,
     repository === undefined || plan === undefined
@@ -118,12 +95,11 @@ export function useCherryPick(
     if (plan === undefined || head === undefined || repository === undefined)
       return undefined;
     const count = plan.commits.length;
-    const blocked = blockedReason(repository, {
-      canRun: start.canRun,
-      running: start.running,
-      operation,
-      plan,
-    });
+    const blocked = !repository.writable
+      ? "Read only"
+      : !start.canRun || !repository.connected
+        ? "Offline"
+        : (start.blocked ?? (plan.merges > 1 ? "Several merges" : undefined));
     return {
       id: "cherryPick",
       label: count === 1 ? "Cherry-pick" : `Cherry-pick ${count} commits`,
@@ -172,29 +148,6 @@ async function resolvePlan(
       ? []
       : await history.ask({ _tag: "Commits", oids: merge.parents });
   return { commits, merge, merges: merges.length, parents };
-}
-
-function blockedReason(
-  repository: RepositoryScope,
-  {
-    canRun,
-    running,
-    operation,
-    plan,
-  }: {
-    readonly canRun: boolean;
-    readonly running: boolean;
-    readonly operation: RepositoryOperation | undefined;
-    readonly plan: CherryPickPlan;
-  },
-) {
-  if (!repository.writable) return "Read only";
-  if (!canRun || !repository.connected) return "Offline";
-  if (operation !== undefined && operation.kind !== "idle")
-    return `${operationKindLabel(operation.kind)} in progress`;
-  if (running) return "Cherry-picking…";
-  if (plan.merges > 1) return "Several merges";
-  return undefined;
 }
 
 function CherryPickItems({

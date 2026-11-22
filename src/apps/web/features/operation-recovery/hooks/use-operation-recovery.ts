@@ -7,8 +7,10 @@ import type {
   RepositoryOperationsApi,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { useOperationAction } from "#web/features/operation-recovery/hooks/use-operation.ts";
-import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation-status.ts";
+import {
+  useOperationAction,
+  useWorktreeOperation,
+} from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import type {
   Command,

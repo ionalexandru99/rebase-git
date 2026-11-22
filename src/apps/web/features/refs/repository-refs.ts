@@ -60,6 +60,14 @@ export function useScopedRepositoryRefs() {
   return useRepositoryRefs(scope?.repositoryId);
 }
 
+export function useActiveHead() {
+  const scope = useRepositoryScope();
+  const { refs } = useRepositoryRefs(scope?.repositoryId);
+  return refs === undefined || scope === undefined
+    ? undefined
+    : activeHead(refs, scope.worktreePath);
+}
+
 export function forgetRepositoryRefs(
   queryClient: QueryClient,
   environmentId: string,

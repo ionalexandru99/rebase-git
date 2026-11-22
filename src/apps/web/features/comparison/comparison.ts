@@ -6,12 +6,8 @@ import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/r
 import type { RepositoryHead } from "#contracts/repository-refs/repository-refs.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import {
-  activeHead,
-  useScopedRepositoryRefs,
-} from "#web/features/refs/repository-refs.ts";
+import { useActiveHead } from "#web/features/refs/repository-refs.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
-import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 export interface CompareInput {
   readonly _tag: "Compare";
@@ -83,13 +79,8 @@ export function useCompareActions(
   history: Pick<RepositoryHistory, "ask"> | undefined,
   open: (input: CompareInput) => void,
 ): CompareActions {
-  const scope = useRepositoryScope();
   const errorToast = useErrorToast();
-  const { refs } = useScopedRepositoryRefs();
-  const head =
-    refs === undefined || scope === undefined
-      ? undefined
-      : activeHead(refs, scope.worktreePath);
+  const head = useActiveHead();
   const compare = (from: ComparisonSide, to: ComparisonSide) =>
     open({ _tag: "Compare", from, to });
   return {

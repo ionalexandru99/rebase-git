@@ -18,10 +18,7 @@ import type { RepositoryRefTarget } from "#contracts/repository-refs/repository-
 import { submenu } from "#web/components/ui/action-menu.tsx";
 import { ToolbarButton } from "#web/components/ui/toolbar-button.tsx";
 import type { RefAction } from "#web/features/refs/ref-actions.ts";
-import {
-  activeHead,
-  useScopedRepositoryRefs,
-} from "#web/features/refs/repository-refs.ts";
+import { useActiveHead } from "#web/features/refs/repository-refs.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
@@ -77,12 +74,7 @@ export function CurrentPullRequest({
 }: {
   readonly pullRequests: PullRequests;
 }) {
-  const scope = useRepositoryScope();
-  const { refs } = useScopedRepositoryRefs();
-  const branch =
-    refs === undefined || scope === undefined
-      ? undefined
-      : activeHead(refs, scope.worktreePath)?.branch;
+  const branch = useActiveHead()?.branch;
   const [pullRequest] =
     branch === undefined ? none : pullRequests.forBranch(branch);
   if (pullRequest === undefined) return null;

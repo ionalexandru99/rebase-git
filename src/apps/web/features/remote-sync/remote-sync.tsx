@@ -1,9 +1,9 @@
 import { IconArrowBarToDown } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 import { ToolbarButton } from "#web/components/ui/toolbar-button.tsx";
-import { useOperationCommandState } from "#web/features/operation-recovery/hooks/use-operation-status.ts";
+import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import {
-  activeHead,
+  useActiveHead,
   useScopedRepositoryRefs,
 } from "#web/features/refs/repository-refs.ts";
 import {
@@ -43,11 +43,13 @@ function SyncActions({
 }) {
   const scope = useRepositoryScope();
   const { refs } = useScopedRepositoryRefs();
-  const recoveryBusy = useOperationCommandState() === "busy";
-  const activeBranch =
-    refs === undefined || scope === undefined
-      ? undefined
-      : activeHead(refs, scope.worktreePath)?.branch;
+  const recovery = useWorktreeOperation(scope);
+  const recoveryBusy =
+    recovery !== null &&
+    (recovery.busy ||
+      recovery.checking ||
+      (recovery.operation !== null && recovery.operation.kind !== "idle"));
+  const activeBranch = useActiveHead()?.branch;
   const incoming =
     refs?.branches.find(({ name }) => name === activeBranch)?.upstream
       ?.behind ?? 0;
