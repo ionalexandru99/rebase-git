@@ -8,9 +8,10 @@ import type {
 } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
 import type { RebaseActionId } from "#web/features/rebase/rebase-actions.ts";
-import type {
-  BranchTarget,
-  RefDeletion,
+import {
+  type BranchTarget,
+  type RefDeletion,
+  upstreamBranch,
 } from "#web/features/refs/ref-deletion.ts";
 import type { RefEditing } from "#web/features/refs/ref-editing.ts";
 import {
@@ -18,6 +19,7 @@ import {
   type RefKind,
   type StartPoint,
 } from "#web/features/refs/ref-kinds.ts";
+import { refSource } from "#web/features/refs/repository-refs.ts";
 import type { ResetActionId } from "#web/features/reset/reset-actions.tsx";
 import {
   worktreeDrafts,
@@ -136,29 +138,12 @@ export function refActions(
   const remove = (
     fields: Omit<ActionFields, "group" | "run">,
     deletion: RefDeletion | undefined,
-  ) =>
-    action({
-      ...fields,
-      group: "delete",
-      run: () => {
-        if (deletion !== undefined) editing.deletion.request(deletion);
-      },
-    });
-  const deleteOnRemote = (remote: RemoteBranch | undefined) => {
-    if (remote === undefined) return [];
-    const branch = targeted(remote);
-    return [
-      remove(
-        {
-          id: `deleteOn:${remote.remote}`,
-          label: `On ${remote.remote}`,
-          reason: readOnly,
-        },
-        branch && { kind: "branch", branches: [{ remote: branch }] },
-      ),
-    ];
-  };
-  const holder = localBranch(target, refs)?.worktreePath;
+  ) => deleteAction(fields, deletion, editing);
+  const branch =
+    target._tag === "LocalBranch"
+      ? refs.branches.find(({ name }) => name === target.name)
+      : undefined;
+  const holder = branch?.worktreePath;
   const current = holder === activeWorktreePath;
   const common: readonly RefAction[] = [
     ...(current
@@ -178,14 +163,7 @@ export function refActions(
     target._tag !== "LocalBranch" ||
     row.upstream === undefined
       ? []
-      : [
-          pullAction(
-            target.name,
-            localBranch(target, refs)?.worktreePath !== undefined,
-            row.upstream,
-            pull,
-          ),
-        ]),
+      : [pullAction(target.name, holder !== undefined, row.upstream, pull)]),
     ...(showReflog === undefined || target._tag !== "LocalBranch"
       ? []
       : [
@@ -275,12 +253,32 @@ export function refActions(
       ]),
     ];
   }
-  if (target._tag === "RemoteBranch")
+  if (target._tag === "RemoteBranch") {
+    const remote = refs.remoteBranches.find(
+      ({ name, remote }) => remote === target.remote && name === target.name,
+    );
+    const deletion = targeted(remote);
     return [
       ...common,
-      ...deleteMenu(deleteOnRemote(remoteBranch(target, refs))),
+      ...deleteMenu(
+        remote === undefined
+          ? []
+          : [
+              remove(
+                {
+                  id: `deleteOn:${remote.remote}`,
+                  label: `On ${remote.remote}`,
+                  reason: readOnly,
+                },
+                deletion && {
+                  kind: "branch",
+                  branches: [{ remote: deletion }],
+                },
+              ),
+            ],
+      ),
     ];
-  const branch = refs.branches.find(({ name }) => name === target.name);
+  }
   if (branch === undefined) return common;
   const elsewhere =
     branch.worktreePath !== undefined &&
@@ -361,10 +359,15 @@ function branchDeleteMenu(
   },
   editing: RefActionHandlers["editing"],
 ): readonly RefAction[] {
-  const pairs = branches.map((branch) => ({
-    branch,
-    counterpart: trackedRemoteBranch(branch, refs),
-  }));
+  const pairs = branches.map((branch) => {
+    const upstream = branch.upstream?.gone
+      ? undefined
+      : upstreamBranch(refs, branch.upstream?.name);
+    return {
+      branch,
+      counterpart: upstream?.name === branch.name ? upstream : undefined,
+    };
+  });
   const remotes = [
     ...new Set(pairs.flatMap(({ counterpart }) => counterpart?.remote ?? [])),
   ];
@@ -377,14 +380,7 @@ function branchDeleteMenu(
   const remove = (
     fields: Omit<ActionFields, "group" | "run">,
     chosen: RefDeletion | undefined,
-  ) =>
-    action({
-      ...fields,
-      group: "delete",
-      run: () => {
-        if (chosen !== undefined) editing.deletion.request(chosen);
-      },
-    });
+  ) => deleteAction(fields, chosen, editing);
   const both = (branch: LocalBranch, counterpart: RemoteBranch | undefined) => {
     const local = targeted(branch);
     const remote = targeted(counterpart);
@@ -572,6 +568,20 @@ function action({ reason, group, keys, ...fields }: ActionFields): RefAction {
   };
 }
 
+function deleteAction(
+  fields: Omit<ActionFields, "group" | "run">,
+  deletion: RefDeletion | undefined,
+  editing: RefActionHandlers["editing"],
+) {
+  return action({
+    ...fields,
+    group: "delete",
+    run: () => {
+      if (deletion !== undefined) editing.deletion.request(deletion);
+    },
+  });
+}
+
 function targeted<Ref extends { readonly target?: string | undefined }>(
   ref: Ref | undefined,
 ): (Ref & { readonly target: string }) | undefined {
@@ -582,62 +592,16 @@ function refStartPoint(
   target: RepositoryRefTarget,
   refs: RepositoryRefs,
 ): StartPoint | undefined {
-  switch (target._tag) {
-    case "LocalBranch": {
-      const oid = localBranch(target, refs)?.target;
-      return oid === undefined
-        ? undefined
-        : { label: target.name, name: "", oid };
-    }
-    case "RemoteBranch": {
-      const oid = remoteBranch(target, refs)?.target;
-      return oid === undefined
-        ? undefined
-        : {
-            label: `${target.remote}/${target.name}`,
-            name: target.name,
-            oid,
-            track: { name: target.name, remote: target.remote },
-          };
-    }
-    case "Tag": {
-      const oid = refs.tags.find((tag) => tag.name === target.name)?.target;
-      return oid === undefined
-        ? undefined
-        : { label: target.name, name: "", oid };
-    }
-  }
-}
-
-function localBranch(
-  target: RepositoryRefTarget,
-  refs: RepositoryRefs,
-): LocalBranch | undefined {
-  return target._tag === "LocalBranch"
-    ? refs.branches.find((branch) => branch.name === target.name)
-    : undefined;
-}
-
-function remoteBranch(
-  target: RepositoryRefTarget,
-  refs: RepositoryRefs,
-): RemoteBranch | undefined {
-  return target._tag === "RemoteBranch"
-    ? refs.remoteBranches.find(
-        ({ name, remote }) => remote === target.remote && name === target.name,
-      )
-    : undefined;
-}
-
-function trackedRemoteBranch(
-  branch: LocalBranch,
-  refs: RepositoryRefs,
-): RemoteBranch | undefined {
-  if (branch.upstream === undefined || branch.upstream.gone) return undefined;
-  return refs.remoteBranches.find(
-    ({ name, remote }) =>
-      name === branch.name && `${remote}/${name}` === branch.upstream?.name,
-  );
+  const source = refSource(refs, target);
+  if (source === undefined) return undefined;
+  if (target._tag !== "RemoteBranch")
+    return { label: source.label, name: "", oid: source.commit };
+  return {
+    label: source.label,
+    name: target.name,
+    oid: source.commit,
+    track: { name: target.name, remote: target.remote },
+  };
 }
 
 function isDefined<Value>(value: Value | undefined): value is Value {

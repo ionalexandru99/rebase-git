@@ -260,16 +260,13 @@ function branchLabel({
   return local?.name ?? remote?.name ?? "";
 }
 
-function upstreamTarget(
+export function upstreamBranch(
   refs: RepositoryRefs,
   upstreamName: string | undefined,
-): BranchUpstreamTarget | undefined {
-  const branch = refs.remoteBranches.find(
+): RemoteBranch | undefined {
+  return refs.remoteBranches.find(
     ({ name, remote }) => `${remote}/${name}` === upstreamName,
   );
-  return branch === undefined
-    ? undefined
-    : { name: branch.name, remote: branch.remote };
 }
 
 function confirmsFirst(deletion: RefDeletion) {
@@ -329,11 +326,13 @@ function deletedBranches(
     const track =
       refs === undefined
         ? undefined
-        : upstreamTarget(refs, local.upstream?.name);
+        : upstreamBranch(refs, local.upstream?.name);
     return {
       name: local.name,
       target: local.target,
-      ...(track === undefined ? {} : { track }),
+      ...(track === undefined
+        ? {}
+        : { track: { name: track.name, remote: track.remote } }),
     };
   });
 }
