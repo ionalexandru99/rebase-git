@@ -48,26 +48,21 @@ export function RepositoryFetchSettings({
     String(
       setting._tag === "Interval" ? setting.seconds : defaultIntervalSeconds,
     );
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const errorToast = useErrorToast();
   const apply = (next: RepositoryFetchSetting) => {
-    setSaving(true);
     setError(undefined);
-    void configure
-      .run({ repositoryId, setting: next })
-      .then((result) => {
-        if (result._tag === "Ok") setDraft(undefined);
-        else {
-          if (next._tag !== "Interval") setDraft(undefined);
-          errorToast.failure("saveFetchSettings", result);
-        }
-      })
-      .finally(() => setSaving(false));
+    void configure.run({ repositoryId, setting: next }).then((result) => {
+      if (result._tag === "Ok") setDraft(undefined);
+      else {
+        if (next._tag !== "Interval") setDraft(undefined);
+        errorToast.failure("saveFetchSettings", result);
+      }
+    });
   };
   const save = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (disabled || saving) return;
+    if (disabled || configure.running) return;
     const interval = Number(seconds);
     if (!Number.isInteger(interval) || interval < 1 || interval > 86_400) {
       setError("Enter a whole number from 1 to 86,400.");
@@ -77,7 +72,10 @@ export function RepositoryFetchSettings({
   };
   return (
     <form onSubmit={save}>
-      <fieldset className="m-0 border-0 p-0" disabled={disabled || saving}>
+      <fieldset
+        className="m-0 border-0 p-0"
+        disabled={disabled || configure.running}
+      >
         <SettingsRow
           title="Automatic fetch"
           description={
@@ -140,7 +138,7 @@ export function RepositoryFetchSettings({
                 value={seconds}
               />
               <Button size="sm" type="submit" variant="outline">
-                {saving ? "Saving…" : "Save"}
+                {configure.running ? "Saving…" : "Save"}
               </Button>
             </>
           ) : null}
