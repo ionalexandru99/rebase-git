@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
@@ -10,14 +10,14 @@ import {
   RepositoryPath,
 } from "#contracts/git/git-values.contract.ts";
 
-export const OperationScope = Schema.Struct({
+export const OperationScope = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
 });
-export type OperationScope = typeof OperationScope.Type;
-export const OperationAction = Schema.Literals(["continue", "skip", "abort"]);
-export type OperationAction = typeof OperationAction.Type;
-export const OperationKind = Schema.Literals([
+export type OperationScope = z.infer<typeof OperationScope>;
+export const OperationAction = z.enum(["continue", "skip", "abort"]);
+export type OperationAction = z.infer<typeof OperationAction>;
+export const OperationKind = z.enum([
   "idle",
   "merge",
   "squash",
@@ -27,8 +27,8 @@ export const OperationKind = Schema.Literals([
   "am",
   "unknown",
 ]);
-export type OperationKind = typeof OperationKind.Type;
-export const PlanAction = Schema.Literals([
+export type OperationKind = z.infer<typeof OperationKind>;
+export const PlanAction = z.enum([
   "pick",
   "reword",
   "edit",
@@ -36,114 +36,93 @@ export const PlanAction = Schema.Literals([
   "fixup",
   "drop",
 ]);
-export type PlanAction = typeof PlanAction.Type;
-export const PlanStep = Schema.Struct({
+export type PlanAction = z.infer<typeof PlanAction>;
+export const PlanStep = z.object({
   commit: ObjectId,
   action: PlanAction,
-  message: Schema.NullOr(
-    Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(32000)),
-  ),
+  message: z.string().min(1).max(32000).nullable(),
 });
-export type PlanStep = typeof PlanStep.Type;
-export const RebaseStep = Schema.Struct({
+export type PlanStep = z.infer<typeof PlanStep>;
+export const RebaseStep = z.object({
   commit: ObjectId,
   action: PlanAction,
-  subject: Schema.String,
-  done: Schema.Boolean,
+  subject: z.string(),
+  done: z.boolean(),
 });
-export type RebaseStep = typeof RebaseStep.Type;
-export const RepositoryOperation = Schema.Struct({
+export type RebaseStep = z.infer<typeof RebaseStep>;
+export const RepositoryOperation = z.object({
   kind: OperationKind,
-  phase: Schema.Literals([
-    "idle",
-    "conflicts",
-    "edit",
-    "ready",
-    "empty",
-    "blocked",
-  ]),
-  revision: Schema.String,
-  branch: Schema.NullOr(Schema.String),
-  commit: Schema.NullOr(Schema.String),
-  mergedBranch: Schema.NullOr(Schema.String),
-  progress: Schema.NullOr(
-    Schema.Struct({ current: Schema.Natural, total: Schema.Natural }),
-  ),
-  unresolvedPaths: Schema.Array(Schema.String),
-  actions: Schema.Array(
-    Schema.Struct({
-      action: OperationAction,
-      enabled: Schema.Boolean,
-      reason: Schema.NullOr(Schema.String),
-    }),
-  ),
-  lock: Schema.NullOr(Schema.String),
-  steps: Schema.NullOr(Schema.Array(RebaseStep)),
+  phase: z.enum(["idle", "conflicts", "edit", "ready", "empty", "blocked"]),
+  revision: z.string(),
+  branch: z.string().nullable(),
+  commit: z.string().nullable(),
+  mergedBranch: z.string().nullable(),
+  progress: z
+    .object({ current: z.int().nonnegative(), total: z.int().nonnegative() })
+    .nullable(),
+  unresolvedPaths: z.array(z.string()).readonly(),
+  actions: z
+    .array(
+      z.object({
+        action: OperationAction,
+        enabled: z.boolean(),
+        reason: z.string().nullable(),
+      }),
+    )
+    .readonly(),
+  lock: z.string().nullable(),
+  steps: z.array(RebaseStep).readonly().nullable(),
 });
-export type RepositoryOperation = typeof RepositoryOperation.Type;
-export const ExecuteOperation = Schema.Struct({
-  ...OperationScope.fields,
-  revision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+export type RepositoryOperation = z.infer<typeof RepositoryOperation>;
+export const ExecuteOperation = z.object({
+  ...OperationScope.shape,
+  revision: z.string().regex(/^[a-f0-9]{64}$/),
   action: OperationAction,
 });
-export type ExecuteOperation = typeof ExecuteOperation.Type;
-export const MergeMode = Schema.Literals([
-  "merge",
-  "ff-only",
-  "no-ff",
-  "squash",
-]);
-export type MergeMode = typeof MergeMode.Type;
-export const StartMerge = Schema.TaggedStruct("Merge", {
-  source: Schema.Struct({ ref: Schema.NullOr(RefName), commit: ObjectId }),
+export type ExecuteOperation = z.infer<typeof ExecuteOperation>;
+export const MergeMode = z.enum(["merge", "ff-only", "no-ff", "squash"]);
+export type MergeMode = z.infer<typeof MergeMode>;
+export const StartMerge = z.object({
+  _tag: z.literal("Merge"),
+  source: z.object({ ref: RefName.nullable(), commit: ObjectId }),
   mode: MergeMode,
 });
-export type StartMerge = typeof StartMerge.Type;
-export const StartRebase = Schema.TaggedStruct("Rebase", {
-  onto: Schema.Struct({ ref: Schema.NullOr(RefName), commit: ObjectId }),
-  stash: Schema.Boolean,
-  plan: Schema.optionalKey(
-    Schema.Array(PlanStep).check(
-      Schema.isMinLength(1),
-      Schema.isMaxLength(1_000),
-    ),
-  ),
+export type StartMerge = z.infer<typeof StartMerge>;
+export const StartRebase = z.object({
+  _tag: z.literal("Rebase"),
+  onto: z.object({ ref: RefName.nullable(), commit: ObjectId }),
+  stash: z.boolean(),
+  plan: z.array(PlanStep).min(1).max(1_000).readonly().exactOptional(),
 });
-export type StartRebase = typeof StartRebase.Type;
-export const StartRevert = Schema.TaggedStruct("Revert", {
-  commits: Schema.Array(ObjectId).check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(256),
-  ),
-  commit: Schema.Boolean,
+export type StartRebase = z.infer<typeof StartRebase>;
+export const StartRevert = z.object({
+  _tag: z.literal("Revert"),
+  commits: z.array(ObjectId).min(1).max(256).readonly(),
+  commit: z.boolean(),
 });
-export type StartRevert = typeof StartRevert.Type;
-export const CherryPickResult = Schema.Literals(["commit", "stage"]);
-export type CherryPickResult = typeof CherryPickResult.Type;
-export const StartCherryPick = Schema.TaggedStruct("CherryPick", {
-  commits: Schema.Array(ObjectId).check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(1_000),
-  ),
-  mainline: Schema.NullOr(
-    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 64 })),
-  ),
+export type StartRevert = z.infer<typeof StartRevert>;
+export const CherryPickResult = z.enum(["commit", "stage"]);
+export type CherryPickResult = z.infer<typeof CherryPickResult>;
+export const StartCherryPick = z.object({
+  _tag: z.literal("CherryPick"),
+  commits: z.array(ObjectId).min(1).max(1_000).readonly(),
+  mainline: z.int().min(1).max(64).nullable(),
   result: CherryPickResult,
 });
-export type StartCherryPick = typeof StartCherryPick.Type;
-export const StartOperation = Schema.Struct({
-  ...OperationScope.fields,
+export type StartCherryPick = z.infer<typeof StartCherryPick>;
+export const StartOperation = z.object({
+  ...OperationScope.shape,
   expectedHead: ObjectId,
-  operation: Schema.Union([
+  operation: z.discriminatedUnion("_tag", [
     StartMerge,
     StartRebase,
     StartRevert,
     StartCherryPick,
   ]),
 });
-export type StartOperation = typeof StartOperation.Type;
-export const OperationStarted = Schema.Struct({
-  outcome: Schema.Literals([
+export type StartOperation = z.infer<typeof StartOperation>;
+export const OperationStarted = z.object({
+  outcome: z.enum([
     "UpToDate",
     "FastForwarded",
     "Committed",
@@ -153,9 +132,10 @@ export const OperationStarted = Schema.Struct({
   ]),
   operation: RepositoryOperation,
 });
-export type OperationStarted = typeof OperationStarted.Type;
-export const OperationFailure = Schema.TaggedStruct("OperationFailed", {
-  reason: Schema.Literals([
+export type OperationStarted = z.infer<typeof OperationStarted>;
+export const OperationFailure = z.object({
+  _tag: z.literal("OperationFailed"),
+  reason: z.enum([
     "Stale",
     "Incompatible",
     "HookFailed",
@@ -165,12 +145,10 @@ export const OperationFailure = Schema.TaggedStruct("OperationFailed", {
     "WouldOverwrite",
     "Empty",
   ]),
-  detail: Schema.String.check(Schema.isMaxLength(2048)),
-  paths: Schema.optionalKey(
-    Schema.Array(RepositoryPath).check(Schema.isMaxLength(100)),
-  ),
+  detail: z.string().max(2048),
+  paths: z.array(RepositoryPath).max(100).readonly().exactOptional(),
 });
-export type OperationFailure = typeof OperationFailure.Type;
+export type OperationFailure = z.infer<typeof OperationFailure>;
 export const RepositoryOperationsApi = {
   read: repositoryQuery("repositories/operations/read", {
     request: OperationScope,

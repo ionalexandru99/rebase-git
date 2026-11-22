@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import { route } from "#contracts/environment-connection/environment-route.contract.ts";
 import { IsoDate } from "#contracts/environment-connection/iso-date.contract.ts";
 import { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
@@ -9,12 +9,9 @@ import {
   RepositoryPath,
 } from "#contracts/git/git-values.contract.ts";
 
-const RepositoryName = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(255),
-);
+const RepositoryName = z.string().min(1).max(255);
 
-export const RepositoryColor = Schema.Literals([
+export const RepositoryColor = z.enum([
   "blue",
   "green",
   "violet",
@@ -24,93 +21,87 @@ export const RepositoryColor = Schema.Literals([
   "red",
   "amber",
 ]);
-export type RepositoryColor = typeof RepositoryColor.Type;
+export type RepositoryColor = z.infer<typeof RepositoryColor>;
 
-export const RepositoryCatalogEntry = Schema.Struct({
+export const RepositoryCatalogEntry = z.object({
   addedAt: IsoDate,
   color: RepositoryColor,
   id: RepositoryId,
   lastOpenedAt: IsoDate,
-  logicalRepositoryId: Schema.optionalKey(RepositoryId),
+  logicalRepositoryId: RepositoryId.exactOptional(),
   name: RepositoryName,
   path: RepositoryPath,
 });
-export type RepositoryCatalogEntry = typeof RepositoryCatalogEntry.Type;
+export type RepositoryCatalogEntry = z.infer<typeof RepositoryCatalogEntry>;
 
-export const RepositoryCatalog = Schema.Struct({
-  repositories: Schema.Array(RepositoryCatalogEntry).check(
-    Schema.isMaxLength(10_000),
-  ),
+export const RepositoryCatalog = z.object({
+  repositories: z.array(RepositoryCatalogEntry).max(10_000).readonly(),
 });
-export type RepositoryCatalog = typeof RepositoryCatalog.Type;
+export type RepositoryCatalog = z.infer<typeof RepositoryCatalog>;
 
-export const RememberRepository = Schema.Struct({
+export const RememberRepository = z.object({
   path: RepositoryPath,
 });
-export type RememberRepository = typeof RememberRepository.Type;
+export type RememberRepository = z.infer<typeof RememberRepository>;
 
-export const RecordRepositoryOpened = Schema.Struct({
+export const RecordRepositoryOpened = z.object({
   repositoryId: RepositoryId,
 });
-export type RecordRepositoryOpened = typeof RecordRepositoryOpened.Type;
+export type RecordRepositoryOpened = z.infer<typeof RecordRepositoryOpened>;
 
-export const RemoveRepository = Schema.Struct({
+export const RemoveRepository = z.object({
   repositoryId: RepositoryId,
 });
-export type RemoveRepository = typeof RemoveRepository.Type;
+export type RemoveRepository = z.infer<typeof RemoveRepository>;
 
-export const RepositoryRemoved = Schema.Struct({
+export const RepositoryRemoved = z.object({
   repositoryId: RepositoryId,
 });
-export type RepositoryRemoved = typeof RepositoryRemoved.Type;
+export type RepositoryRemoved = z.infer<typeof RepositoryRemoved>;
 
-export const RepositoryPathRejected = Schema.TaggedStruct(
-  "RepositoryPathRejected",
-  {
-    reason: Schema.Literals([
-      "MalformedPath",
-      "NotFound",
-      "NotDirectory",
-      "NotRepository",
-      "InspectionFailed",
-    ]),
-  },
-);
-export type RepositoryPathRejected = typeof RepositoryPathRejected.Type;
+export const RepositoryPathRejected = z.object({
+  _tag: z.literal("RepositoryPathRejected"),
+  reason: z.enum([
+    "MalformedPath",
+    "NotFound",
+    "NotDirectory",
+    "NotRepository",
+    "InspectionFailed",
+  ]),
+});
+export type RepositoryPathRejected = z.infer<typeof RepositoryPathRejected>;
 
-export const RepositoryDefaults = Schema.Struct({
+export const RepositoryDefaults = z.object({
   cloneFolder: RepositoryPath,
   initialBranch: RefName,
 });
-export type RepositoryDefaults = typeof RepositoryDefaults.Type;
+export type RepositoryDefaults = z.infer<typeof RepositoryDefaults>;
 
-export const CloneRepository = Schema.Struct({
+export const CloneRepository = z.object({
   repositoryId: RepositoryId,
   url: RemoteUrl,
   path: RepositoryPath,
 });
-export type CloneRepository = typeof CloneRepository.Type;
+export type CloneRepository = z.infer<typeof CloneRepository>;
 
-export const InitializeRepository = Schema.Struct({
+export const InitializeRepository = z.object({
   path: RepositoryPath,
   branch: RefName,
 });
-export type InitializeRepository = typeof InitializeRepository.Type;
+export type InitializeRepository = z.infer<typeof InitializeRepository>;
 
-export const RepositoryNotCreated = Schema.TaggedStruct(
-  "RepositoryNotCreated",
-  {
-    reason: Schema.Literals([
-      "MalformedPath",
-      "DestinationNotEmpty",
-      "InsideRepository",
-      "GitFailed",
-    ]),
-    detail: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(2_048))),
-    leftover: Schema.optionalKey(RepositoryPath),
-  },
-);
-export type RepositoryNotCreated = typeof RepositoryNotCreated.Type;
+export const RepositoryNotCreated = z.object({
+  _tag: z.literal("RepositoryNotCreated"),
+  reason: z.enum([
+    "MalformedPath",
+    "DestinationNotEmpty",
+    "InsideRepository",
+    "GitFailed",
+  ]),
+  detail: z.string().max(2_048).exactOptional(),
+  leftover: RepositoryPath.exactOptional(),
+});
+export type RepositoryNotCreated = z.infer<typeof RepositoryNotCreated>;
 
 export const RepositoryCatalogApi = {
   list: route("repositories/list", {
@@ -130,8 +121,8 @@ export const RepositoryCatalogApi = {
     success: RepositoryDefaults,
   }),
   setCloneFolder: route("repositories/set-clone-folder", {
-    request: Schema.Struct({ path: RepositoryPath }),
-    success: Schema.Void,
+    request: z.object({ path: RepositoryPath }),
+    success: z.void(),
     failure: RepositoryPathRejected,
   }),
   clone: route("repositories/clone", {

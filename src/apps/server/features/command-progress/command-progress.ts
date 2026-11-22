@@ -1,11 +1,11 @@
 import { Effect, Queue, Stream } from "effect";
-import type {
-  CommandProgressRpc,
-  CommandProgressUpdate,
+import {
+  CommandProgressApi,
+  type CommandProgressUpdate,
 } from "#contracts/command-progress/command-progress.contract.ts";
-import type {
-  EnvironmentFeature,
-  EnvironmentRpcHandlersFor,
+import {
+  type EnvironmentFeature,
+  stream,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 
 type ProgressListener = (update: CommandProgressUpdate) => void;
@@ -107,12 +107,8 @@ export function commandProgressFeature(
   progress: CommandProgress,
 ): EnvironmentFeature {
   return {
-    routes: [],
-    rpc: (): Pick<
-      EnvironmentRpcHandlersFor<typeof CommandProgressRpc>,
-      "WatchCommandProgress"
-    > => ({
-      WatchCommandProgress: ({ repositoryId, route }) =>
+    routes: [
+      stream(CommandProgressApi.watch, ({ repositoryId, route }) =>
         Stream.unwrap(
           Effect.gen(function* () {
             const queue = yield* Queue.sliding<CommandProgressUpdate>(1);
@@ -128,6 +124,7 @@ export function commandProgressFeature(
             return Stream.fromQueue(queue);
           }),
         ),
-    }),
+      ),
+    ],
   };
 }

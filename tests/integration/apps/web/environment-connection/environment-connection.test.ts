@@ -7,7 +7,6 @@ import { RepositoryPushApi } from "#contracts/repository-push/repository-push.co
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { cloneRepository, createRepository, git } from "#tests-support/git.ts";
 import { openTestServer } from "#tests-support/server.ts";
-import { environmentRequests } from "#web/platform/environment/environment-connection.ts";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 
@@ -65,9 +64,7 @@ describe("browser Environment connection", () => {
     const repositoryPath = join(server.home, "repository");
     await createRepository(repositoryPath);
     const changed = vi.fn();
-    const requests = environmentRequests(
-      (await server.connect(server.owner, { changed })).rpc,
-    );
+    const requests = (await server.connect(server.owner, { changed })).requests;
     const repository = await requests(RepositoryCatalogApi.remember, {
       path: repositoryPath,
     });

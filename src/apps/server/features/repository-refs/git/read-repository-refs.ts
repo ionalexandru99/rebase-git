@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import { SettledDay } from "#contracts/branch-settling/branch-settling.contract.ts";
 import type {
   LocalBranch,
@@ -153,7 +153,7 @@ export function branchSettlements(output: string) {
   );
 }
 
-const isSettledDay = Schema.is(SettledDay);
+const isSettledDay = (value: unknown) => SettledDay.safeParse(value).success;
 
 function withSettlements(
   branches: readonly LocalBranch[],

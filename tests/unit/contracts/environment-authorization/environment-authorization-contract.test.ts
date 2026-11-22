@@ -1,11 +1,10 @@
-import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { ExchangeEnvironmentPairing } from "#contracts/environment-authorization/environment-authorization.contract.ts";
 
 describe("Environment authorization HTTP contract", () => {
   it("accepts only six-digit pairing codes", () => {
     expect(
-      Schema.decodeUnknownSync(ExchangeEnvironmentPairing)({
+      ExchangeEnvironmentPairing.parse({
         label: "Alex's workstation",
         pairingMaterial: "123-456",
       }),
@@ -21,7 +20,7 @@ describe("Environment authorization HTTP contract", () => {
       "123-4567",
     ]) {
       expect(() =>
-        Schema.decodeUnknownSync(ExchangeEnvironmentPairing)({
+        ExchangeEnvironmentPairing.parse({
           label: "Alex's workstation",
           pairingMaterial,
         }),

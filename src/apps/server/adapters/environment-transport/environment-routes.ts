@@ -1,13 +1,14 @@
-import { Effect, type Scope } from "effect";
-import type { Rpc, RpcGroup } from "effect/rpc";
+import { Effect, type Stream } from "effect";
+import type { z } from "zod";
 import type { EnvironmentDeviceAuthorization } from "#contracts/environment-authorization/environment-authorization.contract.ts";
 import type {
   EnvironmentRoute,
+  EnvironmentStreamRoute,
   RouteFailure,
   RouteInput,
   RouteSuccess,
+  StreamValue,
 } from "#contracts/environment-connection/environment-route.contract.ts";
-import type { EnvironmentRpc } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import {
   type RepositoryRejected,
   repositoryRejected,
@@ -39,39 +40,30 @@ export type EnvironmentTransportError =
   | EnvironmentAuthorizationError
   | EnvironmentStorageError;
 
-export interface RouteHandler {
-  readonly route: EnvironmentRoute;
-  readonly handle: (
-    input: unknown,
-    context: RouteContext,
-  ) => Effect.Effect<unknown, unknown>;
-}
-
-export type EnvironmentRpcHandlersFor<Group extends RpcGroup.Any> = {
-  readonly [Current in RpcGroup.Rpcs<Group> as Current["_tag"]]: Rpc.ToHandlerFn<
-    Current,
-    Scope.Scope
-  >;
-};
-
-type StreamRpcHandlers = Partial<
-  EnvironmentRpcHandlersFor<typeof EnvironmentRpc>
->;
+export type RouteHandler =
+  | {
+      readonly route: EnvironmentRoute;
+      readonly handle: (
+        input: unknown,
+        context: RouteContext,
+      ) => Effect.Effect<unknown, unknown>;
+    }
+  | {
+      readonly route: EnvironmentStreamRoute;
+      readonly handle: (
+        input: unknown,
+        context: RouteContext,
+      ) => Stream.Stream<unknown, unknown>;
+    };
 
 export interface EnvironmentFeature {
   readonly routes: readonly RouteHandler[];
-  readonly rpc?: () => StreamRpcHandlers;
 }
-
-export type EnvironmentFeatures = Required<EnvironmentFeature>;
 
 export function combineEnvironmentFeatures(
   features: readonly EnvironmentFeature[],
-): EnvironmentFeatures {
-  return {
-    routes: features.flatMap((feature) => feature.routes),
-    rpc: () => Object.assign({}, ...features.map((feature) => feature.rpc?.())),
-  };
+): EnvironmentFeature {
+  return { routes: features.flatMap((feature) => feature.routes) };
 }
 
 export function route<Route extends EnvironmentRoute>(
@@ -93,6 +85,19 @@ export function route<Route extends EnvironmentRoute>(
   };
 }
 
+export function stream<Route extends EnvironmentStreamRoute>(
+  definition: Route,
+  handle: (
+    input: RouteInput<Route>,
+    context: RouteContext,
+  ) => Stream.Stream<StreamValue<Route>, RouteFailure<Route>>,
+): RouteHandler {
+  return {
+    route: definition,
+    handle: (input, context) => handle(input as RouteInput<Route>, context),
+  };
+}
+
 export interface RepositoryDependencies {
   readonly access: RepositoryAccess;
   readonly coordination: RepositoryCoordination;
@@ -106,11 +111,12 @@ interface WorktreeScope {
   readonly worktreePath: string;
 }
 
-type RepositoryRoute<Input, Success, Failure> = EnvironmentRoute & {
-  readonly payloadSchema: { readonly Type: Input };
-  readonly successSchema: { readonly Type: Success };
-  readonly errorSchema: { readonly Type: Failure | RepositoryRejected };
-};
+type RepositoryRoute<Input, Success, Failure> = EnvironmentRoute<
+  string,
+  z.ZodType<Input>,
+  z.ZodType<Success>,
+  z.ZodType<Failure | RepositoryRejected>
+>;
 
 type RepositoryHandle<Input, Success, Failure> = (
   input: Input,

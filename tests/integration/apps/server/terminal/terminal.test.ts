@@ -4,7 +4,6 @@ import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-c
 import { TerminalsApi } from "#contracts/terminal/terminal.contract.ts";
 import { createRepository } from "#tests-support/git.ts";
 import { openTestServer } from "#tests-support/server.ts";
-import { environmentSubscriptions } from "#web/platform/environment/environment-connection.ts";
 
 it("runs the user's shell in the worktree over the environment socket until it exits", async () => {
   const server = await openTestServer();
@@ -15,9 +14,7 @@ it("runs the user's shell in the worktree over the environment socket until it e
     path: worktreePath,
   });
   const worktree = { repositoryId, worktreePath };
-  const subscribe = environmentSubscriptions(
-    (await server.connect(server.owner)).rpc,
-  );
+  const subscribe = (await server.connect(server.owner)).subscribe;
 
   const terminal = await requests(TerminalsApi.open, {
     ...worktree,

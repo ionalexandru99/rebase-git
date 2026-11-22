@@ -1,11 +1,15 @@
-import { Schema } from "effect";
-import { Rpc, type RpcClient, type RpcClientError, RpcGroup } from "effect/rpc";
+import { z } from "zod";
 import { AuthorAvatarsApi } from "#contracts/author-avatars/author-avatars.contract.ts";
 import { BranchSettlingApi } from "#contracts/branch-settling/branch-settling.contract.ts";
-import { CommandProgressRpc } from "#contracts/command-progress/command-progress.contract.ts";
+import { CommandProgressApi } from "#contracts/command-progress/command-progress.contract.ts";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { DiagnosticsApi } from "#contracts/diagnostics/diagnostics.contract.ts";
 import { EnvironmentAuthorizationApi } from "#contracts/environment-authorization/environment-authorization.contract.ts";
+import {
+  type AnyEnvironmentRoute,
+  route,
+  streamRoute,
+} from "#contracts/environment-connection/environment-route.contract.ts";
 import { EnvironmentFilesystemApi } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
 import { FileBlameApi } from "#contracts/file-blame/file-blame.contract.ts";
 import { FileHistoryApi } from "#contracts/file-history/file-history.contract.ts";
@@ -17,7 +21,7 @@ import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-c
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { CompareApi } from "#contracts/repository-comparison/compare-revisions.contract.ts";
 import { RepositoryConflictsApi } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
-import { RepositoryHistoryRpc } from "#contracts/repository-history/repository-history.contract.ts";
+import { RepositoryHistoryApi } from "#contracts/repository-history/repository-history.contract.ts";
 import { RepositoryLfsApi } from "#contracts/repository-lfs/repository-lfs.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
@@ -33,89 +37,86 @@ import { SourceControlApi } from "#contracts/source-control/source-control.contr
 import { TerminalsApi } from "#contracts/terminal/terminal.contract.ts";
 import { WorktreeFilesApi } from "#contracts/worktree-files/worktree-files.contract.ts";
 
-export const environmentProtocol = 5;
+export const environmentProtocol = 6;
 export const environmentMaxMessageBytes = 64 * 1_048_576;
 export const environmentLivePath = "/api/environment/live";
 export const environmentSubprotocol = "rebase";
 export const unauthorizedCloseCode = 4401;
 
-const EnvironmentId = Schema.String.check(Schema.isUUID(4));
+const EnvironmentId = z.uuidv4();
 
-export const EnvironmentHello = Schema.Struct({
-  protocol: Schema.Natural,
+export const EnvironmentHello = z.object({
+  protocol: z.int().nonnegative(),
 });
 
-export const EnvironmentGreeting = Schema.Struct({
+export const EnvironmentGreeting = z.object({
   environmentId: EnvironmentId,
-  sequence: Schema.Natural,
 });
-export type EnvironmentGreeting = typeof EnvironmentGreeting.Type;
+export type EnvironmentGreeting = z.infer<typeof EnvironmentGreeting>;
 
-export const ProtocolMismatch = Schema.TaggedStruct("ProtocolMismatch", {
-  serverProtocol: Schema.Natural,
+export const ProtocolMismatch = z.object({
+  _tag: z.literal("ProtocolMismatch"),
+  serverProtocol: z.int().nonnegative(),
 });
-export type ProtocolMismatch = typeof ProtocolMismatch.Type;
+export type ProtocolMismatch = z.infer<typeof ProtocolMismatch>;
 
-export const RepositoryChangeKind = Schema.Literals([
+export const RepositoryChangeKind = z.enum([
   "Refs",
   "Index",
   "Fetch",
   "Terminals",
 ]);
-export type RepositoryChangeKind = typeof RepositoryChangeKind.Type;
+export type RepositoryChangeKind = z.infer<typeof RepositoryChangeKind>;
 
-export const EnvironmentChanged = Schema.TaggedStruct("EnvironmentChanged", {
-  sequence: Schema.Natural,
-  repositoryIds: Schema.optionalKey(Schema.Array(EnvironmentId)),
-  kind: Schema.optionalKey(RepositoryChangeKind),
+export const EnvironmentChanged = z.object({
+  _tag: z.literal("EnvironmentChanged"),
+  sequence: z.int().nonnegative(),
+  repositoryIds: z.array(EnvironmentId).readonly().exactOptional(),
+  kind: RepositoryChangeKind.exactOptional(),
 });
-export type EnvironmentChanged = typeof EnvironmentChanged.Type;
+export type EnvironmentChanged = z.infer<typeof EnvironmentChanged>;
 
-export const EnvironmentRpc = RpcGroup.make(
-  Rpc.make("Hello", {
-    payload: EnvironmentHello,
+export const EnvironmentSessionApi = {
+  hello: route("Hello", {
+    request: EnvironmentHello,
     success: EnvironmentGreeting,
-    error: ProtocolMismatch,
+    failure: ProtocolMismatch,
   }),
-  Rpc.make("WatchEnvironment", {
-    success: EnvironmentChanged,
-    stream: true,
-  }),
-  ...Object.values(EnvironmentAuthorizationApi),
-  ...Object.values(EnvironmentFilesystemApi),
-  ...Object.values(RepositoryCatalogApi),
-  ...Object.values(CommitInspectionApi),
-  ...Object.values(FileHistoryApi),
-  ...Object.values(HistorySearchApi),
-  ...Object.values(WorktreeFilesApi),
-  ...Object.values(FileBlameApi),
-  ...Object.values(CompareApi),
-  ...Object.values(RepositoryChangesApi),
-  ...Object.values(RepositoryConflictsApi),
-  ...Object.values(RepositoryLfsApi),
-  ...Object.values(RepositoryOperationsApi),
-  ...Object.values(RepositoryPullApi),
-  ...Object.values(PullRequestsApi),
-  ...Object.values(AuthorAvatarsApi),
-  ...Object.values(RepositoryPushApi),
-  ...Object.values(RepositoryReflogApi),
-  ...Object.values(RepositoryRefsApi),
-  ...Object.values(RepositoryBranchesApi),
-  ...Object.values(BranchSettlingApi),
-  ...Object.values(RepositoryTagsApi),
-  ...Object.values(RepositoryStashesApi),
-  ...Object.values(RepositoryWorktreesApi),
-  ...Object.values(SourceControlApi),
-  ...Object.values(GitIdentityApi),
-  ...Object.values(SignatureVerificationApi),
-  ...Object.values(GitSigningApi),
-  ...Object.values(TerminalsApi),
-  ...Object.values(DiagnosticsApi),
-).merge(RepositoryHistoryRpc, CommandProgressRpc);
+  watch: streamRoute("WatchEnvironment", { success: EnvironmentChanged }),
+};
 
-export type EnvironmentRpcs = RpcGroup.Rpcs<typeof EnvironmentRpc>;
-
-export type EnvironmentRpcClient = RpcClient.RpcClient<
-  EnvironmentRpcs,
-  RpcClientError.RpcClientError
->;
+export const environmentRoutes: readonly AnyEnvironmentRoute[] = [
+  EnvironmentSessionApi,
+  EnvironmentAuthorizationApi,
+  EnvironmentFilesystemApi,
+  RepositoryCatalogApi,
+  CommitInspectionApi,
+  FileHistoryApi,
+  HistorySearchApi,
+  WorktreeFilesApi,
+  FileBlameApi,
+  CompareApi,
+  RepositoryChangesApi,
+  RepositoryConflictsApi,
+  RepositoryLfsApi,
+  RepositoryOperationsApi,
+  RepositoryPullApi,
+  PullRequestsApi,
+  AuthorAvatarsApi,
+  RepositoryPushApi,
+  RepositoryReflogApi,
+  RepositoryRefsApi,
+  RepositoryBranchesApi,
+  BranchSettlingApi,
+  RepositoryTagsApi,
+  RepositoryStashesApi,
+  RepositoryWorktreesApi,
+  SourceControlApi,
+  GitIdentityApi,
+  SignatureVerificationApi,
+  GitSigningApi,
+  TerminalsApi,
+  DiagnosticsApi,
+  RepositoryHistoryApi,
+  CommandProgressApi,
+].flatMap((api): AnyEnvironmentRoute[] => Object.values(api));

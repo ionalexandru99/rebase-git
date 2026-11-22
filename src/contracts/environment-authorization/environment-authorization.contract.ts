@@ -1,73 +1,79 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import { route } from "#contracts/environment-connection/environment-route.contract.ts";
 import { IsoDate } from "#contracts/environment-connection/iso-date.contract.ts";
 
-const AuthorizationId = Schema.String.check(Schema.isUUID(4));
-const SecretMaterial = Schema.String.check(
-  Schema.isMinLength(32),
-  Schema.isMaxLength(512),
-);
-const PairingCode = Schema.String.check(Schema.isPattern(/^\d{3}-\d{3}$/));
-const DeviceLabel = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(128),
-);
+const AuthorizationId = z.uuidv4();
+const SecretMaterial = z.string().min(32).max(512);
+const PairingCode = z.string().regex(/^\d{3}-\d{3}$/);
+const DeviceLabel = z.string().min(1).max(128);
 
-export const EnvironmentPairingCreated = Schema.Struct({
-  pairingUrl: Schema.String,
+export const EnvironmentPairingCreated = z.object({
+  pairingUrl: z.string(),
   expiresAt: IsoDate,
 });
-export type EnvironmentPairingCreated = typeof EnvironmentPairingCreated.Type;
+export type EnvironmentPairingCreated = z.infer<
+  typeof EnvironmentPairingCreated
+>;
 
-export const ExchangeEnvironmentPairing = Schema.Struct({
+export const ExchangeEnvironmentPairing = z.object({
   pairingMaterial: PairingCode,
   label: DeviceLabel,
 });
-export type ExchangeEnvironmentPairing = typeof ExchangeEnvironmentPairing.Type;
+export type ExchangeEnvironmentPairing = z.infer<
+  typeof ExchangeEnvironmentPairing
+>;
 
-export const EnvironmentDeviceAuthorization = Schema.Struct({
+export const EnvironmentDeviceAuthorization = z.object({
   id: AuthorizationId,
   label: DeviceLabel,
 });
-export type EnvironmentDeviceAuthorization =
-  typeof EnvironmentDeviceAuthorization.Type;
+export type EnvironmentDeviceAuthorization = z.infer<
+  typeof EnvironmentDeviceAuthorization
+>;
 
-export const EnvironmentPairingExchanged = Schema.Struct({
+export const EnvironmentPairingExchanged = z.object({
   authorization: EnvironmentDeviceAuthorization,
   credential: SecretMaterial,
 });
-export type EnvironmentPairingExchanged =
-  typeof EnvironmentPairingExchanged.Type;
+export type EnvironmentPairingExchanged = z.infer<
+  typeof EnvironmentPairingExchanged
+>;
 
-export const EnvironmentBrowserSession = Schema.Struct({
+export const EnvironmentBrowserSession = z.object({
   authorization: EnvironmentDeviceAuthorization,
 });
-export type EnvironmentBrowserSession = typeof EnvironmentBrowserSession.Type;
+export type EnvironmentBrowserSession = z.infer<
+  typeof EnvironmentBrowserSession
+>;
 
-export const RevokeEnvironmentAuthorization = Schema.Struct({
+export const RevokeEnvironmentAuthorization = z.object({
   authorizationId: AuthorizationId,
 });
-export type RevokeEnvironmentAuthorization =
-  typeof RevokeEnvironmentAuthorization.Type;
+export type RevokeEnvironmentAuthorization = z.infer<
+  typeof RevokeEnvironmentAuthorization
+>;
 
-export const EnvironmentAuthorizationRevoked = Schema.Struct({
+export const EnvironmentAuthorizationRevoked = z.object({
   authorizationId: AuthorizationId,
   revokedAt: IsoDate,
 });
-export type EnvironmentAuthorizationRevoked =
-  typeof EnvironmentAuthorizationRevoked.Type;
+export type EnvironmentAuthorizationRevoked = z.infer<
+  typeof EnvironmentAuthorizationRevoked
+>;
 
-export const InvalidHost = Schema.TaggedStruct("InvalidHost", {});
-export const InvalidOrigin = Schema.TaggedStruct("InvalidOrigin", {});
-export const InvalidGrant = Schema.TaggedStruct("InvalidGrant", {});
-export type InvalidGrant = typeof InvalidGrant.Type;
-export const ExpiredGrant = Schema.TaggedStruct("ExpiredGrant", {});
-export const RevokedGrant = Schema.TaggedStruct("RevokedGrant", {});
-export const InvalidPairing = Schema.TaggedStruct("InvalidPairing", {});
-export const ExpiredPairing = Schema.TaggedStruct("ExpiredPairing", {});
-export const PairingAlreadyUsed = Schema.TaggedStruct("PairingAlreadyUsed", {});
+export const InvalidHost = z.object({ _tag: z.literal("InvalidHost") });
+export const InvalidOrigin = z.object({ _tag: z.literal("InvalidOrigin") });
+export const InvalidGrant = z.object({ _tag: z.literal("InvalidGrant") });
+export type InvalidGrant = z.infer<typeof InvalidGrant>;
+export const ExpiredGrant = z.object({ _tag: z.literal("ExpiredGrant") });
+export const RevokedGrant = z.object({ _tag: z.literal("RevokedGrant") });
+export const InvalidPairing = z.object({ _tag: z.literal("InvalidPairing") });
+export const ExpiredPairing = z.object({ _tag: z.literal("ExpiredPairing") });
+export const PairingAlreadyUsed = z.object({
+  _tag: z.literal("PairingAlreadyUsed"),
+});
 
-export const EnvironmentAuthorizationFailure = Schema.Union([
+export const EnvironmentAuthorizationFailure = z.discriminatedUnion("_tag", [
   InvalidHost,
   InvalidOrigin,
   InvalidGrant,
@@ -77,20 +83,22 @@ export const EnvironmentAuthorizationFailure = Schema.Union([
   ExpiredPairing,
   PairingAlreadyUsed,
 ]);
-export type EnvironmentAuthorizationFailure =
-  typeof EnvironmentAuthorizationFailure.Type;
+export type EnvironmentAuthorizationFailure = z.infer<
+  typeof EnvironmentAuthorizationFailure
+>;
 
-export const InvalidMessage = Schema.TaggedStruct("InvalidMessage", {});
-export const PayloadTooLarge = Schema.TaggedStruct("PayloadTooLarge", {
-  limitBytes: Schema.Natural,
+export const InvalidMessage = z.object({ _tag: z.literal("InvalidMessage") });
+export const PayloadTooLarge = z.object({
+  _tag: z.literal("PayloadTooLarge"),
+  limitBytes: z.int().nonnegative(),
 });
 
-export const EnvironmentAccessFailure = Schema.Union([
+export const EnvironmentAccessFailure = z.discriminatedUnion("_tag", [
   EnvironmentAuthorizationFailure,
   InvalidMessage,
   PayloadTooLarge,
 ]);
-export type EnvironmentAccessFailure = typeof EnvironmentAccessFailure.Type;
+export type EnvironmentAccessFailure = z.infer<typeof EnvironmentAccessFailure>;
 
 export const environmentBrowserSessionPath =
   "/api/authorization/browser-session";

@@ -1,3 +1,4 @@
+import type { z } from "zod";
 import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   BranchCheckedOutElsewhere,
@@ -21,7 +22,7 @@ type SharedFailure =
   | { readonly _tag: "RepositoryMissing" }
   | RepositoryRejected
   | RefMissing
-  | typeof BranchCheckedOutElsewhere.Type;
+  | z.infer<typeof BranchCheckedOutElsewhere>;
 
 const repositoryMissing = "The repository is no longer available.";
 

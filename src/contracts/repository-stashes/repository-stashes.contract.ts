@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import { CommitFile } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import {
   repositoryCommand,
@@ -15,87 +15,78 @@ import {
 } from "#contracts/repository-changes/repository-changes.contract.ts";
 
 const maximumStashes = 1_000;
-const StashText = Schema.String.check(Schema.isMaxLength(1_024));
+const StashText = z.string().max(1_024);
 
-const StashScope = Schema.Struct({
+const StashScope = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
 });
 
-export const RepositoryStash = Schema.Struct({
+export const RepositoryStash = z.object({
   oid: ObjectId,
   name: StashText,
-  named: Schema.Boolean,
-  auto: Schema.Boolean,
-  branch: Schema.NullOr(StashText),
-  staged: Schema.Boolean,
-  recordedAt: Schema.Int,
+  named: z.boolean(),
+  auto: z.boolean(),
+  branch: StashText.nullable(),
+  staged: z.boolean(),
+  recordedAt: z.int(),
 });
-export type RepositoryStash = typeof RepositoryStash.Type;
+export type RepositoryStash = z.infer<typeof RepositoryStash>;
 
-export const RepositoryStashes = Schema.Struct({
-  stashes: Schema.Array(RepositoryStash).check(
-    Schema.isMaxLength(maximumStashes),
-  ),
-  truncated: Schema.Boolean,
+export const RepositoryStashes = z.object({
+  stashes: z.array(RepositoryStash).max(maximumStashes).readonly(),
+  truncated: z.boolean(),
 });
-export type RepositoryStashes = typeof RepositoryStashes.Type;
+export type RepositoryStashes = z.infer<typeof RepositoryStashes>;
 
-export const StashTarget = Schema.Struct({
-  ...StashScope.fields,
+export const StashTarget = z.object({
+  ...StashScope.shape,
   oid: ObjectId,
 });
-export type StashTarget = typeof StashTarget.Type;
+export type StashTarget = z.infer<typeof StashTarget>;
 
-export const StashFile = Schema.Struct({
-  ...CommitFile.fields,
-  untracked: Schema.Boolean,
+export const StashFile = z.object({
+  ...CommitFile.shape,
+  untracked: z.boolean(),
 });
-export type StashFile = typeof StashFile.Type;
+export type StashFile = z.infer<typeof StashFile>;
 
-export const StashContents = Schema.Struct({
+export const StashContents = z.object({
   base: ObjectId,
-  untracked: Schema.NullOr(ObjectId),
-  files: Schema.Array(StashFile),
-  truncated: Schema.Boolean,
+  untracked: ObjectId.nullable(),
+  files: z.array(StashFile).readonly(),
+  truncated: z.boolean(),
 });
-export type StashContents = typeof StashContents.Type;
+export type StashContents = z.infer<typeof StashContents>;
 
-export const ApplyStash = Schema.Struct({
-  ...StashTarget.fields,
-  restoreIndex: Schema.Boolean,
-  drop: Schema.Boolean,
+export const ApplyStash = z.object({
+  ...StashTarget.shape,
+  restoreIndex: z.boolean(),
+  drop: z.boolean(),
 });
-export type ApplyStash = typeof ApplyStash.Type;
+export type ApplyStash = z.infer<typeof ApplyStash>;
 
-export const StashApplied = Schema.Struct({ conflicts: Schema.Natural });
-export type StashApplied = typeof StashApplied.Type;
+export const StashApplied = z.object({ conflicts: z.int().nonnegative() });
+export type StashApplied = z.infer<typeof StashApplied>;
 
-export const SaveStash = Schema.Struct({
-  ...StashScope.fields,
-  revision: Schema.String.check(Schema.isMaxLength(128)),
-  into: Schema.NullOr(ObjectId),
-  name: Schema.optional(StashText.check(Schema.isMinLength(1))),
+export const SaveStash = z.object({
+  ...StashScope.shape,
+  revision: z.string().max(128),
+  into: ObjectId.nullable(),
+  name: StashText.min(1).optional(),
   section: ChangeSection,
-  paths: Schema.Array(RepositoryPath).check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(1_000),
-  ),
+  paths: z.array(RepositoryPath).min(1).max(1_000).readonly(),
 });
-export type SaveStash = typeof SaveStash.Type;
+export type SaveStash = z.infer<typeof SaveStash>;
 
-export const StashMissing = Schema.TaggedStruct("StashMissing", {});
-export type StashMissing = typeof StashMissing.Type;
+export const StashMissing = z.object({ _tag: z.literal("StashMissing") });
+export type StashMissing = z.infer<typeof StashMissing>;
 
-export const StashRejected = Schema.TaggedStruct("StashRejected", {
-  reason: Schema.Literals([
-    "LocalChanges",
-    "IndexConflict",
-    "DoesNotFit",
-    "Unborn",
-  ]),
+export const StashRejected = z.object({
+  _tag: z.literal("StashRejected"),
+  reason: z.enum(["LocalChanges", "IndexConflict", "DoesNotFit", "Unborn"]),
 });
-export type StashRejected = typeof StashRejected.Type;
+export type StashRejected = z.infer<typeof StashRejected>;
 
 export const RepositoryStashesApi = {
   list: repositoryQuery("repositories/stashes/list", {
@@ -110,16 +101,20 @@ export const RepositoryStashesApi = {
   apply: repositoryCommand("repositories/stashes/apply", {
     request: ApplyStash,
     success: StashApplied,
-    failure: Schema.Union([StashMissing, StashRejected]),
+    failure: z.discriminatedUnion("_tag", [StashMissing, StashRejected]),
   }),
   drop: repositoryCommand("repositories/stashes/drop", {
     request: StashTarget,
-    success: Schema.Struct({}),
+    success: z.object({}),
     failure: StashMissing,
   }),
   save: repositoryCommand("repositories/stashes/save", {
     request: SaveStash,
-    success: Schema.Struct({ oid: ObjectId }),
-    failure: Schema.Union([StashMissing, StashRejected, ChangesFailure]),
+    success: z.object({ oid: ObjectId }),
+    failure: z.discriminatedUnion("_tag", [
+      StashMissing,
+      StashRejected,
+      ChangesFailure,
+    ]),
   }),
 };

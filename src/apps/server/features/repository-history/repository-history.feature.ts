@@ -1,13 +1,13 @@
 import { type Cause, Effect, Queue, Stream } from "effect";
-import type {
-  RepositoryHistoryFailure,
-  RepositoryHistoryRpc,
-  RepositoryHistoryUpdate,
-  SynchronizeRepositoryHistory,
+import {
+  RepositoryHistoryApi,
+  type RepositoryHistoryFailure,
+  type RepositoryHistoryUpdate,
+  type SynchronizeRepositoryHistory,
 } from "#contracts/repository-history/repository-history.contract.ts";
-import type {
-  EnvironmentFeature,
-  EnvironmentRpcHandlersFor,
+import {
+  type EnvironmentFeature,
+  stream,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import {
@@ -46,12 +46,8 @@ export function repositoryHistoryFeature(dependencies: {
       Effect.mapError(historyWireFailure),
     );
   return {
-    routes: [],
-    rpc: (): Pick<
-      EnvironmentRpcHandlersFor<typeof RepositoryHistoryRpc>,
-      "SynchronizeHistory"
-    > => ({
-      SynchronizeHistory: (request) =>
+    routes: [
+      stream(RepositoryHistoryApi.synchronize, (request) =>
         Stream.unwrap(
           Effect.gen(function* () {
             const queue = yield* Queue.bounded<
@@ -70,7 +66,8 @@ export function repositoryHistoryFeature(dependencies: {
             return Stream.fromQueue(queue);
           }),
         ),
-    }),
+      ),
+    ],
   } satisfies EnvironmentFeature;
 }
 

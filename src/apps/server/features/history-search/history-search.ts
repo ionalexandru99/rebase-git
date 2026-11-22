@@ -1,5 +1,4 @@
 import { Effect, Stream } from "effect";
-import type { EnvironmentRpc } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import {
   type RepositoryRejected,
   repositoryRejected,
@@ -7,12 +6,13 @@ import {
 import {
   type CodeMatch,
   type CodeSearchUpdate,
+  HistorySearchApi,
   maximumCodeMatches,
   type SearchCode,
 } from "#contracts/history-search/history-search.contract.ts";
-import type {
-  EnvironmentFeature,
-  EnvironmentRpcHandlersFor,
+import {
+  type EnvironmentFeature,
+  stream,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
@@ -38,12 +38,8 @@ export function historySearchFeature({
   readonly git: GitCommandRunner;
 }): EnvironmentFeature {
   return {
-    routes: [],
-    rpc: (): Pick<
-      EnvironmentRpcHandlersFor<typeof EnvironmentRpc>,
-      "repositories/history/code-search"
-    > => ({
-      "repositories/history/code-search": (input) =>
+    routes: [
+      stream(HistorySearchApi.code, (input) =>
         Stream.unwrap(
           access.requireWorktree(input).pipe(
             Effect.catchTag("EnvironmentStorageError", Effect.die),
@@ -51,7 +47,8 @@ export function historySearchFeature({
             Effect.map((oids) => searchCommits(git, input, oids)),
           ),
         ).pipe(Stream.mapError(rejected)),
-    }),
+      ),
+    ],
   };
 }
 

@@ -8,11 +8,10 @@ import {
   type DiagnosticsProcess,
   type DiagnosticsSample,
 } from "#contracts/diagnostics/diagnostics.contract.ts";
-import type { EnvironmentRpc } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import {
   type EnvironmentFeature,
-  type EnvironmentRpcHandlersFor,
   route,
+  stream,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import {
@@ -168,12 +167,7 @@ export function acquireDiagnosticsFeature({
         route(DiagnosticsApi.watchAgain, ({ repositoryId }) =>
           changes.restart(repositoryId).pipe(Effect.as({})),
         ),
-      ],
-      rpc: (): Pick<
-        EnvironmentRpcHandlersFor<typeof EnvironmentRpc>,
-        "diagnostics/watch"
-      > => ({
-        "diagnostics/watch": ({ period }) =>
+        stream(DiagnosticsApi.watch, ({ period }) =>
           Stream.unwrap(
             Effect.gen(function* () {
               watching += 1;
@@ -207,7 +201,8 @@ export function acquireDiagnosticsFeature({
               );
             }),
           ),
-      }),
+        ),
+      ],
     } satisfies EnvironmentFeature;
   });
 }

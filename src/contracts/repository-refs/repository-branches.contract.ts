@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
@@ -17,108 +17,111 @@ import {
   RefMissing,
 } from "#contracts/repository-refs/repository-refs.contract.ts";
 
-export const BranchUpstreamTarget = Schema.Struct({
+export const BranchUpstreamTarget = z.object({
   name: RefName,
   remote: RemoteName,
 });
-export type BranchUpstreamTarget = typeof BranchUpstreamTarget.Type;
+export type BranchUpstreamTarget = z.infer<typeof BranchUpstreamTarget>;
 
 const BranchScope = {
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
 };
 
-export const CreateRepositoryBranch = Schema.Struct({
+export const CreateRepositoryBranch = z.object({
   ...BranchScope,
   name: RefName,
   startPoint: ObjectId,
-  track: Schema.optional(BranchUpstreamTarget),
+  track: BranchUpstreamTarget.optional(),
 });
-export type CreateRepositoryBranch = typeof CreateRepositoryBranch.Type;
+export type CreateRepositoryBranch = z.infer<typeof CreateRepositoryBranch>;
 
-export const RenameRepositoryBranch = Schema.Struct({
+export const RenameRepositoryBranch = z.object({
   ...BranchScope,
-  expectedTarget: Schema.optional(ObjectId),
+  expectedTarget: ObjectId.optional(),
   name: RefName,
   newName: RefName,
 });
-export type RenameRepositoryBranch = typeof RenameRepositoryBranch.Type;
+export type RenameRepositoryBranch = z.infer<typeof RenameRepositoryBranch>;
 
-const DeletedLocalBranch = Schema.Struct({ name: RefName, target: ObjectId });
-const DeletedRemoteBranch = Schema.Struct({
+const DeletedLocalBranch = z.object({ name: RefName, target: ObjectId });
+const DeletedRemoteBranch = z.object({
   name: RefName,
   remote: RemoteName,
   target: ObjectId,
 });
 
-export const BranchDeletion = Schema.Struct({
-  local: Schema.optional(DeletedLocalBranch),
-  remote: Schema.optional(DeletedRemoteBranch),
+export const BranchDeletion = z.object({
+  local: DeletedLocalBranch.optional(),
+  remote: DeletedRemoteBranch.optional(),
 });
-export type BranchDeletion = typeof BranchDeletion.Type;
+export type BranchDeletion = z.infer<typeof BranchDeletion>;
 
-export const DeleteRepositoryBranches = Schema.Struct({
+export const DeleteRepositoryBranches = z.object({
   ...BranchScope,
-  branches: Schema.Array(BranchDeletion).check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(1_000),
-  ),
-  force: Schema.Boolean,
+  branches: z.array(BranchDeletion).min(1).max(1_000).readonly(),
+  force: z.boolean(),
 });
-export type DeleteRepositoryBranches = typeof DeleteRepositoryBranches.Type;
+export type DeleteRepositoryBranches = z.infer<typeof DeleteRepositoryBranches>;
 
-export const ReadUnmergedBranches = Schema.Struct({
+export const ReadUnmergedBranches = z.object({
   ...BranchScope,
-  branches: DeleteRepositoryBranches.fields.branches,
+  branches: DeleteRepositoryBranches.shape.branches,
 });
-export type ReadUnmergedBranches = typeof ReadUnmergedBranches.Type;
+export type ReadUnmergedBranches = z.infer<typeof ReadUnmergedBranches>;
 
-export const RepositoryBranchRenamed = Schema.Struct({
+export const RepositoryBranchRenamed = z.object({
   branch: LocalBranch,
   previousName: RefName,
 });
-export type RepositoryBranchRenamed = typeof RepositoryBranchRenamed.Type;
+export type RepositoryBranchRenamed = z.infer<typeof RepositoryBranchRenamed>;
 
-export const BranchCommitSummary = Schema.Struct({
+export const BranchCommitSummary = z.object({
   oid: ObjectId,
-  subject: Schema.String.check(Schema.isMaxLength(512)),
+  subject: z.string().max(512),
 });
-export type BranchCommitSummary = typeof BranchCommitSummary.Type;
+export type BranchCommitSummary = z.infer<typeof BranchCommitSummary>;
 
-export const InvalidBranchName = Schema.TaggedStruct("InvalidBranchName", {
-  name: Schema.String.check(Schema.isMaxLength(1_024)),
+export const InvalidBranchName = z.object({
+  _tag: z.literal("InvalidBranchName"),
+  name: z.string().max(1_024),
 });
-export const BranchExists = Schema.TaggedStruct("BranchExists", {
+export const BranchExists = z.object({
+  _tag: z.literal("BranchExists"),
   name: RefName,
 });
-export const BranchMoved = Schema.TaggedStruct("BranchMoved", {
+export const BranchMoved = z.object({
+  _tag: z.literal("BranchMoved"),
   name: RefName,
 });
-export const UnmergedBranch = Schema.Struct({
+export const UnmergedBranch = z.object({
   branch: BranchDeletion,
-  commits: Schema.Array(BranchCommitSummary).check(Schema.isMaxLength(20)),
-  count: Schema.Natural,
+  commits: z.array(BranchCommitSummary).max(20).readonly(),
+  count: z.int().nonnegative(),
 });
-export type UnmergedBranch = typeof UnmergedBranch.Type;
+export type UnmergedBranch = z.infer<typeof UnmergedBranch>;
 
-export const RepositoryBranchesOperationFailure = Schema.Union([
+export const RepositoryBranchesOperationFailure = z.discriminatedUnion("_tag", [
   RefMissing,
   BranchCheckedOutElsewhere,
   InvalidBranchName,
   BranchExists,
   BranchMoved,
 ]);
-export type RepositoryBranchesOperationFailure =
-  typeof RepositoryBranchesOperationFailure.Type;
+export type RepositoryBranchesOperationFailure = z.infer<
+  typeof RepositoryBranchesOperationFailure
+>;
 
-export const RepositoryBranchesDeleted = Schema.Struct({
-  deleted: Schema.Array(BranchDeletion).check(Schema.isMaxLength(1_000)),
-  unmerged: Schema.Array(UnmergedBranch).check(Schema.isMaxLength(1_000)),
-  failure: Schema.optional(
-    Schema.Union([RepositoryBranchesOperationFailure, RepositoryRejected]),
-  ),
+export const RepositoryBranchesDeleted = z.object({
+  deleted: z.array(BranchDeletion).max(1_000).readonly(),
+  unmerged: z.array(UnmergedBranch).max(1_000).readonly(),
+  failure: z
+    .union([RepositoryBranchesOperationFailure, RepositoryRejected])
+    .optional(),
 });
-export type RepositoryBranchesDeleted = typeof RepositoryBranchesDeleted.Type;
+export type RepositoryBranchesDeleted = z.infer<
+  typeof RepositoryBranchesDeleted
+>;
 
 export const RepositoryBranchesApi = {
   create: repositoryCommand("repositories/branches/create", {
@@ -133,7 +136,7 @@ export const RepositoryBranchesApi = {
   }),
   unmerged: repositoryQuery("repositories/branches/unmerged", {
     request: ReadUnmergedBranches,
-    success: Schema.Array(UnmergedBranch).check(Schema.isMaxLength(1_000)),
+    success: z.array(UnmergedBranch).max(1_000).readonly(),
   }),
   rename: repositoryCommand("repositories/branches/rename", {
     request: RenameRepositoryBranch,

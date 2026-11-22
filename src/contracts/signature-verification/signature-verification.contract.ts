@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import { repositoryQuery } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   ObjectId,
@@ -6,35 +6,33 @@ import {
   RepositoryPath,
 } from "#contracts/git/git-values.contract.ts";
 
-export const VerifySignature = Schema.Struct({
+export const VerifySignature = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
-  kind: Schema.Literals(["commit", "tag"]),
+  kind: z.enum(["commit", "tag"]),
   object: ObjectId,
 });
-export type VerifySignature = typeof VerifySignature.Type;
+export type VerifySignature = z.infer<typeof VerifySignature>;
 
 const Signed = {
-  signer: Schema.NullOr(Schema.String.check(Schema.isMaxLength(512))),
-  key: Schema.NullOr(Schema.String.check(Schema.isMaxLength(128))),
+  signer: z.string().max(512).nullable(),
+  key: z.string().max(128).nullable(),
 };
 
-export const SignatureCheck = Schema.Union([
-  Schema.TaggedStruct("Unsigned", {}),
-  Schema.TaggedStruct("Verified", Signed),
-  Schema.TaggedStruct("UnknownKey", {
+export const SignatureCheck = z.discriminatedUnion("_tag", [
+  z.object({ _tag: z.literal("Unsigned") }),
+  z.object({ _tag: z.literal("Verified"), ...Signed }),
+  z.object({
+    _tag: z.literal("UnknownKey"),
     ...Signed,
-    reason: Schema.Literals([
-      "KeyMissing",
-      "KeyNotTrusted",
-      "NotAllowedSigner",
-    ]),
+    reason: z.enum(["KeyMissing", "KeyNotTrusted", "NotAllowedSigner"]),
   }),
-  Schema.TaggedStruct("ExpiredKey", Signed),
-  Schema.TaggedStruct("RevokedKey", Signed),
-  Schema.TaggedStruct("BadSignature", Signed),
-  Schema.TaggedStruct("CantCheck", {
-    reason: Schema.Literals([
+  z.object({ _tag: z.literal("ExpiredKey"), ...Signed }),
+  z.object({ _tag: z.literal("RevokedKey"), ...Signed }),
+  z.object({ _tag: z.literal("BadSignature"), ...Signed }),
+  z.object({
+    _tag: z.literal("CantCheck"),
+    reason: z.enum([
       "ToolMissing",
       "AllowedSignersMissing",
       "TimedOut",
@@ -42,7 +40,7 @@ export const SignatureCheck = Schema.Union([
     ]),
   }),
 ]);
-export type SignatureCheck = typeof SignatureCheck.Type;
+export type SignatureCheck = z.infer<typeof SignatureCheck>;
 
 export const SignatureVerificationApi = {
   verify: repositoryQuery("repositories/signatures/verify", {

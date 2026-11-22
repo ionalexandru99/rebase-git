@@ -60,15 +60,14 @@ describe("Electron application", () => {
       );
       expect(host.windows[1]?.credential).toBe(firstWindow?.credential);
       await expect(
-        Effect.runPromise(
-          Effect.scoped(
-            connectEnvironment(
-              firstWindow?.environmentOrigin ?? "",
-              { type: "bearer", value: host.windows[1]?.credential ?? "" },
-              { changed: () => {} },
-            ),
-          ),
-        ),
+        connectEnvironment(
+          firstWindow?.environmentOrigin ?? "",
+          { type: "bearer", value: host.windows[1]?.credential ?? "" },
+          { changed: () => {} },
+        ).then((connection) => {
+          connection.close();
+          return connection;
+        }),
       ).resolves.toHaveProperty("environmentId");
       expect(serverStarts).toBe(1);
 

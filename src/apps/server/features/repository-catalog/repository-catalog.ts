@@ -217,7 +217,7 @@ function leastUsedColor(
 ): RepositoryColor {
   const repositoriesWith = (color: RepositoryColor) =>
     usage.find((used) => used.color === color)?.repositories ?? 0;
-  return RepositoryColor.literals.reduce((least, color) =>
+  return RepositoryColor.options.reduce((least, color) =>
     repositoriesWith(color) < repositoriesWith(least) ? color : least,
   );
 }

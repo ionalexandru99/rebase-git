@@ -242,6 +242,6 @@ describe("historical commit inspection", () => {
     );
     await expect(
       Effect.runPromise(f.service.inspect({ ...scope, oid: "HEAD^{tree}" })),
-    ).rejects.toThrow("Schema validation failed");
+    ).rejects.toThrow();
   });
 });

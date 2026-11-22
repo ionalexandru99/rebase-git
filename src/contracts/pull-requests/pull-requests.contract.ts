@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
@@ -10,78 +10,71 @@ import {
 } from "#contracts/git/git-values.contract.ts";
 import type { GitHostKind } from "#contracts/source-control/source-control.contract.ts";
 
-export const PullRequestKind = Schema.Literals(["PullRequest", "MergeRequest"]);
-export type PullRequestKind = typeof PullRequestKind.Type;
+export const PullRequestKind = z.enum(["PullRequest", "MergeRequest"]);
+export type PullRequestKind = z.infer<typeof PullRequestKind>;
 
 const maximumNumber = 999_999_999;
 
-export const PullRequestNumber = Schema.Int.check(
-  Schema.isBetween({ minimum: 1, maximum: maximumNumber }),
-);
+export const PullRequestNumber = z.int().min(1).max(maximumNumber);
 
-export const PullRequest = Schema.Struct({
+export const PullRequest = z.object({
   kind: PullRequestKind,
   number: PullRequestNumber,
-  url: Schema.String.check(
-    Schema.isPattern(/^https:\/\//),
-    Schema.isMaxLength(2_048),
-  ),
-  title: Schema.String.check(Schema.isMaxLength(1_024)),
-  state: Schema.Literals(["Open", "Draft", "Merged", "Closed"]),
-  checks: Schema.optionalKey(
-    Schema.Literals(["Passing", "Failing", "Pending"]),
-  ),
+  url: z
+    .string()
+    .regex(/^https:\/\//)
+    .max(2_048),
+  title: z.string().max(1_024),
+  state: z.enum(["Open", "Draft", "Merged", "Closed"]),
+  checks: z.enum(["Passing", "Failing", "Pending"]).exactOptional(),
 });
-export type PullRequest = typeof PullRequest.Type;
+export type PullRequest = z.infer<typeof PullRequest>;
 
-export const BranchPullRequests = Schema.Struct({
+export const BranchPullRequests = z.object({
   branch: RefName,
-  pullRequests: Schema.Array(PullRequest).check(Schema.isMaxLength(10)),
+  pullRequests: z.array(PullRequest).max(10).readonly(),
 });
-export type BranchPullRequests = typeof BranchPullRequests.Type;
+export type BranchPullRequests = z.infer<typeof BranchPullRequests>;
 
-export const PullRequestsUnavailable = Schema.TaggedStruct(
-  "PullRequestsUnavailable",
-  {},
-);
-export type PullRequestsUnavailable = typeof PullRequestsUnavailable.Type;
+export const PullRequestsUnavailable = z.object({
+  _tag: z.literal("PullRequestsUnavailable"),
+});
+export type PullRequestsUnavailable = z.infer<typeof PullRequestsUnavailable>;
 
-export const LinkPullRequest = Schema.Struct({
+export const LinkPullRequest = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
   branch: RefName,
   number: PullRequestNumber,
-  linked: Schema.Boolean,
+  linked: z.boolean(),
 });
-export type LinkPullRequest = typeof LinkPullRequest.Type;
+export type LinkPullRequest = z.infer<typeof LinkPullRequest>;
 
 export const PullRequestsApi = {
   list: repositoryQuery("repositories/pull-requests", {
-    request: Schema.Struct({ repositoryId: RepositoryId }),
-    success: Schema.NullOr(
-      Schema.Struct({
+    request: z.object({ repositoryId: RepositoryId }),
+    success: z
+      .object({
         kind: PullRequestKind,
-        branches: Schema.Array(BranchPullRequests).check(
-          Schema.isMaxLength(10_000),
-        ),
-      }),
-    ),
+        branches: z.array(BranchPullRequests).max(10_000).readonly(),
+      })
+      .nullable(),
     failure: PullRequestsUnavailable,
   }),
   find: repositoryQuery("repositories/pull-requests/find", {
-    request: Schema.Struct({
+    request: z.object({
       repositoryId: RepositoryId,
       number: PullRequestNumber,
     }),
-    success: Schema.Struct({
+    success: z.object({
       kind: PullRequestKind,
-      pullRequest: Schema.NullOr(PullRequest),
+      pullRequest: PullRequest.nullable(),
     }),
     failure: PullRequestsUnavailable,
   }),
   link: repositoryCommand("repositories/pull-requests/link", {
     request: LinkPullRequest,
-    success: Schema.Struct({}),
+    success: z.object({}),
   }),
 };
 

@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
@@ -6,32 +6,30 @@ import {
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import { RepositoryId } from "#contracts/git/git-values.contract.ts";
 
-const IdentityValue = Schema.Trim.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(256),
-);
+const IdentityValue = z.string().trim().min(1).max(256);
 
-export const GitIdentity = Schema.Struct({
-  name: Schema.optionalKey(IdentityValue),
-  email: Schema.optionalKey(IdentityValue),
+export const GitIdentity = z.object({
+  name: IdentityValue.exactOptional(),
+  email: IdentityValue.exactOptional(),
 });
-export type GitIdentity = typeof GitIdentity.Type;
+export type GitIdentity = z.infer<typeof GitIdentity>;
 
-const SavedIdentity = Schema.Struct({
-  name: Schema.optionalKey(Schema.String),
-  email: Schema.optionalKey(Schema.String),
+const SavedIdentity = z.object({
+  name: z.string().exactOptional(),
+  email: z.string().exactOptional(),
 });
 
-export const RepositoryIdentity = Schema.Struct({
+export const RepositoryIdentity = z.object({
   local: SavedIdentity,
   inherited: SavedIdentity,
 });
-export type RepositoryIdentity = typeof RepositoryIdentity.Type;
+export type RepositoryIdentity = z.infer<typeof RepositoryIdentity>;
 
-export const IdentityFailed = Schema.TaggedStruct("IdentityFailed", {
-  detail: Schema.String.check(Schema.isMaxLength(2_048)),
+export const IdentityFailed = z.object({
+  _tag: z.literal("IdentityFailed"),
+  detail: z.string().max(2_048),
 });
-export type IdentityFailed = typeof IdentityFailed.Type;
+export type IdentityFailed = z.infer<typeof IdentityFailed>;
 
 export const GitIdentityApi = {
   read: route("git-identity/read", {
@@ -44,11 +42,11 @@ export const GitIdentityApi = {
     failure: IdentityFailed,
   }),
   readRepository: repositoryQuery("repositories/identity", {
-    request: Schema.Struct({ repositoryId: RepositoryId }),
+    request: z.object({ repositoryId: RepositoryId }),
     success: RepositoryIdentity,
   }),
   saveRepository: repositoryCommand("repositories/save-identity", {
-    request: Schema.Struct({
+    request: z.object({
       repositoryId: RepositoryId,
       identity: GitIdentity,
     }),

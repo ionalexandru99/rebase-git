@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
@@ -9,60 +9,57 @@ import {
   RepositoryPath,
 } from "#contracts/git/git-values.contract.ts";
 
-const LfsScope = Schema.Struct({
+const LfsScope = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
 });
 
-export const LfsPattern = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(4_096),
-  Schema.isPattern(/^[^-\s][^\n\r]*$/),
-);
-export type LfsPattern = typeof LfsPattern.Type;
+export const LfsPattern = z
+  .string()
+  .min(1)
+  .max(4_096)
+  .regex(/^[^-\s][^\n\r]*$/);
+export type LfsPattern = z.infer<typeof LfsPattern>;
 
-export const LargeFiles = Schema.Struct({
-  installed: Schema.Boolean,
-  patterns: Schema.Array(LfsPattern).check(Schema.isMaxLength(1_000)),
+export const LargeFiles = z.object({
+  installed: z.boolean(),
+  patterns: z.array(LfsPattern).max(1_000).readonly(),
 });
-export type LargeFiles = typeof LargeFiles.Type;
+export type LargeFiles = z.infer<typeof LargeFiles>;
 
-export const LfsLock = Schema.Struct({
+export const LfsLock = z.object({
   path: RepositoryPath,
-  owner: Schema.String.check(Schema.isMaxLength(256)),
-  ours: Schema.Boolean,
+  owner: z.string().max(256),
+  ours: z.boolean(),
 });
-export type LfsLock = typeof LfsLock.Type;
+export type LfsLock = z.infer<typeof LfsLock>;
 
-export const LfsLocks = Schema.Array(LfsLock).check(Schema.isMaxLength(10_000));
-export type LfsLocks = typeof LfsLocks.Type;
+export const LfsLocks = z.array(LfsLock).max(10_000).readonly();
+export type LfsLocks = z.infer<typeof LfsLocks>;
 
-export const SetTracked = Schema.Struct({
-  ...LfsScope.fields,
+export const SetTracked = z.object({
+  ...LfsScope.shape,
   pattern: LfsPattern,
-  tracked: Schema.Boolean,
+  tracked: z.boolean(),
 });
-export type SetTracked = typeof SetTracked.Type;
+export type SetTracked = z.infer<typeof SetTracked>;
 
-export const DownloadLargeFiles = Schema.Struct({
-  ...LfsScope.fields,
-  paths: Schema.Array(RepositoryPath).check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(1_000),
-  ),
-  commits: Schema.optional(Schema.Array(ObjectId).check(Schema.isMaxLength(2))),
+export const DownloadLargeFiles = z.object({
+  ...LfsScope.shape,
+  paths: z.array(RepositoryPath).min(1).max(1_000).readonly(),
+  commits: z.array(ObjectId).max(2).readonly().optional(),
 });
-export type DownloadLargeFiles = typeof DownloadLargeFiles.Type;
+export type DownloadLargeFiles = z.infer<typeof DownloadLargeFiles>;
 
-export const LockAction = Schema.Literals(["Lock", "Unlock", "ForceUnlock"]);
-export type LockAction = typeof LockAction.Type;
+export const LockAction = z.enum(["Lock", "Unlock", "ForceUnlock"]);
+export type LockAction = z.infer<typeof LockAction>;
 
-export const SetLock = Schema.Struct({
-  ...LfsScope.fields,
+export const SetLock = z.object({
+  ...LfsScope.shape,
   path: RepositoryPath,
   action: LockAction,
 });
-export type SetLock = typeof SetLock.Type;
+export type SetLock = z.infer<typeof SetLock>;
 
 export const RepositoryLfsApi = {
   read: repositoryQuery("repositories/lfs/read", {
@@ -75,14 +72,14 @@ export const RepositoryLfsApi = {
   }),
   setTracked: repositoryCommand("repositories/lfs/set-tracked", {
     request: SetTracked,
-    success: Schema.Void,
+    success: z.void(),
   }),
   download: repositoryCommand("repositories/lfs/download", {
     request: DownloadLargeFiles,
-    success: Schema.Void,
+    success: z.void(),
   }),
   setLock: repositoryCommand("repositories/lfs/set-lock", {
     request: SetLock,
-    success: Schema.Void,
+    success: z.void(),
   }),
 };

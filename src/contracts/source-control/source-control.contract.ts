@@ -1,20 +1,20 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import { route } from "#contracts/environment-connection/environment-route.contract.ts";
 import { IsoDate } from "#contracts/environment-connection/iso-date.contract.ts";
 import { RemoteUrl } from "#contracts/git/git-values.contract.ts";
 
-export const GitHostKind = Schema.Literals([
+export const GitHostKind = z.enum([
   "github",
   "gitlab",
   "azure-devops",
   "bitbucket",
   "forgejo",
 ]);
-export type GitHostKind = typeof GitHostKind.Type;
+export type GitHostKind = z.infer<typeof GitHostKind>;
 
-const ToolVersion = Schema.String.check(Schema.isMaxLength(256));
-const HostText = Schema.String.check(Schema.isMaxLength(256));
-const HostAccount = Schema.Struct({ host: HostText, account: HostText });
+const ToolVersion = z.string().max(256);
+const HostText = z.string().max(256);
+const HostAccount = z.object({ host: HostText, account: HostText });
 
 export const bitbucketApiTokenScopes = [
   "read:repository:bitbucket",
@@ -23,106 +23,104 @@ export const bitbucketApiTokenScopes = [
   "read:workspace:bitbucket",
 ] as const;
 
-export const BitbucketToken = Schema.Union([
-  Schema.TaggedStruct("AccessToken", {}),
-  Schema.TaggedStruct("ApiToken", {
+export const BitbucketToken = z.discriminatedUnion("_tag", [
+  z.object({ _tag: z.literal("AccessToken") }),
+  z.object({
+    _tag: z.literal("ApiToken"),
     email: HostText,
     account: HostText,
-    missingScopes: Schema.Array(Schema.Literals(bitbucketApiTokenScopes)),
+    missingScopes: z.array(z.enum(bitbucketApiTokenScopes)).readonly(),
   }),
 ]);
-export type BitbucketToken = typeof BitbucketToken.Type;
+export type BitbucketToken = z.infer<typeof BitbucketToken>;
 
-const Secret = Schema.String.check(
-  Schema.isPattern(/^[\x21-\x7e]+$/),
-  Schema.isMaxLength(4_096),
-);
+const Secret = z
+  .string()
+  .regex(/^[\x21-\x7e]+$/)
+  .max(4_096);
 
-export const BitbucketTokenRejected = Schema.TaggedStruct(
-  "BitbucketTokenRejected",
-  { reason: Schema.Literals(["Invalid", "MissingScope", "Unreachable"]) },
-);
-export type BitbucketTokenRejected = typeof BitbucketTokenRejected.Type;
+export const BitbucketTokenRejected = z.object({
+  _tag: z.literal("BitbucketTokenRejected"),
+  reason: z.enum(["Invalid", "MissingScope", "Unreachable"]),
+});
+export type BitbucketTokenRejected = z.infer<typeof BitbucketTokenRejected>;
 
-export const GitStatus = Schema.Union([
-  Schema.TaggedStruct("Available", { version: ToolVersion }),
-  Schema.TaggedStruct("Missing", {}),
+export const GitStatus = z.discriminatedUnion("_tag", [
+  z.object({ _tag: z.literal("Available"), version: ToolVersion }),
+  z.object({ _tag: z.literal("Missing") }),
 ]);
-export type GitStatus = typeof GitStatus.Type;
+export type GitStatus = z.infer<typeof GitStatus>;
 
-export const GitHostStatus = Schema.Union([
-  Schema.TaggedStruct("ComingSoon", { kind: GitHostKind }),
-  Schema.TaggedStruct("Missing", {
+export const GitHostStatus = z.discriminatedUnion("_tag", [
+  z.object({ _tag: z.literal("ComingSoon"), kind: GitHostKind }),
+  z.object({
+    _tag: z.literal("Missing"),
     kind: GitHostKind,
-    enabled: Schema.Boolean,
+    enabled: z.boolean(),
   }),
-  Schema.TaggedStruct("SignedOut", {
+  z.object({
+    _tag: z.literal("SignedOut"),
     kind: GitHostKind,
-    enabled: Schema.Boolean,
+    enabled: z.boolean(),
     version: ToolVersion,
   }),
-  Schema.TaggedStruct("SignedIn", {
+  z.object({
+    _tag: z.literal("SignedIn"),
     kind: GitHostKind,
-    enabled: Schema.Boolean,
+    enabled: z.boolean(),
     version: ToolVersion,
-    accounts: Schema.Array(HostAccount).check(
-      Schema.isMinLength(1),
-      Schema.isMaxLength(16),
-    ),
+    accounts: z.array(HostAccount).min(1).max(16).readonly(),
   }),
-  Schema.TaggedStruct("Token", {
+  z.object({
+    _tag: z.literal("Token"),
     kind: GitHostKind,
-    enabled: Schema.Boolean,
-    saved: Schema.NullOr(BitbucketToken),
+    enabled: z.boolean(),
+    saved: BitbucketToken.nullable(),
   }),
 ]);
-export type GitHostStatus = typeof GitHostStatus.Type;
+export type GitHostStatus = z.infer<typeof GitHostStatus>;
 
-export const CloneableRepository = Schema.Struct({
+export const CloneableRepository = z.object({
   name: HostText,
   url: RemoteUrl,
-  private: Schema.Boolean,
-  description: Schema.optionalKey(
-    Schema.String.check(Schema.isMaxLength(1_024)),
-  ),
-  updatedAt: Schema.optionalKey(IsoDate),
+  private: z.boolean(),
+  description: z.string().max(1_024).exactOptional(),
+  updatedAt: IsoDate.exactOptional(),
 });
-export type CloneableRepository = typeof CloneableRepository.Type;
+export type CloneableRepository = z.infer<typeof CloneableRepository>;
 
-export const HostRepositories = Schema.Struct({
+export const HostRepositories = z.object({
   kind: GitHostKind,
   host: HostText,
   account: HostText,
-  repositories: Schema.Array(CloneableRepository).check(
-    Schema.isMaxLength(1_000),
-  ),
+  repositories: z.array(CloneableRepository).max(1_000).readonly(),
 });
-export type HostRepositories = typeof HostRepositories.Type;
+export type HostRepositories = z.infer<typeof HostRepositories>;
 
 export const SourceControlApi = {
   discover: route("source-control/discover", {
-    success: Schema.Struct({
+    success: z.object({
       git: GitStatus,
       lfs: GitStatus,
-      hosts: Schema.Array(GitHostStatus).check(Schema.isMaxLength(16)),
+      hosts: z.array(GitHostStatus).max(16).readonly(),
     }),
   }),
   cloneable: route("source-control/cloneable", {
-    success: Schema.Array(HostRepositories).check(Schema.isMaxLength(64)),
+    success: z.array(HostRepositories).max(64).readonly(),
   }),
   setHostEnabled: route("source-control/set-host-enabled", {
-    request: Schema.Struct({ kind: GitHostKind, enabled: Schema.Boolean }),
-    success: Schema.Void,
+    request: z.object({ kind: GitHostKind, enabled: z.boolean() }),
+    success: z.void(),
   }),
   saveBitbucketToken: route("source-control/save-bitbucket-token", {
-    request: Schema.Union([
-      Schema.TaggedStruct("AccessToken", { token: Secret }),
-      Schema.TaggedStruct("ApiToken", { email: HostText, token: Secret }),
+    request: z.discriminatedUnion("_tag", [
+      z.object({ _tag: z.literal("AccessToken"), token: Secret }),
+      z.object({ _tag: z.literal("ApiToken"), email: HostText, token: Secret }),
     ]),
-    success: Schema.Void,
+    success: z.void(),
     failure: BitbucketTokenRejected,
   }),
   removeBitbucketToken: route("source-control/remove-bitbucket-token", {
-    success: Schema.Void,
+    success: z.void(),
   }),
 };

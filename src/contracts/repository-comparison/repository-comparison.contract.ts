@@ -1,15 +1,15 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   ObjectId,
   RepositoryPath,
 } from "#contracts/git/git-values.contract.ts";
 
-const Revision = Schema.String.check(Schema.isMaxLength(128));
+const Revision = z.string().max(128);
 
-export const ChangeDiff = Schema.Struct({
+export const ChangeDiff = z.object({
   path: RepositoryPath,
   revision: Revision,
-  kind: Schema.Literals([
+  kind: z.enum([
     "text",
     "partial",
     "image",
@@ -20,14 +20,12 @@ export const ChangeDiff = Schema.Struct({
     "symlink",
     "missing",
   ]),
-  before: Schema.NullOr(Schema.String),
-  after: Schema.NullOr(Schema.String),
-  beforeBytes: Schema.Natural,
-  afterBytes: Schema.Natural,
-  mime: Schema.NullOr(Schema.String),
-  patch: Schema.String,
-  largeFileCommits: Schema.optional(
-    Schema.Array(ObjectId).check(Schema.isMaxLength(2)),
-  ),
+  before: z.string().nullable(),
+  after: z.string().nullable(),
+  beforeBytes: z.int().nonnegative(),
+  afterBytes: z.int().nonnegative(),
+  mime: z.string().nullable(),
+  patch: z.string(),
+  largeFileCommits: z.array(ObjectId).max(2).readonly().optional(),
 });
-export type ChangeDiff = typeof ChangeDiff.Type;
+export type ChangeDiff = z.infer<typeof ChangeDiff>;

@@ -1,69 +1,59 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import { route } from "#contracts/environment-connection/environment-route.contract.ts";
 import { IsoDate } from "#contracts/environment-connection/iso-date.contract.ts";
 
-const EnvironmentPath = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(4_096),
-);
-const EntryName = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(255),
-);
-const EntryKind = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(32),
-);
+const EnvironmentPath = z.string().min(1).max(4_096);
+const EntryName = z.string().min(1).max(255);
+const EntryKind = z.string().min(1).max(32);
 
-export const ListEnvironmentDirectory = Schema.Struct({
-  includeHidden: Schema.optional(Schema.Boolean),
-  path: Schema.optional(EnvironmentPath),
+export const ListEnvironmentDirectory = z.object({
+  includeHidden: z.boolean().optional(),
+  path: EnvironmentPath.optional(),
 });
-export type ListEnvironmentDirectory = typeof ListEnvironmentDirectory.Type;
+export type ListEnvironmentDirectory = z.infer<typeof ListEnvironmentDirectory>;
 
-export const EnvironmentPathBreadcrumb = Schema.Struct({
+export const EnvironmentPathBreadcrumb = z.object({
   name: EntryName,
   path: EnvironmentPath,
 });
-export type EnvironmentPathBreadcrumb = typeof EnvironmentPathBreadcrumb.Type;
+export type EnvironmentPathBreadcrumb = z.infer<
+  typeof EnvironmentPathBreadcrumb
+>;
 
-export const EnvironmentDirectoryEntry = Schema.Struct({
+export const EnvironmentDirectoryEntry = z.object({
   kind: EntryKind,
-  modifiedAt: Schema.optional(IsoDate),
+  modifiedAt: IsoDate.optional(),
   name: EntryName,
   path: EnvironmentPath,
-  type: Schema.Literals(["directory", "file"]),
+  type: z.enum(["directory", "file"]),
 });
-export type EnvironmentDirectoryEntry = typeof EnvironmentDirectoryEntry.Type;
+export type EnvironmentDirectoryEntry = z.infer<
+  typeof EnvironmentDirectoryEntry
+>;
 
-export const EnvironmentDirectory = Schema.Struct({
-  breadcrumbs: Schema.Array(EnvironmentPathBreadcrumb).check(
-    Schema.isMaxLength(256),
-  ),
-  entries: Schema.Array(EnvironmentDirectoryEntry).check(
-    Schema.isMaxLength(500),
-  ),
-  parentPath: Schema.optional(EnvironmentPath),
+export const EnvironmentDirectory = z.object({
+  breadcrumbs: z.array(EnvironmentPathBreadcrumb).max(256).readonly(),
+  entries: z.array(EnvironmentDirectoryEntry).max(500).readonly(),
+  parentPath: EnvironmentPath.optional(),
   path: EnvironmentPath,
-  repository: Schema.Boolean,
-  truncated: Schema.Boolean,
+  repository: z.boolean(),
+  truncated: z.boolean(),
 });
-export type EnvironmentDirectory = typeof EnvironmentDirectory.Type;
+export type EnvironmentDirectory = z.infer<typeof EnvironmentDirectory>;
 
-export const EnvironmentDirectoryRejected = Schema.TaggedStruct(
-  "EnvironmentDirectoryRejected",
-  {
-    reason: Schema.Literals([
-      "MalformedPath",
-      "NotFound",
-      "NotDirectory",
-      "PermissionDenied",
-      "InspectionFailed",
-    ]),
-  },
-);
-export type EnvironmentDirectoryRejected =
-  typeof EnvironmentDirectoryRejected.Type;
+export const EnvironmentDirectoryRejected = z.object({
+  _tag: z.literal("EnvironmentDirectoryRejected"),
+  reason: z.enum([
+    "MalformedPath",
+    "NotFound",
+    "NotDirectory",
+    "PermissionDenied",
+    "InspectionFailed",
+  ]),
+});
+export type EnvironmentDirectoryRejected = z.infer<
+  typeof EnvironmentDirectoryRejected
+>;
 
 export const EnvironmentFilesystemApi = {
   listDirectory: route("filesystem/directory", {

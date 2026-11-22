@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
@@ -14,67 +14,69 @@ import {
   RepositoryBranchesOperationFailure,
 } from "#contracts/repository-refs/repository-branches.contract.ts";
 
-const WorktreeScope = Schema.Struct({
+const WorktreeScope = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
 });
 
-export const WorktreeChanges = Schema.Struct({
+export const WorktreeChanges = z.object({
   path: RepositoryPath,
-  unstaged: Schema.Natural,
-  staged: Schema.Natural,
+  unstaged: z.int().nonnegative(),
+  staged: z.int().nonnegative(),
 });
-export type WorktreeChanges = typeof WorktreeChanges.Type;
+export type WorktreeChanges = z.infer<typeof WorktreeChanges>;
 
-export const RepositoryWorktreeStatus = Schema.Struct({
-  worktrees: Schema.Array(WorktreeChanges).check(Schema.isMaxLength(256)),
+export const RepositoryWorktreeStatus = z.object({
+  worktrees: z.array(WorktreeChanges).max(256).readonly(),
 });
-export type RepositoryWorktreeStatus = typeof RepositoryWorktreeStatus.Type;
+export type RepositoryWorktreeStatus = z.infer<typeof RepositoryWorktreeStatus>;
 
-export const WorktreeFolder = Schema.Struct({
+export const WorktreeFolder = z.object({
   folder: RepositoryPath,
-  configured: Schema.Boolean,
-  separator: Schema.Literals(["/", "\\"]),
+  configured: z.boolean(),
+  separator: z.enum(["/", "\\"]),
 });
-export type WorktreeFolder = typeof WorktreeFolder.Type;
+export type WorktreeFolder = z.infer<typeof WorktreeFolder>;
 
-export const WorktreeStart = Schema.Union([
-  Schema.TaggedStruct("Branch", { name: RefName }),
-  Schema.TaggedStruct("NewBranch", {
+export const WorktreeStart = z.discriminatedUnion("_tag", [
+  z.object({ _tag: z.literal("Branch"), name: RefName }),
+  z.object({
+    _tag: z.literal("NewBranch"),
     name: RefName,
     startPoint: ObjectId,
-    track: Schema.optional(BranchUpstreamTarget),
+    track: BranchUpstreamTarget.optional(),
   }),
 ]);
-export type WorktreeStart = typeof WorktreeStart.Type;
+export type WorktreeStart = z.infer<typeof WorktreeStart>;
 
-export const CreateWorktree = Schema.Struct({
-  ...WorktreeScope.fields,
+export const CreateWorktree = z.object({
+  ...WorktreeScope.shape,
   path: RepositoryPath,
   start: WorktreeStart,
 });
-export type CreateWorktree = typeof CreateWorktree.Type;
+export type CreateWorktree = z.infer<typeof CreateWorktree>;
 
-export const WorktreeTarget = Schema.Struct({
-  ...WorktreeScope.fields,
+export const WorktreeTarget = z.object({
+  ...WorktreeScope.shape,
   target: RepositoryPath,
 });
-export type WorktreeTarget = typeof WorktreeTarget.Type;
+export type WorktreeTarget = z.infer<typeof WorktreeTarget>;
 
-export const RemoveWorktree = Schema.Struct({
-  ...WorktreeTarget.fields,
-  changes: Schema.Natural,
+export const RemoveWorktree = z.object({
+  ...WorktreeTarget.shape,
+  changes: z.int().nonnegative(),
 });
-export type RemoveWorktree = typeof RemoveWorktree.Type;
+export type RemoveWorktree = z.infer<typeof RemoveWorktree>;
 
-export const SetWorktreeFolder = Schema.Struct({
-  ...WorktreeScope.fields,
-  folder: Schema.NullOr(RepositoryPath),
+export const SetWorktreeFolder = z.object({
+  ...WorktreeScope.shape,
+  folder: RepositoryPath.nullable(),
 });
-export type SetWorktreeFolder = typeof SetWorktreeFolder.Type;
+export type SetWorktreeFolder = z.infer<typeof SetWorktreeFolder>;
 
-export const WorktreeRejected = Schema.TaggedStruct("WorktreeRejected", {
-  reason: Schema.Literals([
+export const WorktreeRejected = z.object({
+  _tag: z.literal("WorktreeRejected"),
+  reason: z.enum([
     "FolderExists",
     "NotAbsolute",
     "Locked",
@@ -83,12 +85,13 @@ export const WorktreeRejected = Schema.TaggedStruct("WorktreeRejected", {
     "Unsaved",
   ]),
 });
-export type WorktreeRejected = typeof WorktreeRejected.Type;
+export type WorktreeRejected = z.infer<typeof WorktreeRejected>;
 
-export const WorktreeChanged = Schema.TaggedStruct("WorktreeChanged", {
-  changes: Schema.Natural,
+export const WorktreeChanged = z.object({
+  _tag: z.literal("WorktreeChanged"),
+  changes: z.int().nonnegative(),
 });
-export type WorktreeChanged = typeof WorktreeChanged.Type;
+export type WorktreeChanged = z.infer<typeof WorktreeChanged>;
 
 export const RepositoryWorktreesApi = {
   status: repositoryQuery("repositories/worktrees/status", {
@@ -101,24 +104,24 @@ export const RepositoryWorktreesApi = {
   }),
   create: repositoryCommand("repositories/worktrees/create", {
     request: CreateWorktree,
-    success: Schema.Struct({ worktreePath: RepositoryPath }),
-    failure: Schema.Union([
+    success: z.object({ worktreePath: RepositoryPath }),
+    failure: z.discriminatedUnion("_tag", [
       WorktreeRejected,
       RepositoryBranchesOperationFailure,
     ]),
   }),
   remove: repositoryCommand("repositories/worktrees/remove", {
     request: RemoveWorktree,
-    success: Schema.Struct({}),
-    failure: Schema.Union([WorktreeRejected, WorktreeChanged]),
+    success: z.object({}),
+    failure: z.discriminatedUnion("_tag", [WorktreeRejected, WorktreeChanged]),
   }),
   unlock: repositoryCommand("repositories/worktrees/unlock", {
     request: WorktreeTarget,
-    success: Schema.Struct({}),
+    success: z.object({}),
   }),
   setFolder: repositoryCommand("repositories/worktrees/set-folder", {
     request: SetWorktreeFolder,
-    success: Schema.Struct({}),
+    success: z.object({}),
     failure: WorktreeRejected,
   }),
 };

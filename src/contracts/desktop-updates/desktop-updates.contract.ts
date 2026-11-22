@@ -1,34 +1,35 @@
-import { Schema } from "effect";
+import { z } from "zod";
 
 export const releaseChannels = ["stable", "nightly"] as const;
-export const ReleaseChannel = Schema.Literals(releaseChannels);
-export type ReleaseChannel = typeof ReleaseChannel.Type;
+export const ReleaseChannel = z.enum(releaseChannels);
+export type ReleaseChannel = z.infer<typeof ReleaseChannel>;
 
-export const DesktopUpdateSettings = Schema.Struct({
-  checkAutomatically: Schema.Boolean,
+export const DesktopUpdateSettings = z.object({
+  checkAutomatically: z.boolean(),
   releaseChannel: ReleaseChannel,
 });
-export type DesktopUpdateSettings = typeof DesktopUpdateSettings.Type;
+export type DesktopUpdateSettings = z.infer<typeof DesktopUpdateSettings>;
 
-export const DesktopUpdateStatus = Schema.Union([
-  Schema.TaggedStruct("Idle", {}),
-  Schema.TaggedStruct("Checking", {}),
-  Schema.TaggedStruct("UpToDate", {}),
-  Schema.TaggedStruct("Downloading", {
-    percent: Schema.Number,
-    version: Schema.String,
+export const DesktopUpdateStatus = z.discriminatedUnion("_tag", [
+  z.object({ _tag: z.literal("Idle") }),
+  z.object({ _tag: z.literal("Checking") }),
+  z.object({ _tag: z.literal("UpToDate") }),
+  z.object({
+    _tag: z.literal("Downloading"),
+    percent: z.number(),
+    version: z.string(),
   }),
-  Schema.TaggedStruct("Ready", { version: Schema.String }),
-  Schema.TaggedStruct("Error", { message: Schema.String }),
-  Schema.TaggedStruct("Unavailable", {}),
+  z.object({ _tag: z.literal("Ready"), version: z.string() }),
+  z.object({ _tag: z.literal("Error"), message: z.string() }),
+  z.object({ _tag: z.literal("Unavailable") }),
 ]);
-export type DesktopUpdateStatus = typeof DesktopUpdateStatus.Type;
+export type DesktopUpdateStatus = z.infer<typeof DesktopUpdateStatus>;
 
-export const DesktopUpdateSnapshot = Schema.Struct({
+export const DesktopUpdateSnapshot = z.object({
   settings: DesktopUpdateSettings,
   status: DesktopUpdateStatus,
 });
-export type DesktopUpdateSnapshot = typeof DesktopUpdateSnapshot.Type;
+export type DesktopUpdateSnapshot = z.infer<typeof DesktopUpdateSnapshot>;
 
 export interface DesktopUpdates {
   checkForUpdates(): Promise<void>;

@@ -1,17 +1,11 @@
-import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { EnvironmentRpcClient } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import {
   createLocalEnvironmentSession,
   type LocalEnvironmentGateway,
   type LocalEnvironmentSessionOptions,
   type LocalEnvironmentSessionState,
 } from "#web/app/environment/local-environment-session.ts";
-import {
-  EnvironmentAccessDenied,
-  EnvironmentProtocolMismatch,
-  EnvironmentUnavailable,
-} from "#web/platform/environment/environment-connection.ts";
+import type { EnvironmentConnection } from "#web/platform/environment/environment-connection.ts";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
 
@@ -42,11 +36,10 @@ describe("local Environment session", () => {
     "stops when authorization fails with %s",
     async (failure) => {
       const gateway = createGateway();
-      gateway.authorize.mockReturnValue(
-        Effect.fail(
-          new EnvironmentAccessDenied({ failure: { _tag: failure } }),
-        ),
-      );
+      gateway.authorize.mockRejectedValue({
+        _tag: "EnvironmentAccessDenied",
+        failure: { _tag: failure },
+      });
       const session = createSession({ gateway });
 
       session.start();
@@ -61,14 +54,11 @@ describe("local Environment session", () => {
 
   it("asks a browser to pair again when the socket refuses its session", async () => {
     const gateway = createGateway();
-    gateway.authorize.mockReturnValue(
-      Effect.succeed({ type: "browser-session" }),
-    );
-    gateway.connect.mockReturnValue(
-      Effect.fail(
-        new EnvironmentAccessDenied({ failure: { _tag: "InvalidGrant" } }),
-      ),
-    );
+    gateway.authorize.mockResolvedValue({ type: "browser-session" });
+    gateway.connect.mockRejectedValue({
+      _tag: "EnvironmentAccessDenied",
+      failure: { _tag: "InvalidGrant" },
+    });
     const session = createSession({ gateway });
 
     session.start();
@@ -82,9 +72,7 @@ describe("local Environment session", () => {
     const gateway = createGateway(initial, reconnected);
     const invalidation = { changed: vi.fn() };
     const reconnect = Promise.withResolvers<void>();
-    const waitBeforeReconnect = vi.fn(() =>
-      Effect.promise(() => reconnect.promise),
-    );
+    const waitBeforeReconnect = vi.fn(() => reconnect.promise);
     const session = createSession({
       gateway,
       invalidation,
@@ -94,7 +82,7 @@ describe("local Environment session", () => {
     session.start();
     await expectState(session.getSnapshot, "Connected");
     expect(invalidation.changed).toHaveBeenCalledOnce();
-    initial.disconnect.resolve(new EnvironmentUnavailable());
+    initial.disconnect.resolve();
     await expectState(session.getSnapshot, "Reconnecting");
     expect(session.getSnapshot()).toMatchObject({ environmentId });
 
@@ -108,10 +96,11 @@ describe("local Environment session", () => {
 
   it("stops on a protocol mismatch without starting a retry loop", async () => {
     const gateway = createGateway();
-    gateway.connect.mockReturnValue(
-      Effect.fail(new EnvironmentProtocolMismatch({ serverProtocol: 1 })),
-    );
-    const waitBeforeReconnect = vi.fn(() => Effect.void);
+    gateway.connect.mockRejectedValue({
+      _tag: "EnvironmentProtocolMismatch",
+      serverProtocol: 1,
+    });
+    const waitBeforeReconnect = vi.fn(async () => {});
     const session = createSession({ gateway, waitBeforeReconnect });
 
     session.start();
@@ -137,28 +126,30 @@ function createSession(
 function createGateway(...connections: ReturnType<typeof createConnection>[]) {
   const remaining = [...connections];
   return {
-    connect: vi.fn<LocalEnvironmentGateway["connect"]>(() => {
+    connect: vi.fn<LocalEnvironmentGateway["connect"]>(async () => {
       const connection = remaining.shift();
       if (connection === undefined)
-        return Effect.die("No test connection is available.");
-      return Effect.acquireRelease(Effect.succeed(connection), (active) =>
-        Effect.sync(active.close),
-      );
+        throw new Error("No test connection is available.");
+      return connection;
     }),
-    authorize: vi.fn<LocalEnvironmentGateway["authorize"]>(() =>
-      Effect.succeed({ type: "bearer", value: "device-credential" }),
-    ),
+    authorize: vi.fn<LocalEnvironmentGateway["authorize"]>(async () => ({
+      type: "bearer",
+      value: "device-credential",
+    })),
   };
 }
 
 function createConnection() {
-  const disconnect = Promise.withResolvers<EnvironmentUnavailable>();
+  const disconnect = Promise.withResolvers<void>();
   return {
     close: vi.fn(),
-    closed: Effect.promise(() => disconnect.promise),
+    closed: disconnect.promise,
     disconnect,
     environmentId,
-    rpc: {} as EnvironmentRpcClient,
+    requests: vi.fn(),
+    subscribe: vi.fn(),
+  } satisfies EnvironmentConnection & {
+    readonly disconnect: PromiseWithResolvers<void>;
   };
 }
 

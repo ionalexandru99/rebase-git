@@ -1,9 +1,10 @@
-import { Schema } from "effect";
+import { z } from "zod";
 
 const maximumDetailLength = 2_048;
 
-export const RepositoryRejected = Schema.TaggedStruct("RepositoryRejected", {
-  reason: Schema.Literals([
+export const RepositoryRejected = z.object({
+  _tag: z.literal("RepositoryRejected"),
+  reason: z.enum([
     "Missing",
     "Busy",
     "Incompatible",
@@ -13,9 +14,9 @@ export const RepositoryRejected = Schema.TaggedStruct("RepositoryRejected", {
     "SigningUnavailable",
     "SigningLocked",
   ]),
-  detail: Schema.String.check(Schema.isMaxLength(maximumDetailLength)),
+  detail: z.string().max(maximumDetailLength),
 });
-export type RepositoryRejected = typeof RepositoryRejected.Type;
+export type RepositoryRejected = z.infer<typeof RepositoryRejected>;
 
 export function repositoryRejected(
   reason: RepositoryRejected["reason"],

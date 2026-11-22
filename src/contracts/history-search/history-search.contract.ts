@@ -1,5 +1,5 @@
-import { Schema } from "effect";
-import { Rpc } from "effect/rpc";
+import { z } from "zod";
+import { streamRoute } from "#contracts/environment-connection/environment-route.contract.ts";
 import { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   ObjectId,
@@ -9,43 +9,41 @@ import {
 
 export const maximumCodeMatches = 1_000;
 
-export const SearchCode = Schema.Struct({
+export const SearchCode = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
-  text: Schema.String.check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(256),
-    Schema.isPattern(/^[^\n\r\0]+$/),
-  ),
-  path: Schema.optionalKey(RepositoryPath),
-  roots: Schema.Array(ObjectId).check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(40_512),
-  ),
+  text: z
+    .string()
+    .min(1)
+    .max(256)
+    .regex(/^[^\n\r\0]+$/),
+  path: RepositoryPath.exactOptional(),
+  roots: z.array(ObjectId).min(1).max(40_512).readonly(),
 });
-export type SearchCode = typeof SearchCode.Type;
+export type SearchCode = z.infer<typeof SearchCode>;
 
-export const CodeMatch = Schema.Struct({
+export const CodeMatch = z.object({
   oid: ObjectId,
-  paths: Schema.Array(RepositoryPath).check(Schema.isMaxLength(10_000)),
+  paths: z.array(RepositoryPath).max(10_000).readonly(),
 });
-export type CodeMatch = typeof CodeMatch.Type;
+export type CodeMatch = z.infer<typeof CodeMatch>;
 
-export const CodeSearchUpdate = Schema.Union([
-  Schema.TaggedStruct("CodeMatches", {
-    matches: Schema.Array(CodeMatch).check(Schema.isMaxLength(256)),
+export const CodeSearchUpdate = z.discriminatedUnion("_tag", [
+  z.object({
+    _tag: z.literal("CodeMatches"),
+    matches: z.array(CodeMatch).max(256).readonly(),
   }),
-  Schema.TaggedStruct("CodeSearchProgress", {
-    percent: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
+  z.object({
+    _tag: z.literal("CodeSearchProgress"),
+    percent: z.int().min(0).max(100),
   }),
 ]);
-export type CodeSearchUpdate = typeof CodeSearchUpdate.Type;
+export type CodeSearchUpdate = z.infer<typeof CodeSearchUpdate>;
 
 export const HistorySearchApi = {
-  code: Rpc.make("repositories/history/code-search", {
-    payload: SearchCode,
+  code: streamRoute("repositories/history/code-search", {
+    request: SearchCode,
     success: CodeSearchUpdate,
-    error: RepositoryRejected,
-    stream: true,
+    failure: RepositoryRejected,
   }),
 };

@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import { repositoryQuery } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   ObjectId,
@@ -13,36 +13,32 @@ import {
 export const fileHistoryPage = 100;
 export const maximumFileHistory = 5_000;
 
-export const ReadFileHistory = Schema.Struct({
+export const ReadFileHistory = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
   path: RepositoryPath,
-  limit: Schema.Int.check(
-    Schema.isBetween({ minimum: 1, maximum: maximumFileHistory }),
-  ),
+  limit: z.int().min(1).max(maximumFileHistory),
 });
-export type ReadFileHistory = typeof ReadFileHistory.Type;
+export type ReadFileHistory = z.infer<typeof ReadFileHistory>;
 
-export const FileHistoryEntry = Schema.Struct({
+export const FileHistoryEntry = z.object({
   oid: ObjectId,
-  parentOid: Schema.NullOr(ObjectId),
-  subject: Schema.String.check(Schema.isMaxLength(1_024)),
-  author: Schema.String.check(Schema.isMaxLength(256)),
-  authoredAt: Schema.Int,
+  parentOid: ObjectId.nullable(),
+  subject: z.string().max(1_024),
+  author: z.string().max(256),
+  authoredAt: z.int(),
   path: RepositoryPath,
-  previousPath: Schema.NullOr(RepositoryPath),
-  status: Schema.Literals(["A", "M", "D", "R", "T"]),
+  previousPath: RepositoryPath.nullable(),
+  status: z.enum(["A", "M", "D", "R", "T"]),
   lines: ChangedLines,
 });
-export type FileHistoryEntry = typeof FileHistoryEntry.Type;
+export type FileHistoryEntry = z.infer<typeof FileHistoryEntry>;
 
-export const FileHistory = Schema.Struct({
-  entries: Schema.Array(FileHistoryEntry).check(
-    Schema.isMaxLength(maximumFileHistory),
-  ),
-  complete: Schema.Boolean,
+export const FileHistory = z.object({
+  entries: z.array(FileHistoryEntry).max(maximumFileHistory).readonly(),
+  complete: z.boolean(),
 });
-export type FileHistory = typeof FileHistory.Type;
+export type FileHistory = z.infer<typeof FileHistory>;
 
 export const FileHistoryApi = {
   read: repositoryQuery("repositories/files/history", {

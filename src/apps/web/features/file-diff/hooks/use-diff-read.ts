@@ -1,5 +1,6 @@
 import { type SkipToken, skipToken } from "@tanstack/react-query";
 import { useState } from "react";
+import type { z } from "zod";
 import type {
   EnvironmentRoute,
   RouteInput,
@@ -15,17 +16,12 @@ import {
   type TaggedFailure,
 } from "#web/platform/query/request-failure.ts";
 
-interface DiffRoute extends EnvironmentRoute {
-  readonly payloadSchema: EnvironmentRoute["payloadSchema"] & {
-    readonly Type: { readonly whole?: boolean | undefined };
-  };
-  readonly successSchema: EnvironmentRoute["successSchema"] & {
-    readonly Type: ChangeDiff;
-  };
-  readonly errorSchema: EnvironmentRoute["errorSchema"] & {
-    readonly Type: TaggedFailure;
-  };
-}
+type DiffRoute = EnvironmentRoute<
+  string,
+  z.ZodType<{ readonly whole?: boolean | undefined }>,
+  z.ZodType<ChangeDiff>,
+  z.ZodType<TaggedFailure>
+>;
 
 export interface DiffRead {
   readonly value: ChangeDiff | undefined;

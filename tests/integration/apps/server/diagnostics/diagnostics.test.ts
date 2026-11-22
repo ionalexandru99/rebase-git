@@ -10,22 +10,21 @@ import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-c
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { createRepository } from "#tests-support/git.ts";
 import { openTestServer } from "#tests-support/server.ts";
-import { environmentSubscriptions } from "#web/platform/environment/environment-connection.ts";
 
 it("samples the server's processes through the bundled monitor and records Git runs per repository", async () => {
   const server = await openTestServer();
   const worktreePath = join(server.home, "repository");
   await createRepository(worktreePath);
   const requests = server.requests(server.owner);
-  const subscribe = environmentSubscriptions(
-    (await server.connect(server.owner)).rpc,
-  );
+  const subscribe = (await server.connect(server.owner)).subscribe;
   const events: DiagnosticsEvent[] = [];
   const watching = new AbortController();
   const watched = subscribe(
     DiagnosticsApi.watch,
     { period: "5m" },
-    (event) => events.push(event),
+    (event) => {
+      events.push(event);
+    },
     watching.signal,
   );
 
@@ -80,9 +79,7 @@ it("sends the first sample before Git reports its version", async () => {
           : runner.run(command),
     }),
   });
-  const subscribe = environmentSubscriptions(
-    (await server.connect(server.owner)).rpc,
-  );
+  const subscribe = (await server.connect(server.owner)).subscribe;
   const versions: (string | null)[] = [];
   const watching = new AbortController();
   const watched = subscribe(

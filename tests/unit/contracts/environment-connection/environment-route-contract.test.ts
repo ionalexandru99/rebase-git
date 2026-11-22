@@ -1,4 +1,3 @@
-import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
@@ -6,7 +5,7 @@ import { RepositoryPushApi } from "#contracts/repository-push/repository-push.co
 
 describe("Environment route contract", () => {
   it("fails a repository command with its own failures or the standard rejection", () => {
-    const decode = Schema.decodeUnknownSync(RepositoryPushApi.push.errorSchema);
+    const decode = RepositoryPushApi.push.failure.parse;
     const pushRejected = {
       _tag: "PushRejected",
       reason: "NonFastForward",
@@ -20,9 +19,7 @@ describe("Environment route contract", () => {
   });
 
   it("rejects every failure on a route that declares none", () => {
-    const decode = Schema.decodeUnknownSync(
-      RepositoryCatalogApi.list.errorSchema,
-    );
+    const decode = RepositoryCatalogApi.list.failure.parse;
 
     expect(() => decode(repositoryRejected("Missing", "Gone."))).toThrow();
   });

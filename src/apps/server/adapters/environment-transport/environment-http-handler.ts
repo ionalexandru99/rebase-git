@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { type Cause, Data, Effect, Schema } from "effect";
+import { type Cause, Data, Effect } from "effect";
 import {
   type EnvironmentAccessFailure,
   EnvironmentBrowserSession,
@@ -36,7 +36,7 @@ type EnvironmentHttpError =
   | EnvironmentStorageError;
 
 const maximumRequestBytes = 65_536;
-const decodeExchange = Schema.decodeUnknownSync(ExchangeEnvironmentPairing);
+const strictExchange = ExchangeEnvironmentPairing.strict();
 
 export function createEnvironmentHttpHandler(
   authorization: EnvironmentAuthorization,
@@ -97,18 +97,14 @@ function respondToEnvironmentRequest(
     const exchange = yield* readPairingExchange(request);
     const paired = yield* authorization.exchangePairing(exchange);
     if (!browserSession) {
-      writeJson(
-        response,
-        200,
-        Schema.encodeSync(EnvironmentPairingExchanged)(paired),
-      );
+      writeJson(response, 200, EnvironmentPairingExchanged.parse(paired));
       return;
     }
     writeBrowserSessionCookie(request, response, paired.credential);
     writeJson(
       response,
       200,
-      Schema.encodeSync(EnvironmentBrowserSession)({
+      EnvironmentBrowserSession.parse({
         authorization: paired.authorization,
       }),
     );
@@ -160,10 +156,7 @@ function readPairingExchange(request: IncomingMessage) {
   }).pipe(
     Effect.flatMap((body) =>
       Effect.try({
-        try: () =>
-          decodeExchange(JSON.parse(body.toString("utf8")), {
-            onExcessProperty: "error",
-          }),
+        try: () => strictExchange.parse(JSON.parse(body.toString("utf8"))),
         catch: () => rejected({ _tag: "InvalidMessage" }),
       }),
     ),

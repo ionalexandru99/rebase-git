@@ -1,23 +1,22 @@
-import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/rpc";
+import { z } from "zod";
+import { streamRoute } from "#contracts/environment-connection/environment-route.contract.ts";
 import { RepositoryId } from "#contracts/git/git-values.contract.ts";
 
-export const WatchCommandProgress = Schema.Struct({
+export const WatchCommandProgress = z.object({
   repositoryId: RepositoryId,
-  route: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
+  route: z.string().min(1).max(128),
 });
-export type WatchCommandProgress = typeof WatchCommandProgress.Type;
+export type WatchCommandProgress = z.infer<typeof WatchCommandProgress>;
 
-export const CommandProgressUpdate = Schema.Struct({
-  percent: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
-  largeFiles: Schema.Boolean,
+export const CommandProgressUpdate = z.object({
+  percent: z.int().min(0).max(100),
+  largeFiles: z.boolean(),
 });
-export type CommandProgressUpdate = typeof CommandProgressUpdate.Type;
+export type CommandProgressUpdate = z.infer<typeof CommandProgressUpdate>;
 
-export const CommandProgressRpc = RpcGroup.make(
-  Rpc.make("WatchCommandProgress", {
-    payload: WatchCommandProgress,
+export const CommandProgressApi = {
+  watch: streamRoute("WatchCommandProgress", {
+    request: WatchCommandProgress,
     success: CommandProgressUpdate,
-    stream: true,
   }),
-);
+};

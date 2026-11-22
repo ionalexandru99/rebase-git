@@ -1,10 +1,9 @@
 import { Effect } from "effect";
-import type { EnvironmentRpc } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import { TerminalsApi } from "#contracts/terminal/terminal.contract.ts";
 import {
   type EnvironmentFeature,
-  type EnvironmentRpcHandlersFor,
   route,
+  stream,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import type { TerminalSessions } from "#server/features/terminal/terminal-sessions.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
@@ -46,12 +45,9 @@ export function terminalFeature({
           return {};
         }),
       ),
+      stream(TerminalsApi.attach, ({ id, since }) =>
+        terminals.attach(id, since),
+      ),
     ],
-    rpc: (): Pick<
-      EnvironmentRpcHandlersFor<typeof EnvironmentRpc>,
-      "terminals/attach"
-    > => ({
-      "terminals/attach": ({ id, since }) => terminals.attach(id, since),
-    }),
   };
 }

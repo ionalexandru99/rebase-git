@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Array as Arrays, Effect, Schema } from "effect";
+import { Array as Arrays, Effect } from "effect";
 import { SettledDay } from "#contracts/branch-settling/branch-settling.contract.ts";
 import {
   type GitCommandRunner,
@@ -24,7 +24,7 @@ import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
 const dayMilliseconds = 86_400_000;
-const isSettledDay = Schema.is(SettledDay);
+const isSettledDay = (value: unknown) => SettledDay.safeParse(value).success;
 const operationBranchFiles = [
   "rebase-merge/head-name",
   "rebase-apply/head-name",

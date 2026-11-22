@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { z } from "zod";
 import {
   repositoryCommand,
   repositoryQuery,
@@ -8,19 +8,19 @@ import {
   RepositoryPath,
 } from "#contracts/git/git-values.contract.ts";
 
-const Revision = Schema.String.check(Schema.isMaxLength(128));
-const ObjectId = Schema.String.check(Schema.isPattern(/^[a-f0-9]{40,64}$/));
+const Revision = z.string().max(128);
+const ObjectId = z.string().regex(/^[a-f0-9]{40,64}$/);
 
-export const ConflictScope = Schema.Struct({
+export const ConflictScope = z.object({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
 });
-export type ConflictScope = typeof ConflictScope.Type;
+export type ConflictScope = z.infer<typeof ConflictScope>;
 
-export const ConflictSide = Schema.Literals(["base", "current", "incoming"]);
-export type ConflictSide = typeof ConflictSide.Type;
+export const ConflictSide = z.enum(["base", "current", "incoming"]);
+export type ConflictSide = z.infer<typeof ConflictSide>;
 
-export const ConflictKind = Schema.Literals([
+export const ConflictKind = z.enum([
   "both-modified",
   "both-added",
   "both-deleted",
@@ -29,106 +29,97 @@ export const ConflictKind = Schema.Literals([
   "added-in-current",
   "added-in-incoming",
 ]);
-export type ConflictKind = typeof ConflictKind.Type;
+export type ConflictKind = z.infer<typeof ConflictKind>;
 
-export const WholeFileChoice = Schema.Literals([
-  "current",
-  "incoming",
-  "delete",
-]);
-export type WholeFileChoice = typeof WholeFileChoice.Type;
+export const WholeFileChoice = z.enum(["current", "incoming", "delete"]);
+export type WholeFileChoice = z.infer<typeof WholeFileChoice>;
 
-export const SideLabel = Schema.Struct({
-  ref: Schema.NullOr(Schema.String),
-  commit: Schema.NullOr(ObjectId),
-  subject: Schema.NullOr(Schema.String),
+export const SideLabel = z.object({
+  ref: z.string().nullable(),
+  commit: ObjectId.nullable(),
+  subject: z.string().nullable(),
 });
-export type SideLabel = typeof SideLabel.Type;
+export type SideLabel = z.infer<typeof SideLabel>;
 
-export const ConflictSides = Schema.Struct({
+export const ConflictSides = z.object({
   base: SideLabel,
   current: SideLabel,
   incoming: SideLabel,
 });
-export type ConflictSides = typeof ConflictSides.Type;
+export type ConflictSides = z.infer<typeof ConflictSides>;
 
-export const ConflictStage = Schema.Struct({
+export const ConflictStage = z.object({
   side: ConflictSide,
-  bytes: Schema.Natural,
-  binary: Schema.Boolean,
+  bytes: z.int().nonnegative(),
+  binary: z.boolean(),
 });
-export type ConflictStage = typeof ConflictStage.Type;
+export type ConflictStage = z.infer<typeof ConflictStage>;
 
-export const ConflictFile = Schema.Struct({
+export const ConflictFile = z.object({
   path: RepositoryPath,
   revision: Revision,
   kind: ConflictKind,
-  stages: Schema.Array(ConflictStage),
-  openRegions: Schema.Natural,
-  choices: Schema.Array(WholeFileChoice),
+  stages: z.array(ConflictStage).readonly(),
+  openRegions: z.int().nonnegative(),
+  choices: z.array(WholeFileChoice).readonly(),
 });
-export type ConflictFile = typeof ConflictFile.Type;
+export type ConflictFile = z.infer<typeof ConflictFile>;
 
-export const ConflictList = Schema.Struct({
+export const ConflictList = z.object({
   sides: ConflictSides,
-  files: Schema.Array(ConflictFile),
+  files: z.array(ConflictFile).readonly(),
 });
-export type ConflictList = typeof ConflictList.Type;
+export type ConflictList = z.infer<typeof ConflictList>;
 
-const LineNumber = Schema.Int.check(Schema.isGreaterThan(0));
+const LineNumber = z.int().gt(0);
 
-export const ConflictExcerpt = Schema.Struct({
+export const ConflictExcerpt = z.object({
   line: LineNumber,
-  text: Schema.String,
+  text: z.string(),
 });
-export type ConflictExcerpt = typeof ConflictExcerpt.Type;
+export type ConflictExcerpt = z.infer<typeof ConflictExcerpt>;
 
-export const ConflictDocument = Schema.Struct({
+export const ConflictDocument = z.object({
   file: ConflictFile,
-  excerpts: Schema.Array(ConflictExcerpt),
+  excerpts: z.array(ConflictExcerpt).readonly(),
 });
-export type ConflictDocument = typeof ConflictDocument.Type;
+export type ConflictDocument = z.infer<typeof ConflictDocument>;
 
-export const ConflictPath = Schema.Struct({
-  ...ConflictScope.fields,
+export const ConflictPath = z.object({
+  ...ConflictScope.shape,
   path: RepositoryPath,
 });
-export type ConflictPath = typeof ConflictPath.Type;
+export type ConflictPath = z.infer<typeof ConflictPath>;
 
-export const EditConflict = Schema.Struct({
-  ...ConflictPath.fields,
+export const EditConflict = z.object({
+  ...ConflictPath.shape,
   revision: Revision,
   line: LineNumber,
-  count: Schema.Natural,
-  text: Schema.String,
+  count: z.int().nonnegative(),
+  text: z.string(),
 });
-export type EditConflict = typeof EditConflict.Type;
+export type EditConflict = z.infer<typeof EditConflict>;
 
-export const ChooseConflict = Schema.Struct({
-  ...ConflictPath.fields,
+export const ChooseConflict = z.object({
+  ...ConflictPath.shape,
   revision: Revision,
   choice: WholeFileChoice,
 });
-export type ChooseConflict = typeof ChooseConflict.Type;
+export type ChooseConflict = z.infer<typeof ChooseConflict>;
 
-export const StageConflict = Schema.Struct({
-  ...ConflictPath.fields,
+export const StageConflict = z.object({
+  ...ConflictPath.shape,
   revision: Revision,
-  allowMarkers: Schema.Boolean,
+  allowMarkers: z.boolean(),
 });
-export type StageConflict = typeof StageConflict.Type;
+export type StageConflict = z.infer<typeof StageConflict>;
 
-export const ConflictFailure = Schema.TaggedStruct("ConflictFailed", {
-  reason: Schema.Literals([
-    "Missing",
-    "Stale",
-    "Unsupported",
-    "Markers",
-    "TooLarge",
-  ]),
-  detail: Schema.String.check(Schema.isMaxLength(2048)),
+export const ConflictFailure = z.object({
+  _tag: z.literal("ConflictFailed"),
+  reason: z.enum(["Missing", "Stale", "Unsupported", "Markers", "TooLarge"]),
+  detail: z.string().max(2048),
 });
-export type ConflictFailure = typeof ConflictFailure.Type;
+export type ConflictFailure = z.infer<typeof ConflictFailure>;
 
 export const RepositoryConflictsApi = {
   list: repositoryQuery("repositories/conflicts/list", {
