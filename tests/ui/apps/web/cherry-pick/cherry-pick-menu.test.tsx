@@ -33,8 +33,8 @@ import {
 } from "#tests-support/fixtures.ts";
 import type { FakeRepositoryHistory } from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
+import { TestWorkspacePanel } from "#tests-support/workspace-panel.tsx";
 import { useCherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
-import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 type Start = RouteInput<typeof RepositoryOperationsApi.start>;
@@ -70,7 +70,7 @@ async function fixture(
     respond(RepositoryOperationsApi.start, (input) => start(input)),
   );
   const screen = await render(
-    <WorkspacePanel.Provider scopeKey={crypto.randomUUID()}>
+    <TestWorkspacePanel>
       <RepositoryScopeProvider scope={repositoryScope()}>
         <div style={{ height: 520, width: 900 }}>
           <CherryPickGraph
@@ -78,7 +78,7 @@ async function fixture(
           />
         </div>
       </RepositoryScopeProvider>
-    </WorkspacePanel.Provider>,
+    </TestWorkspacePanel>,
     { environment: { requests } },
   );
   const row = (index: number) =>

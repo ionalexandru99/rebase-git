@@ -1,6 +1,10 @@
 import { beforeEach, expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
+import {
+  TestWorkspacePanel,
+  workspacePanelScope,
+} from "#tests-support/workspace-panel.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 
@@ -9,14 +13,17 @@ beforeEach(() => localStorage.clear());
 it("restores all open panel tabs after leaving a project and collapsing its panel", async () => {
   const tree = (project: string) => (
     <div style={{ width: 1000, height: 600 }}>
-      <WorkspacePanel.Provider key={project} scopeKey={project}>
+      <TestWorkspacePanel
+        key={project}
+        scope={workspacePanelScope({ repositoryId: project })}
+      >
         <WorkspacePanel.Controls />
         <WorkspacePanel.Group>
           <WorkspacePanel.Sidebar />
           <WorkspacePanel.Main>{() => <Inspect />}</WorkspacePanel.Main>
           <WorkspacePanel.Pane />
         </WorkspacePanel.Group>
-      </WorkspacePanel.Provider>
+      </TestWorkspacePanel>
     </div>
   );
   const view = await render(tree("project-a"));
@@ -64,7 +71,7 @@ function Inspect() {
   return (
     <button
       type="button"
-      onClick={() => panel.execute({ type: "open", kind: "commit" })}
+      onClick={() => panel.dispatch({ type: "open", kind: "commit" })}
     >
       Inspect
     </button>

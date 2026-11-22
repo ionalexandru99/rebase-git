@@ -110,8 +110,7 @@ function ProjectViews({
         expand={expand}
         dispatch={session.store.dispatch}
       >
-        {view.contents[tab] ??
-          (session.scope ? <PanelContent kind={tabKind(tab)} /> : null)}
+        {view.contents[tab] ?? <PanelContent kind={tabKind(tab)} />}
       </PanelFeatureScope>
     </RetainedPanelView>
   ));
@@ -127,7 +126,7 @@ function PanelFeatureScope({
   dispatch,
   children,
 }: {
-  readonly scope: WorkspacePanelScope | undefined;
+  readonly scope: WorkspacePanelScope;
   readonly environment: WorkspacePanelEnvironment | undefined;
   readonly active: boolean;
   readonly input: unknown;
@@ -153,14 +152,13 @@ function PanelFeatureScope({
 }
 
 function useProjectEnvironment(
-  scope: WorkspacePanelScope | undefined,
+  scope: WorkspacePanelScope,
   environment: WorkspacePanelEnvironment | undefined,
 ) {
-  const current =
-    scope !== undefined && environment?.environmentId === scope.environmentId;
+  const current = environment?.environmentId === scope.environmentId;
   const [retained, setRetained] = useState(current ? environment : undefined);
   if (current && environment !== retained) setRetained(environment);
-  if (scope === undefined || current) return environment;
+  if (current) return environment;
   return retained
     ? { ...retained, connected: false, writable: false, visible: false }
     : undefined;
@@ -175,22 +173,14 @@ function PanelContent({ kind }: { readonly kind: WorkspacePanelKind }) {
   );
 }
 
-export function usePanelSession(
-  key: string,
-  scope: WorkspacePanelScope | undefined,
-  previousScopeKey: string,
-) {
+export function usePanelSession(scope: WorkspacePanelScope) {
   const collection = useContext(SessionsContext);
   if (!collection) {
     throw new Error("Workspace panel sessions require an owner.");
   }
-  const session = collection.acquire(key, scope, previousScopeKey);
+  const session = collection.acquire(scope);
   useEffect(() => collection.attach(session), [collection, session]);
   return session;
-}
-
-export function usePanelSessionOwner() {
-  return useContext(SessionsContext);
 }
 
 export function PanelSessionTarget({

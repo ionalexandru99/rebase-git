@@ -28,6 +28,11 @@ import {
   repositoryScope,
 } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
+import {
+  saveWorkspacePanel,
+  TestWorkspacePanel,
+  workspacePanelScope,
+} from "#tests-support/workspace-panel.tsx";
 import { useCommitInspection } from "#web/app/workspace/use-commit-inspection.ts";
 import { CommitInspection } from "#web/features/commit-inspection/commit-inspection.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
@@ -110,15 +115,11 @@ async function fixture(
     }),
   );
   const reader = historyReader({ commits: history(40), status: "ready" });
-  const scopeKey = crypto.randomUUID();
-  if (saved)
-    localStorage.setItem(
-      `rebase:workspace-panel:v1:${scopeKey}`,
-      JSON.stringify(saved),
-    );
+  const panelScope = workspacePanelScope();
+  if (saved) saveWorkspacePanel(panelScope, saved);
   const tree = (connected = true) => (
     <div className="dark text-foreground" style={{ width: 1200, height: 650 }}>
-      <WorkspacePanel.Provider scopeKey={scopeKey}>
+      <TestWorkspacePanel scope={panelScope}>
         <Inspection connected={connected}>
           {(inspection) => (
             <WorkspacePanel.Group>
@@ -163,7 +164,7 @@ async function fixture(
             </WorkspacePanel.Group>
           )}
         </Inspection>
-      </WorkspacePanel.Provider>
+      </TestWorkspacePanel>
     </div>
   );
   const screen = await render(tree(), { environment: { requests } });
@@ -174,7 +175,7 @@ async function fixture(
     previews,
     overwrites,
     grid: screen.getByRole("grid"),
-    scopeKey,
+    panelScope,
     connect: (connected: boolean) => screen.rerender(tree(connected)),
   };
 }

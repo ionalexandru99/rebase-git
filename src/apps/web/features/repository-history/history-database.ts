@@ -3,7 +3,6 @@ import type {
   RepositoryHistoryTips,
 } from "#contracts/repository-history/repository-history.contract.ts";
 
-export const workingChangesStoreName = "workingChanges";
 const commitStoreName = "commits";
 const repositoryStoreName = "repositories";
 const topologyStoreName = "topology";
@@ -59,7 +58,7 @@ export class HistoryStorageUnavailable extends Error {
 
 let connection: Promise<IDBDatabase> | undefined;
 
-export async function withHistoryDatabase<T>(
+async function withHistoryDatabase<T>(
   use: (database: IDBDatabase) => Promise<T>,
 ): Promise<T> {
   const database = await sharedDatabase();
@@ -72,7 +71,7 @@ export async function withHistoryDatabase<T>(
   }
 }
 
-export function requestResult<T>(request: IDBRequest<T>) {
+function requestResult<T>(request: IDBRequest<T>) {
   return new Promise<T>((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () =>
@@ -80,7 +79,7 @@ export function requestResult<T>(request: IDBRequest<T>) {
   });
 }
 
-export function transactionCompleted(transaction: IDBTransaction) {
+function transactionCompleted(transaction: IDBTransaction) {
   return new Promise<void>((resolve, reject) => {
     transaction.oncomplete = () => resolve();
     transaction.onerror = () =>
@@ -367,16 +366,8 @@ function openDatabase(closed: () => void) {
 }
 
 function recreateHistoryStores(database: IDBDatabase) {
-  for (const name of [
-    commitStoreName,
-    repositoryStoreName,
-    topologyStoreName,
-    recentTopologyStoreName,
-  ])
-    if (database.objectStoreNames.contains(name))
-      database.deleteObjectStore(name);
-  if (!database.objectStoreNames.contains(workingChangesStoreName))
-    database.createObjectStore(workingChangesStoreName);
+  for (const name of Array.from(database.objectStoreNames))
+    database.deleteObjectStore(name);
   database.createObjectStore(commitStoreName);
   database.createObjectStore(topologyStoreName);
   database.createObjectStore(recentTopologyStoreName);

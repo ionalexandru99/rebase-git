@@ -3,8 +3,8 @@ import { FileDiff } from "@pierre/diffs/react";
 import { IconFileDiff } from "@tabler/icons-react";
 import { type CSSProperties, useRef } from "react";
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
-import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
 import type { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
+import type { DiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { NotDownloaded } from "#web/features/large-files/large-files.tsx";
 import { useTheme } from "#web/features/theme/theme.ts";
 

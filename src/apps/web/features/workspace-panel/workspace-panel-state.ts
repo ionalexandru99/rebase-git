@@ -178,7 +178,13 @@ export function reduceWorkspacePanel(
     case "expand":
       return { ...state, expanded: action.expanded };
     case "open": {
-      if (!("input" in action)) return openTab(state, action.kind);
+      if (isSingleKind(action.kind))
+        return openTab(
+          action.input === undefined
+            ? state
+            : setInput(state, action.kind, action.input),
+          action.kind,
+        );
       const tab = instanceTab(action.kind, action.input);
       if (tab === undefined) return state;
       return openTab(

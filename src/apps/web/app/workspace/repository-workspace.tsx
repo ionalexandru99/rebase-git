@@ -75,20 +75,9 @@ function RepositoryPanel({
   readonly scope: RepositoryScope;
 }) {
   const { repositoryId, logicalRepositoryId, worktreePath } = scope;
-  const panelScope = {
-    environmentId,
-    repositoryId,
-    logicalRepositoryId,
-    worktreePath,
-  };
   return (
     <WorkspacePanel.Provider
-      scope={panelScope}
-      scopeKey={JSON.stringify([
-        environmentId,
-        logicalRepositoryId,
-        worktreePath,
-      ])}
+      scope={{ environmentId, repositoryId, logicalRepositoryId, worktreePath }}
     >
       <Workspace environmentId={environmentId} scope={scope} />
     </WorkspacePanel.Provider>
@@ -110,12 +99,10 @@ function Workspace({
     logicalRepositoryId: scope.logicalRepositoryId,
   });
   const merge = useMergeActions(history);
-  const { execute, store, state: panelState } = useWorkspacePanel();
+  const { dispatch, state: panelState } = useWorkspacePanel();
   const terminals = useTerminals(environmentId, scope);
-  const openRebasePlan = (input: RebasePlanTarget) => {
-    execute({ type: "input", kind: "rebase", input });
-    execute({ type: "open", kind: "rebase" });
-  };
+  const openRebasePlan = (input: RebasePlanTarget) =>
+    dispatch({ type: "open", kind: "rebase", input });
   const rebase = useRebaseActions(history, openRebasePlan);
   const cherryPick = useCherryPick(history);
   const rewrite = useRewriteCommits(history);
@@ -125,25 +112,22 @@ function Workspace({
   const repositoryRefs = useScopedRepositoryRefs();
   const { refs } = repositoryRefs;
   const historyScope = useHistoryScope(environmentId, scope, repositoryRefs);
-  const showReflog = (name: string) => {
-    execute({
-      type: "input",
+  const showReflog = (name: string) =>
+    dispatch({
+      type: "open",
       kind: "reflog",
       input: { _tag: "LocalBranch", name },
     });
-    execute({ type: "open", kind: "reflog" });
-  };
-  const openStash = (oid: string) => {
-    store.dispatch({
-      type: "input",
+  const openStash = (oid: string) =>
+    dispatch({
+      type: "open",
       kind: "stash",
       input: { _tag: "Stash", oid },
+      focus: false,
     });
-    store.dispatch({ type: "open", kind: "stash" });
-  };
-  const closeRebasePlan = () => execute({ type: "close", tab: "rebase" });
+  const closeRebasePlan = () => dispatch({ type: "close", tab: "rebase" });
   const compare = useCompareActions(history, (input) =>
-    execute({ type: "open", kind: "compare", input }),
+    dispatch({ type: "open", kind: "compare", input }),
   );
   const resolved = historyScope.resolvedScope;
   const {
@@ -193,7 +177,7 @@ function Workspace({
                       onOpenDetails={openDetails}
                       onOpenCodeMatch={openCodeMatch}
                       onOpenChanges={() =>
-                        execute({ type: "open", kind: "changes" })
+                        dispatch({ type: "open", kind: "changes" })
                       }
                       onActiveCommitChange={selectCommit}
                       titleActions={

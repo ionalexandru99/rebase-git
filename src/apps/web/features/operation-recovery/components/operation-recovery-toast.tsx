@@ -152,7 +152,7 @@ export function OperationRecoveryNotice({
       <OperationRecoveryToast
         {...recovery}
         repositoryName={repositoryName}
-        review={() => panel.execute({ type: "open", kind: "changes" })}
+        review={() => panel.dispatch({ type: "open", kind: "changes" })}
       />
     </PersistentNotification>
   );

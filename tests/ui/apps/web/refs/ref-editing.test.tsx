@@ -63,7 +63,9 @@ interface BranchRename {
 }
 
 describe("ref editing", () => {
-  beforeEach(() => localStorage.setItem("rebase:branches-view:v1", "linear"));
+  beforeEach(() =>
+    localStorage.setItem("rebase:branches-view:v1", JSON.stringify("linear")),
+  );
 
   it("creates a branch at a commit and switches to it", async () => {
     const environment = await refsEnvironment();

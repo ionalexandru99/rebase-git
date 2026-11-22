@@ -1,4 +1,3 @@
-import { useLayoutEffect, useRef, useState } from "react";
 import {
   automaticHistoryScope,
   type HistoryScope,
@@ -10,17 +9,19 @@ import {
 } from "#web/features/commit-graph/scope/history-scope.ts";
 import type { RepositoryRefsRead } from "#web/features/refs/repository-refs.ts";
 import type { RepositoryScope } from "#web/platform/query/repository-scope.tsx";
-
-const storagePrefix = "rebase:history-filter:v1";
+import { useStoredStore } from "#web/platform/store/stored-store.ts";
+import { useStore } from "#web/platform/store/use-store.ts";
 
 export function useHistoryScope(
   environmentId: string,
   { logicalRepositoryId, worktreePath: activeWorktreePath }: RepositoryScope,
   { refs, restored: refsRestored }: RepositoryRefsRead,
 ) {
-  const [historyScope, setHistoryScope] = useState<HistoryScope>(() =>
-    loadHistoryScope(environmentId, logicalRepositoryId),
+  const store = useStoredStore(
+    `rebase:history-filter:v1:${environmentId}:${logicalRepositoryId}`,
+    decodeScope,
   );
+  const historyScope = useStore(store);
   const resolvedScope =
     refs === undefined
       ? undefined
@@ -41,24 +42,16 @@ export function useHistoryScope(
         ).selections,
       },
     );
-  const change = (next: HistoryScope) => {
-    setHistoryScope(next);
-    saveHistoryScope(environmentId, logicalRepositoryId, next);
-  };
-  const historyScopeRef = useRef(historyScope);
-  useLayoutEffect(() => {
-    historyScopeRef.current = historyScope;
-  });
   const renameBranch = (branch: {
     readonly name: string;
     readonly newName: string;
   }) =>
-    change(
-      renameHistoryBranch(historyScopeRef.current, branch.name, branch.newName),
+    store.set(
+      renameHistoryBranch(store.getSnapshot(), branch.name, branch.newName),
     );
   const toggleRef = (target: HistorySelection) => {
     if (refs === undefined) return;
-    change(
+    store.set(
       resolveHistoryScope(
         toggleHistoryRef(historyScope, target, refs, activeWorktreePath),
         refs,
@@ -66,7 +59,7 @@ export function useHistoryScope(
       ).scope,
     );
   };
-  const reset = () => change(automaticHistoryScope);
+  const reset = () => store.set(automaticHistoryScope);
   return {
     renameBranch,
     resolvedScope,
@@ -77,52 +70,17 @@ export function useHistoryScope(
 
 export type WorkspaceHistoryScope = ReturnType<typeof useHistoryScope>;
 
-function loadHistoryScope(
-  environmentId: string,
-  repositoryId: string,
-): HistoryScope {
-  try {
-    const value = localStorage.getItem(
-      historyFilterStorageKey(environmentId, repositoryId),
-    );
-    return value === null ? automaticHistoryScope : decodeScope(value);
-  } catch {
-    return automaticHistoryScope;
-  }
-}
-
-function saveHistoryScope(
-  environmentId: string,
-  repositoryId: string,
-  scope: HistoryScope,
-) {
-  try {
-    localStorage.setItem(
-      historyFilterStorageKey(environmentId, repositoryId),
-      JSON.stringify({ scope, version: 1 }),
-    );
-  } catch {}
-}
-
-function historyFilterStorageKey(environmentId: string, repositoryId: string) {
-  return `${storagePrefix}:${environmentId}:${repositoryId}`;
-}
-
-function decodeScope(value: string): HistoryScope {
-  const record = JSON.parse(value) as unknown;
-  if (!isRecord(record) || record.version !== 1 || !isRecord(record.scope)) {
-    return automaticHistoryScope;
-  }
-  if (record.scope._tag === "Automatic") return automaticHistoryScope;
+function decodeScope(saved: unknown): HistoryScope {
   if (
-    record.scope._tag !== "Custom" ||
-    !Array.isArray(record.scope.selections) ||
-    record.scope.selections.length === 0 ||
-    !record.scope.selections.every(isHistorySelection)
+    !isRecord(saved) ||
+    saved._tag !== "Custom" ||
+    !Array.isArray(saved.selections) ||
+    saved.selections.length === 0 ||
+    !saved.selections.every(isHistorySelection)
   ) {
     return automaticHistoryScope;
   }
-  return { _tag: "Custom", selections: record.scope.selections };
+  return { _tag: "Custom", selections: saved.selections };
 }
 
 function isHistorySelection(value: unknown): value is HistorySelection {

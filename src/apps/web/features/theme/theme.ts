@@ -1,13 +1,18 @@
 import { createStore } from "#web/platform/store/store.ts";
+import { createStoredStore } from "#web/platform/store/stored-store.ts";
 import { useStore } from "#web/platform/store/use-store.ts";
 
 export const themePreferences = ["system", "light", "dark"] as const;
 export type ThemePreference = (typeof themePreferences)[number];
 export type Theme = "light" | "dark";
 
-const preferenceKey = "rebase:theme:v1";
 const systemDarkQuery = "(prefers-color-scheme: dark)";
-const preferenceStore = createStore(readPreference());
+const preferenceStore = createStoredStore(
+  "rebase:theme:v1",
+  (saved): ThemePreference =>
+    saved === "light" || saved === "dark" ? saved : "system",
+  { followOtherWindows: true },
+);
 const themeStore = createStore<Theme>("dark");
 
 export const onThemeChange = themeStore.subscribe;
@@ -15,18 +20,11 @@ export const onThemeChange = themeStore.subscribe;
 export function startTheme() {
   applyTheme();
   window.matchMedia(systemDarkQuery).addEventListener("change", applyTheme);
-  window.addEventListener("storage", (event) => {
-    if (event.key !== preferenceKey && event.key !== null) return;
-    preferenceStore.set(readPreference());
-    applyTheme();
-  });
+  preferenceStore.subscribe(applyTheme);
 }
 
 export function saveThemePreference(preference: ThemePreference) {
   preferenceStore.set(preference);
-  try {
-    localStorage.setItem(preferenceKey, preference);
-  } catch {}
   applyTheme();
 }
 
@@ -36,15 +34,6 @@ export function useThemePreference() {
 
 export function useTheme() {
   return useStore(themeStore);
-}
-
-function readPreference(): ThemePreference {
-  try {
-    const value = localStorage.getItem(preferenceKey);
-    return value === "light" || value === "dark" ? value : "system";
-  } catch {
-    return "system";
-  }
 }
 
 function applyTheme() {

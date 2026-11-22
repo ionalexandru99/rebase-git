@@ -22,7 +22,7 @@ import {
   IconToggles,
 } from "#web/components/ui/icon-switch.tsx";
 import { ScrollTopButton } from "#web/components/ui/scroll-top-button.tsx";
-import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
+import type { DiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 
 const layoutOptions = [
   { value: "unified", label: "Unified", Icon: IconLayoutRows },

@@ -10,15 +10,23 @@ import {
 } from "#contracts/terminal/terminal.contract.ts";
 import { onThemeChange } from "#web/features/theme/theme.ts";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
-import { createStore } from "#web/platform/store/store.ts";
+import { createStoredStore } from "#web/platform/store/stored-store.ts";
 import { useStore } from "#web/platform/store/use-store.ts";
 
 const fontFamily =
   '"JetBrains Mono", "SF Mono", SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", "Symbols Nerd Font Mono", monospace';
 
 const defaultFontSize = 12;
-const fontSizeKey = "rebase:terminal-font-size:v1";
-const fontSizeStore = createStore(readFontSize());
+const fontSizeStore = createStoredStore(
+  "rebase:terminal-font-size:v1",
+  (saved) =>
+    typeof saved === "number" &&
+    Number.isInteger(saved) &&
+    saved >= 6 &&
+    saved <= 32
+      ? saved
+      : defaultFontSize,
+);
 
 interface Surface {
   readonly xterm: Terminal;
@@ -52,9 +60,6 @@ function zoom(event: KeyboardEvent) {
       ? defaultFontSize
       : Math.min(32, Math.max(6, fontSizeStore.getSnapshot() + step));
   fontSizeStore.set(size);
-  try {
-    localStorage.setItem(fontSizeKey, String(size));
-  } catch {}
   return true;
 }
 
@@ -67,17 +72,6 @@ function terminalColors(element: HTMLElement) {
     cursor: color("--foreground"),
     selectionBackground: color("--accent"),
   };
-}
-
-function readFontSize() {
-  try {
-    const size = Number(localStorage.getItem(fontSizeKey));
-    return Number.isInteger(size) && size >= 6 && size <= 32
-      ? size
-      : defaultFontSize;
-  } catch {
-    return defaultFontSize;
-  }
 }
 
 function applyFontSize(xterm: Terminal, fontSize: number) {

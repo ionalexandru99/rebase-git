@@ -18,6 +18,11 @@ import {
 } from "#tests-support/fixtures.ts";
 import { historyOid } from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
+import {
+  saveWorkspacePanel,
+  TestWorkspacePanel,
+  workspacePanelScope,
+} from "#tests-support/workspace-panel.tsx";
 import { CommitInspection } from "#web/features/commit-inspection/commit-inspection.tsx";
 import { FileHistoryPanel } from "#web/features/file-history/file-history-panel.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
@@ -63,19 +68,16 @@ async function fixture() {
       repositoryRefs({ worktrees: [worktree(mainPath, "main")] }),
     ),
   );
-  const scopeKey = crypto.randomUUID();
-  localStorage.setItem(
-    `rebase:workspace-panel:v1:${scopeKey}`,
-    JSON.stringify({
-      tabs: ["commit"],
-      active: "commit",
-      open: true,
-      inputs: { commit: historyOid(0) },
-    }),
-  );
+  const panelScope = workspacePanelScope();
+  saveWorkspacePanel(panelScope, {
+    tabs: ["commit"],
+    active: "commit",
+    open: true,
+    inputs: { commit: historyOid(0) },
+  });
   const screen = await render(
     <div className="dark text-foreground" style={{ width: 1200, height: 650 }}>
-      <WorkspacePanel.Provider scopeKey={scopeKey}>
+      <TestWorkspacePanel scope={panelScope}>
         <WorkspacePanel.Group>
           <WorkspacePanel.Sidebar />
           <WorkspacePanel.Main>{() => null}</WorkspacePanel.Main>
@@ -99,7 +101,7 @@ async function fixture() {
             }}
           />
         </WorkspacePanel.Group>
-      </WorkspacePanel.Provider>
+      </TestWorkspacePanel>
     </div>,
     { environment: { requests } },
   );

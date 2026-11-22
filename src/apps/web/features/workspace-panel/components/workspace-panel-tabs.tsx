@@ -1,5 +1,5 @@
 import { IconX } from "@tabler/icons-react";
-import { type ReactNode, useLayoutEffect, useRef } from "react";
+import { type ReactNode, useLayoutEffect } from "react";
 import { Button } from "#web/components/ui/button.tsx";
 import {
   HorizontalScrollButton,
@@ -37,39 +37,26 @@ export function WorkspacePanelTabs({
   readonly uncommitted?: boolean | undefined;
 }) {
   const panel = useWorkspacePanel();
-  const listRef = useRef<HTMLDivElement>(null);
-  const handledFocusRequest = useRef(0);
   const { active, tabs } = panel.state;
+  const { tabListRef, settleFocus } = panel;
   const { viewport, content, edges, measure, scroll } = useHorizontalScroll();
   const labels = tabLabels(panel.state);
   useLayoutEffect(() => {
     if (active === null) return;
-    const tab = listRef.current?.querySelector<HTMLElement>(
+    const tab = tabListRef.current?.querySelector<HTMLElement>(
       '[aria-selected="true"]',
     );
     tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
     if (focusWasLost()) tab?.focus();
-  }, [active]);
-  useLayoutEffect(() => {
-    if (
-      panel.focusRequest === handledFocusRequest.current ||
-      panel.launcherOpen
-    )
-      return;
-    handledFocusRequest.current = panel.focusRequest;
-    const tab = listRef.current?.querySelector<HTMLElement>(
-      '[aria-selected="true"]',
-    );
-    (tab ?? panel.emptyStateRef.current)?.focus();
-    tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [panel.focusRequest, panel.launcherOpen, panel.emptyStateRef]);
+  }, [active, tabListRef]);
+  useLayoutEffect(settleFocus);
 
   return (
     <Tabs
       data-workspace-panel-tabs
       value={active}
       onValueChange={(tab) => {
-        if (typeof tab === "string") panel.execute({ type: "select", tab });
+        if (typeof tab === "string") panel.dispatch({ type: "select", tab });
       }}
       className="flex h-full min-h-0 flex-col bg-background text-foreground"
     >
@@ -86,7 +73,7 @@ export function WorkspacePanelTabs({
               {tabs.length > 0 ? (
                 <>
                   <TabsList
-                    ref={listRef}
+                    ref={tabListRef}
                     aria-label="Side panel tabs"
                     activateOnFocus
                     className="shrink-0 gap-1"
@@ -168,7 +155,7 @@ function PanelTab({
         size="icon-xs"
         variant="ghost"
         className="size-4 text-inherit hover:bg-muted sm:size-4"
-        onClick={() => panel.execute({ type: "close", tab })}
+        onClick={() => panel.dispatch({ type: "close", tab })}
       >
         <feature.icon
           aria-hidden="true"
@@ -186,7 +173,7 @@ function PanelTab({
         onKeyDown={(event) => {
           if (event.key === "Delete") {
             event.preventDefault();
-            panel.execute({ type: "close", tab });
+            panel.dispatch({ type: "close", tab });
           }
         }}
       >
@@ -208,7 +195,7 @@ function WorkspacePanelEmptyState({
 }: {
   readonly uncommitted?: boolean | undefined;
 }) {
-  const { emptyStateRef, execute } = useWorkspacePanel();
+  const { emptyStateRef, dispatch } = useWorkspacePanel();
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-8">
       <div className="my-auto w-full max-w-100 self-center">
@@ -225,7 +212,7 @@ function WorkspacePanelEmptyState({
               key={kind}
               variant="ghost"
               className="h-auto min-h-20 min-w-0 flex-col items-start justify-center gap-2.5 whitespace-normal border-border bg-card px-3 py-3 text-left hover:border-foreground/20 sm:h-auto"
-              onClick={() => execute({ type: "open", kind })}
+              onClick={() => dispatch({ type: "open", kind })}
             >
               <span className="flex items-center gap-2 text-meta font-normal">
                 <definition.icon aria-hidden="true" className="size-3.5" />

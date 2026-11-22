@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { TerminalsApi } from "#contracts/terminal/terminal.contract.ts";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import type { RepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import { useCommand } from "#web/platform/query/use-command.ts";
-import { createStore } from "#web/platform/store/store.ts";
+import { useStoredStore } from "#web/platform/store/stored-store.ts";
 import { useStore } from "#web/platform/store/use-store.ts";
 
 interface TerminalPanelState {
@@ -27,15 +27,12 @@ export type Terminals = ReturnType<typeof useTerminals>;
 export function useTerminals(environmentId: string, scope: RepositoryScope) {
   const { repositoryId, worktreePath, logicalRepositoryId } = scope;
   const key = `${storagePrefix}${JSON.stringify([environmentId, logicalRepositoryId, worktreePath])}`;
-  const store = useMemo(() => createStore(readPanelState(key)), [key]);
+  const store = useStoredStore(key, decodePanelState);
   const state = useStore(store);
   const update = useCallback(
-    (change: Partial<TerminalPanelState>) => {
-      const next = { ...store.getSnapshot(), ...change };
-      store.set(next);
-      savePanelState(key, next);
-    },
-    [key, store],
+    (change: Partial<TerminalPanelState>) =>
+      store.set({ ...store.getSnapshot(), ...change }),
+    [store],
   );
   const worktree = { repositoryId, worktreePath };
   const list = useEnvironmentQuery(TerminalsApi.list, worktree, {
@@ -94,29 +91,18 @@ export function useTerminals(environmentId: string, scope: RepositoryScope) {
   };
 }
 
-function readPanelState(key: string): TerminalPanelState {
-  try {
-    const saved: unknown = JSON.parse(localStorage.getItem(key) ?? "null");
-    if (saved === null || typeof saved !== "object") return initialState;
-    const value = (name: string) => Reflect.get(saved, name);
-    const size = value("size");
-    const active = value("active");
-    return {
-      open: value("open") === true,
-      size:
-        typeof size === "number" && size >= 5 && size <= 90
-          ? size
-          : initialState.size,
-      collapsed: value("collapsed") === true,
-      active: typeof active === "string" ? active : null,
-    };
-  } catch {
-    return initialState;
-  }
-}
-
-function savePanelState(key: string, state: TerminalPanelState) {
-  try {
-    localStorage.setItem(key, JSON.stringify(state));
-  } catch {}
+function decodePanelState(saved: unknown): TerminalPanelState {
+  if (saved === null || typeof saved !== "object") return initialState;
+  const value = (name: string) => Reflect.get(saved, name);
+  const size = value("size");
+  const active = value("active");
+  return {
+    open: value("open") === true,
+    size:
+      typeof size === "number" && size >= 5 && size <= 90
+        ? size
+        : initialState.size,
+    collapsed: value("collapsed") === true,
+    active: typeof active === "string" ? active : null,
+  };
 }

@@ -99,7 +99,6 @@ async function fixture(linkedWorktree = false) {
       >
         <WorkspacePanel.Provider
           key={project}
-          scopeKey={linkedWorktree ? "shared-worktree" : project}
           scope={{
             environmentId: "environment",
             logicalRepositoryId: linkedWorktree ? "shared-logical" : project,
@@ -171,10 +170,9 @@ function Inspect() {
   return (
     <button
       type="button"
-      onClick={() => {
-        panel.execute({ type: "input", kind: "commit", input: oid });
-        panel.execute({ type: "open", kind: "commit" });
-      }}
+      onClick={() =>
+        panel.dispatch({ type: "open", kind: "commit", input: oid })
+      }
     >
       Inspect commit
     </button>

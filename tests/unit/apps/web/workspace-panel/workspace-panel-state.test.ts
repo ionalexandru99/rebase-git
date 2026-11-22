@@ -42,6 +42,23 @@ describe("workspace panel state", () => {
     ).toEqual({ ...resized, open: true });
   });
 
+  it("opens a single panel with its input and replaces the input it showed", () => {
+    const open = (state: WorkspacePanelState, oid: string) =>
+      reduceWorkspacePanel(state, { type: "open", kind: "commit", input: oid });
+
+    const reopened = open(
+      open(initialWorkspacePanelState, "a".repeat(40)),
+      "b".repeat(40),
+    );
+
+    expect(reopened).toMatchObject({
+      tabs: ["commit"],
+      active: "commit",
+      open: true,
+      inputs: { commit: "b".repeat(40) },
+    });
+  });
+
   it("opens one history tab per file and switches to the tab a file already has", () => {
     const open = (state: WorkspacePanelState, path: string) =>
       reduceWorkspacePanel(state, {

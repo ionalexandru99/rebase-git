@@ -1,8 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
-import { createWorkspacePanelStore } from "#web/features/workspace-panel/persistence/workspace-panel-store.ts";
+import {
+  savedWorkspacePanel,
+  saveWorkspacePanel,
+  TestWorkspacePanel,
+  workspacePanelScope,
+} from "#tests-support/workspace-panel.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
+import type { WorkspacePanelScope } from "#web/features/workspace-panel/workspace-panel-session.ts";
 
 describe("workspace panel", () => {
   beforeEach(() => localStorage.clear());
@@ -10,7 +16,7 @@ describe("workspace panel", () => {
   it("expands across the graph while keeping branches visible and restores its width", async () => {
     await render(
       <div className="dark" style={{ width: 1600, height: 600 }}>
-        <WorkspacePanel.Provider scopeKey="expanded">
+        <TestWorkspacePanel>
           <WorkspacePanel.Controls />
           <WorkspacePanel.Group>
             <WorkspacePanel.Sidebar>
@@ -25,7 +31,7 @@ describe("workspace panel", () => {
             </WorkspacePanel.Main>
             <WorkspacePanel.Pane />
           </WorkspacePanel.Group>
-        </WorkspacePanel.Provider>
+        </TestWorkspacePanel>
       </div>,
     );
     await page.getByRole("button", { name: "Show side panel" }).click();
@@ -43,14 +49,14 @@ describe("workspace panel", () => {
   it("marks the closed panel toggle and then the Diffs card while there are uncommitted changes", async () => {
     await render(
       <div className="dark" style={{ width: 1200, height: 600 }}>
-        <WorkspacePanel.Provider scopeKey="uncommitted">
+        <TestWorkspacePanel>
           <WorkspacePanel.Controls uncommitted />
           <WorkspacePanel.Group>
             <WorkspacePanel.Sidebar />
             <WorkspacePanel.Main>{() => null}</WorkspacePanel.Main>
             <WorkspacePanel.Pane uncommitted />
           </WorkspacePanel.Group>
-        </WorkspacePanel.Provider>
+        </TestWorkspacePanel>
       </div>,
     );
     await page
@@ -77,14 +83,14 @@ describe("workspace panel", () => {
   it("keeps the panel toggle in one place and hides the panel while it is expanded", async () => {
     await render(
       <div className="dark" style={{ width: 1200, height: 600 }}>
-        <WorkspacePanel.Provider scopeKey="pinned">
+        <TestWorkspacePanel>
           <WorkspacePanel.Controls />
           <WorkspacePanel.Group>
             <WorkspacePanel.Sidebar />
             <WorkspacePanel.Main>{() => null}</WorkspacePanel.Main>
             <WorkspacePanel.Pane />
           </WorkspacePanel.Group>
-        </WorkspacePanel.Provider>
+        </TestWorkspacePanel>
       </div>,
     );
     const place = () => {
@@ -126,16 +132,14 @@ describe("workspace panel", () => {
   });
 
   it("restores panel preferences without reopening unknown saved tabs", async () => {
-    localStorage.setItem(
-      "rebase:workspace-panel:v1:saved",
-      JSON.stringify({
-        tabs: ["changes", "code"],
-        active: "code",
-        open: false,
-        widths: { sidebar: 16, panel: 30 },
-      }),
-    );
-    await renderPanel("saved");
+    const scope = workspacePanelScope();
+    saveWorkspacePanel(scope, {
+      tabs: ["changes", "code"],
+      active: "code",
+      open: false,
+      widths: { sidebar: 16, panel: 30 },
+    });
+    await renderPanel(scope);
     await page.getByRole("button", { name: "Show side panel" }).click();
     await expect
       .element(page.getByRole("tab", { name: "Diffs" }))
@@ -144,7 +148,9 @@ describe("workspace panel", () => {
   });
 
   it("keeps each project's tabs and visibility when switching projects and reopening the panel", async () => {
-    const panel = await renderPanel("project-a");
+    const projectA = workspacePanelScope();
+    const projectB = workspacePanelScope();
+    const panel = await renderPanel(projectA);
     await page.getByRole("button", { name: "Show side panel" }).click();
     await page
       .getByRole("button", { name: "Diffs Review and commit working changes" })
@@ -154,13 +160,13 @@ describe("workspace panel", () => {
       .toHaveAttribute("aria-selected", "true");
     await page.getByRole("button", { name: "Hide side panel" }).click();
 
-    await panel.switchScope("project-b");
+    await panel.switchScope(projectB);
     await page.getByRole("button", { name: "Show side panel" }).click();
     await expect
       .element(page.getByRole("heading", { name: "Open a tab" }))
       .toBeVisible();
 
-    await panel.switchScope("project-a");
+    await panel.switchScope(projectA);
     await expect
       .element(page.getByRole("complementary", { name: "Side panel" }))
       .not.toBeInTheDocument();
@@ -169,7 +175,7 @@ describe("workspace panel", () => {
       .element(page.getByRole("tab", { name: "Diffs" }))
       .toHaveAttribute("aria-selected", "true");
 
-    await panel.switchScope("project-b");
+    await panel.switchScope(projectB);
     await expect
       .element(page.getByRole("heading", { name: "Open a tab" }))
       .toBeVisible();
@@ -179,24 +185,20 @@ describe("workspace panel", () => {
   });
 
   it("restores the panel width when switching worktrees with the graph mounted", async () => {
-    createWorkspacePanelStore("first").dispatch({
-      type: "resize",
-      widths: { sidebar: 16, panel: 22 },
-    });
-    createWorkspacePanelStore("other").dispatch({
-      type: "resize",
-      widths: { sidebar: 16, panel: 30 },
-    });
-    const panel = await renderPanel("first");
+    const first = workspacePanelScope({ worktreePath: "/first" });
+    const other = { ...first, worktreePath: "/other" };
+    saveWorkspacePanel(first, { tabs: [], widths: { sidebar: 16, panel: 22 } });
+    saveWorkspacePanel(other, { tabs: [], widths: { sidebar: 16, panel: 30 } });
+    const panel = await renderPanel(first);
     await page.getByRole("button", { name: "Show side panel" }).click();
     const graph = page
       .getByRole("button", { name: "Graph selection" })
       .element();
     await expect.poll(panelWidth).toBeCloseTo(352, -1);
-    await panel.switchScope("other");
+    await panel.switchScope(other);
     await page.getByRole("button", { name: "Show side panel" }).click();
     await expect.poll(panelWidth).toBeCloseTo(480, -1);
-    await panel.switchScope("first");
+    await panel.switchScope(first);
     await expect.poll(panelWidth).toBeCloseTo(352, -1);
     expect(
       page.getByRole("button", { name: "Graph selection" }).element(),
@@ -204,7 +206,8 @@ describe("workspace panel", () => {
   });
 
   it("keeps widths in rem across window sizes and saves only the resized panel", async () => {
-    const panel = await renderPanel("window", 1600);
+    const scope = workspacePanelScope();
+    const panel = await renderPanel(scope, 1600);
     await page.getByRole("button", { name: "Show side panel" }).click();
     await expect.poll(panelWidth).toBeCloseTo(576, -1);
     await expect.poll(sidebarWidth).toBeCloseTo(256, -1);
@@ -212,9 +215,9 @@ describe("workspace panel", () => {
     await expect.poll(sidebarWidth).toBeLessThan(250);
     await page.getByRole("separator", { name: "Resize side panel" }).click();
     await userEvent.keyboard("{ArrowRight}");
-    await expect.poll(() => savedWidths("window").panel).toBeLessThan(36);
-    expect(savedWidths("window").sidebar).toBe(16);
-    const saved = savedWidths("window").panel * 16;
+    await expect.poll(() => savedWidths(scope).panel).toBeLessThan(36);
+    expect(savedWidths(scope).sidebar).toBe(16);
+    const saved = savedWidths(scope).panel * 16;
     await panel.resize(2400);
     await expect.poll(sidebarWidth).toBeCloseTo(256, -1);
     await expect.poll(panelWidth).toBeCloseTo(saved, -1);
@@ -225,10 +228,11 @@ function sidebarWidth() {
   return page.getByTestId("branches").element().getBoundingClientRect().width;
 }
 
-function savedWidths(scopeKey: string) {
-  return JSON.parse(
-    localStorage.getItem(`rebase:workspace-panel:v1:${scopeKey}`) ?? "{}",
-  ).widths;
+function savedWidths(scope: WorkspacePanelScope) {
+  const saved = savedWorkspacePanel(scope);
+  return saved !== null && typeof saved === "object" && "widths" in saved
+    ? (saved.widths as { sidebar: number; panel: number })
+    : { sidebar: 0, panel: 0 };
 }
 
 function panelWidth() {
@@ -238,10 +242,10 @@ function panelWidth() {
     .getBoundingClientRect().width;
 }
 
-async function renderPanel(scopeKey = "panel-test", width = 1600) {
-  const tree = (scopeKey: string, width: number) => (
+async function renderPanel(scope = workspacePanelScope(), width = 1600) {
+  const tree = (scope: WorkspacePanelScope, width: number) => (
     <div className="dark" style={{ width, height: 600 }}>
-      <WorkspacePanel.Provider scopeKey={scopeKey}>
+      <WorkspacePanel.Provider scope={scope}>
         <WorkspacePanel.Controls />
         <WorkspacePanel.Group>
           <WorkspacePanel.Sidebar />
@@ -253,142 +257,18 @@ async function renderPanel(scopeKey = "panel-test", width = 1600) {
       </WorkspacePanel.Provider>
     </div>
   );
-  let current = { scopeKey, width };
-  const view = await render(tree(scopeKey, width));
+  let current = { scope, width };
+  const view = await render(tree(scope, width), {
+    wrapper: WorkspacePanel.Sessions,
+  });
   const show = (next: typeof current) => {
     current = next;
-    return view.rerender(tree(next.scopeKey, next.width));
+    return view.rerender(tree(next.scope, next.width));
   };
   return {
     view,
-    switchScope: (next: string) => show({ ...current, scopeKey: next }),
+    switchScope: (next: WorkspacePanelScope) =>
+      show({ ...current, scope: next }),
     resize: (next: number) => show({ ...current, width: next }),
   };
 }
-
-it("migrates a shared previous layout into only the first repository", async () => {
-  localStorage.clear();
-  const scopeKey = JSON.stringify(["environment", "logical", "/repo"]);
-  const storageKey = `rebase:workspace-panel:v1:${scopeKey}`;
-  const saved = {
-    tabs: ["changes", "commit"],
-    active: "commit",
-    open: true,
-    widths: { sidebar: 16, panel: 30 },
-  };
-  localStorage.setItem(storageKey, JSON.stringify(saved));
-  const tree = (repositoryId: string) => (
-    <div style={{ width: 1600, height: 600 }}>
-      <WorkspacePanel.Provider
-        key={repositoryId}
-        scopeKey={scopeKey}
-        scope={{
-          environmentId: "environment",
-          repositoryId,
-          logicalRepositoryId: "logical",
-          worktreePath: "/repo",
-        }}
-      >
-        <WorkspacePanel.Controls />
-        <WorkspacePanel.Group>
-          <WorkspacePanel.Sidebar />
-          <WorkspacePanel.Main>{() => null}</WorkspacePanel.Main>
-          <WorkspacePanel.Pane />
-        </WorkspacePanel.Group>
-      </WorkspacePanel.Provider>
-    </div>
-  );
-  const view = await render(tree("project-a"));
-  await expect
-    .element(page.getByRole("tab", { name: "Commit", exact: true }))
-    .toHaveAttribute("aria-selected", "true");
-  await expect
-    .element(page.getByRole("tab", { name: "Diffs", exact: true }))
-    .toBeVisible();
-  await expect.poll(panelWidth).toBeCloseTo(480, -1);
-  await page.getByRole("button", { name: "Close Commit tab" }).click();
-  await page.getByRole("button", { name: "Hide side panel" }).click();
-  await view.rerender(tree("project-b"));
-  await expect
-    .element(page.getByRole("button", { name: "Show side panel" }))
-    .toBeVisible();
-  await page.getByRole("button", { name: "Show side panel" }).click();
-  await expect
-    .element(page.getByRole("heading", { name: "Open a tab" }))
-    .toBeVisible();
-  expect(JSON.parse(localStorage.getItem(storageKey) ?? "null")).toEqual(saved);
-  localStorage.setItem(
-    storageKey,
-    JSON.stringify({ ...saved, widths: { sidebar: 16, panel: 22 } }),
-  );
-  await view.rerender(tree("project-a"));
-  await expect
-    .element(page.getByRole("complementary", { name: "Side panel" }))
-    .not.toBeInTheDocument();
-  await page.getByRole("button", { name: "Show side panel" }).click();
-  await expect
-    .element(page.getByRole("tab", { name: "Commit", exact: true }))
-    .not.toBeInTheDocument();
-  await expect
-    .element(page.getByRole("tab", { name: "Diffs", exact: true }))
-    .toHaveAttribute("aria-selected", "true");
-  await expect.poll(panelWidth).toBeCloseTo(480, -1);
-  await view.rerender(tree("project-b"));
-  await expect
-    .element(page.getByRole("heading", { name: "Open a tab" }))
-    .toBeVisible();
-  await expect
-    .element(page.getByRole("tab", { name: "Commit", exact: true }))
-    .not.toBeInTheDocument();
-});
-
-it("does not copy an old layout after another repository already migrated it", () => {
-  localStorage.clear();
-  const previousScopeKey = JSON.stringify(["environment", "logical", "/repo"]);
-  localStorage.setItem(
-    `rebase:workspace-panel:v1:${previousScopeKey}`,
-    JSON.stringify({
-      tabs: ["changes"],
-      active: "changes",
-      open: true,
-    }),
-  );
-  createWorkspacePanelStore(
-    JSON.stringify(["environment", "project-a", "logical", "/repo"]),
-  ).dispatch({ type: "open", kind: "changes" });
-
-  const other = createWorkspacePanelStore(
-    JSON.stringify(["environment", "project-b", "logical", "/repo"]),
-    previousScopeKey,
-  ).getSnapshot();
-  expect(other.tabs).toEqual([]);
-  expect(other.open).toBe(false);
-});
-
-it("leaves a previous layout unclaimed when repository storage fails", () => {
-  localStorage.clear();
-  const previousScopeKey = JSON.stringify(["environment", "logical", "/repo"]);
-  localStorage.setItem(
-    `rebase:workspace-panel:v1:${previousScopeKey}`,
-    JSON.stringify({
-      tabs: ["changes"],
-      active: "changes",
-      open: true,
-    }),
-  );
-  const write = vi
-    .spyOn(Storage.prototype, "setItem")
-    .mockImplementation(() => {
-      throw new DOMException("Storage full", "QuotaExceededError");
-    });
-  try {
-    const first = createWorkspacePanelStore(
-      JSON.stringify(["environment", "project-a", "logical", "/repo"]),
-      previousScopeKey,
-    ).getSnapshot();
-    expect(first.tabs).toEqual([]);
-    expect(first.open).toBe(false);
-  } finally {
-    write.mockRestore();
-  }
-});

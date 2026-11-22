@@ -11,7 +11,7 @@ import { launchablePanels } from "#web/features/workspace-panel/workspace-panel-
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 
 export function WorkspacePanelLauncher() {
-  const { launcherOpen, setLauncherOpen, launcherRef, execute } =
+  const { launcherOpen, setLauncherOpen, launcherRef, dispatch } =
     useWorkspacePanel();
   const openedTab = useRef(false);
   return (
@@ -48,7 +48,7 @@ export function WorkspacePanelLauncher() {
             onClick={() => {
               openedTab.current = true;
               setLauncherOpen(false);
-              execute({ type: "open", kind });
+              dispatch({ type: "open", kind });
             }}
           >
             <definition.icon aria-hidden="true" />

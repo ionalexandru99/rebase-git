@@ -7,7 +7,7 @@ import type {
 
 export const PanelFeatureContext = createContext<
   | {
-      readonly scope: WorkspacePanelScope | undefined;
+      readonly scope: WorkspacePanelScope;
       readonly environment: WorkspacePanelEnvironment | undefined;
       readonly active: boolean;
       readonly input: unknown;

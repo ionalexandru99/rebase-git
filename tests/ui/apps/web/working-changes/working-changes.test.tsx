@@ -31,9 +31,7 @@ import {
   repositoryChanges,
 } from "#tests-support/fixtures.ts";
 import { render, testChanges } from "#tests-support/render.tsx";
-import { defaultDiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
 import { WorkingChanges } from "#web/features/working-changes/working-changes.tsx";
-import { saveDiffPreferences } from "#web/persistence/working-changes/working-changes-store.ts";
 
 const path = "src/read-status.ts";
 const before = 'export const status = "old";\n';
@@ -227,7 +225,7 @@ async function fixture(
   };
 }
 
-afterEach(() => saveDiffPreferences(defaultDiffPreferences));
+afterEach(() => localStorage.removeItem("rebase:diff-preferences:v1"));
 
 async function stageAll() {
   page.getByRole("button", { name: "Collapse unstaged" }).element().focus();
@@ -830,23 +828,5 @@ describe("working changes", () => {
     await userEvent.keyboard("{Control>}{Enter}{/Control}");
     await expect.poll(() => f.commits).toHaveLength(1);
     expect(f.commits[0]?.message).toBe(longSubject);
-  });
-
-  it("says when this browser cannot keep the commit draft", async () => {
-    const transaction = vi
-      .spyOn(IDBDatabase.prototype, "transaction")
-      .mockImplementation(() => {
-        throw new DOMException("Storage is blocked.", "InvalidStateError");
-      });
-    try {
-      await fixture();
-      await expect
-        .element(page.getByRole("alert"))
-        .toMatchTextContent(
-          "Could not access changes preferences or the commit draft in this browser.",
-        );
-    } finally {
-      transaction.mockRestore();
-    }
   });
 });

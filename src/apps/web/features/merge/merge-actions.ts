@@ -86,7 +86,7 @@ export function useMergeActions(
       },
     });
     if (result._tag === "Ok" && result.value.outcome === "Staged")
-      panel.execute({ type: "open", kind: "changes" });
+      panel.dispatch({ type: "open", kind: "changes" });
     errorToast.failure(
       "merge",
       result,

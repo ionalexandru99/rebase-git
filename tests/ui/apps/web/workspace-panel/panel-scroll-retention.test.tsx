@@ -1,33 +1,29 @@
 import { expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
+import {
+  saveWorkspacePanel,
+  workspacePanelScope,
+} from "#tests-support/workspace-panel.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 
 it("retains nested scroll coordinates when detached views are shown again", async () => {
   localStorage.clear();
-  for (const project of ["scroll-a", "scroll-b"]) {
-    localStorage.setItem(
-      `rebase:workspace-panel:v1:${project}`,
-      JSON.stringify({
-        tabs: ["changes"],
-        active: "changes",
-        open: true,
-      }),
-    );
-  }
+  const scope = (project: string) =>
+    workspacePanelScope({
+      repositoryId: project,
+      worktreePath: `/repo/${project}`,
+    });
+  for (const project of ["scroll-a", "scroll-b"])
+    saveWorkspacePanel(scope(project), {
+      tabs: ["changes"],
+      active: "changes",
+      open: true,
+    });
   const tree = (project: string, repositoryIds = ["scroll-a", "scroll-b"]) => (
     <div style={{ width: 1000, height: 600 }}>
       <WorkspacePanel.Sessions repositoryIds={repositoryIds}>
-        <WorkspacePanel.Provider
-          key={project}
-          scopeKey={project}
-          scope={{
-            environmentId: "environment",
-            repositoryId: project,
-            logicalRepositoryId: project,
-            worktreePath: `/repo/${project}`,
-          }}
-        >
+        <WorkspacePanel.Provider key={project} scope={scope(project)}>
           <WorkspacePanel.Controls />
           <WorkspacePanel.Group>
             <WorkspacePanel.Sidebar />

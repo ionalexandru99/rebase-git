@@ -1,15 +1,11 @@
-import { createWorkspacePanelStore } from "#web/features/workspace-panel/persistence/workspace-panel-store.ts";
 import type {
   PanelViewState,
   WorkspacePanelScope,
 } from "#web/features/workspace-panel/workspace-panel-session.ts";
+import { createWorkspacePanelStore } from "#web/features/workspace-panel/workspace-panel-store.ts";
 import { createStore } from "#web/platform/store/store.ts";
 
-function createPanelSession(
-  key: string,
-  scope: WorkspacePanelScope | undefined,
-  previousScopeKey: string | undefined,
-) {
+function createPanelSession(key: string, scope: WorkspacePanelScope) {
   const view = createStore<PanelViewState>({
     mounted: false,
     targets: {},
@@ -18,7 +14,7 @@ function createPanelSession(
   return {
     key,
     scope,
-    store: createWorkspacePanelStore(key, previousScopeKey),
+    store: createWorkspacePanelStore(key),
     getSnapshot: view.getSnapshot,
     subscribe: view.subscribe,
     update: (next: Partial<PanelViewState>) =>
@@ -35,14 +31,14 @@ export function createSessionCollection() {
   return {
     getSnapshot: snapshot.getSnapshot,
     subscribe: snapshot.subscribe,
-    acquire: (
-      key: string,
-      scope: WorkspacePanelScope | undefined,
-      previousScopeKey?: string,
-    ) => {
-      return (
-        sessions.get(key) ?? createPanelSession(key, scope, previousScopeKey)
-      );
+    acquire: (scope: WorkspacePanelScope) => {
+      const key = JSON.stringify([
+        scope.environmentId,
+        scope.repositoryId,
+        scope.logicalRepositoryId,
+        scope.worktreePath,
+      ]);
+      return sessions.get(key) ?? createPanelSession(key, scope);
     },
     attach: (session: PanelSession) => {
       sessions.set(session.key, session);
@@ -55,10 +51,7 @@ export function createSessionCollection() {
     retain: (repositoryIds: readonly string[]) => {
       let changed = false;
       for (const [key, session] of sessions) {
-        if (
-          session.scope &&
-          !repositoryIds.includes(session.scope.repositoryId)
-        ) {
+        if (!repositoryIds.includes(session.scope.repositoryId)) {
           sessions.delete(key);
           changed = true;
         }

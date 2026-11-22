@@ -15,7 +15,6 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "#web/components/ui/resizable.tsx";
-import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
 import {
   FileListSection,
   openMenu,
@@ -27,6 +26,7 @@ import {
   LineCounts,
 } from "#web/features/file-diff/components/file-row-name.tsx";
 import type { ChangeTreeRow } from "#web/features/file-diff/file-tree.ts";
+import type { DiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { cn } from "#web/lib/utils.ts";
 
 export function CommitFiles({
