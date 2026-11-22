@@ -16,6 +16,7 @@ import {
 
 const maximumMetadataBytes = 2 * 1024 * 1024;
 const stampConcurrency = 16;
+const noCommitOption = /no-commit\s*=\s*true/;
 
 export interface GitDirectories {
   readonly gitDirectory: string;
@@ -52,11 +53,17 @@ const metadataNames = [
 ] as const;
 type Metadata = Record<(typeof metadataNames)[number], string | null>;
 
+interface OperationStamps {
+  readonly rebaseMerge: string | null;
+  readonly rebaseApply: string | null;
+  readonly sequencer: string | null;
+}
+
 const idleWorktree = {
   head: null,
   index: null,
-  unresolved: "",
-  status: "",
+  unresolved: [],
+  status: [],
   worktree: [],
 };
 
@@ -74,9 +81,7 @@ export async function readRepositoryOperation(
     candidate === "idle"
       ? idleWorktree
       : await inspectWorktree(git, worktreePath, directories.gitDirectory);
-  const unresolvedPaths = [
-    ...new Set(worktree.unresolved.split("\0").filter(Boolean)),
-  ].sort();
+  const unresolvedPaths = [...new Set(worktree.unresolved)].sort();
   const kind =
     candidate === "squash" && unresolvedPaths.length === 0 ? "idle" : candidate;
   const stopped = metadata["rebase-merge/amend"]?.trim() ?? null;
@@ -89,7 +94,7 @@ export async function readRepositoryOperation(
   const empty =
     unresolvedPaths.length === 0 &&
     (metadata.CHERRY_PICK_HEAD ?? metadata.REVERT_HEAD) !== null &&
-    !hasStagedChanges(worktree.status);
+    !hasChanges(worktree.status, "staged");
   const reason = empty
     ? (lockedReason(lock) ?? "Nothing to commit. Skip this commit.")
     : blockedReason(
@@ -143,11 +148,12 @@ async function readOperationMetadata(gitDirectory: string) {
   const metadata = Object.fromEntries(
     metadataNames.map((name, index) => [name, values[index] ?? null]),
   ) as Metadata;
-  const stamps = await Promise.all(
-    ["rebase-merge", "rebase-apply", "sequencer"].map((name) =>
-      operationFileStamp(gitDirectory, name),
-    ),
-  );
+  const [rebaseMerge, rebaseApply, sequencer] = await Promise.all([
+    operationFileStamp(gitDirectory, "rebase-merge"),
+    operationFileStamp(gitDirectory, "rebase-apply"),
+    operationFileStamp(gitDirectory, "sequencer"),
+  ]);
+  const stamps: OperationStamps = { rebaseMerge, rebaseApply, sequencer };
   return { values, metadata, stamps };
 }
 
@@ -189,10 +195,7 @@ async function inspectWorktree(
   const index = await operationFileStamp(gitDirectory, "index");
   const worktree = await stampFiles(
     worktreePath,
-    status
-      .split("\0")
-      .filter(Boolean)
-      .map((record) => record.slice(3)),
+    status.map((record) => record.slice(3)),
   );
   return { head, index, unresolved, status, worktree };
 }
@@ -214,11 +217,7 @@ function parseWorktreeStatus(output: string) {
     status.push(`${(fields[1] ?? "").replaceAll(".", " ")} ${path}`);
     if (fields[0] === "u") unresolved.push(path);
   }
-  return {
-    head,
-    unresolved: unresolved.join("\0"),
-    status: status.join("\0"),
-  };
+  return { head, unresolved, status };
 }
 
 async function newFilesLeftOut(
@@ -270,10 +269,10 @@ async function inspect(
 
 function identifyOperation(
   metadata: Metadata,
-  stamps: readonly (string | null)[],
+  stamps: OperationStamps,
 ): OperationKind {
-  if (stamps[0] !== null) return "rebase";
-  if (stamps[1] !== null) {
+  if (stamps.rebaseMerge !== null) return "rebase";
+  if (stamps.rebaseApply !== null) {
     if (metadata["rebase-apply/rebasing"] !== null) return "rebase";
     if (metadata["rebase-apply/applying"] !== null) return "am";
     return "unknown";
@@ -284,7 +283,7 @@ function identifyOperation(
   const todo = metadata["sequencer/todo"]?.trimStart();
   if (todo?.startsWith("pick ")) return "cherry-pick";
   if (todo?.startsWith("revert ")) return "revert";
-  if (stamps[2] !== null) return "unknown";
+  if (stamps.sequencer !== null) return "unknown";
   return metadata.SQUASH_MSG === null ? "idle" : "squash";
 }
 
@@ -299,7 +298,7 @@ function blockedReason(
   lock: string | null,
   unresolved: number,
   edit: boolean,
-  status: string,
+  status: readonly string[],
   leftovers: number,
 ) {
   const locked = lockedReason(lock);
@@ -308,10 +307,7 @@ function blockedReason(
     return `Resolve and stage ${unresolved} ${unresolved === 1 ? "file" : "files"} to continue.`;
   if (edit && (status.length > 0 || leftovers > 0))
     return "Commit or amend your changes before continuing the rebase.";
-  const unstaged = status
-    .split("\0")
-    .some((line) => line.length > 2 && line[1] !== " " && line[1] !== "?");
-  if (kind === "rebase" && unstaged)
+  if (kind === "rebase" && hasChanges(status, "unstaged"))
     return "Stage and amend your changes before continuing the rebase.";
   return null;
 }
@@ -319,7 +315,7 @@ function blockedReason(
 function availableActions(
   kind: OperationKind,
   metadata: Metadata,
-  stamps: readonly (string | null)[],
+  stamps: OperationStamps,
   edit: boolean,
   lock: string | null,
   reason: string | null,
@@ -333,10 +329,10 @@ function availableActions(
   const skippable =
     kind !== "merge" &&
     !edit &&
-    !/no-commit\s*=\s*true/.test(metadata["sequencer/opts"] ?? "") &&
+    !noCommitOption.test(metadata["sequencer/opts"] ?? "") &&
     (kind !== "rebase" ||
       metadata["rebase-merge/stopped-sha"] !== null ||
-      stamps[1] !== null);
+      stamps.rebaseApply !== null);
   return [
     { action: "continue", enabled: reason === null, reason },
     ...(skippable ? [{ action: "skip" as const, ...unlocked }] : []),
@@ -420,10 +416,9 @@ function operationProgress(metadata: Metadata) {
     : null;
 }
 
-function hasStagedChanges(status: string) {
-  return status
-    .split("\0")
-    .some((line) => line.length > 2 && line[0] !== " " && line[0] !== "?");
+function hasChanges(status: readonly string[], side: "staged" | "unstaged") {
+  const column = side === "staged" ? 0 : 1;
+  return status.some((line) => line[column] !== " ");
 }
 
 async function sequenceProgress(
@@ -440,7 +435,7 @@ async function sequenceProgress(
     start === undefined ||
     head === null ||
     remaining === 0 ||
-    /no-commit\s*=\s*true/.test(metadata["sequencer/opts"] ?? "")
+    noCommitOption.test(metadata["sequencer/opts"] ?? "")
   )
     return null;
   const output = await inspect(git, worktreePath, [
@@ -456,22 +451,29 @@ async function sequenceProgress(
 
 async function readOperationFile(directory: string, name: string) {
   const path = join(directory, name);
-  try {
-    if ((await stat(path)).size <= maximumMetadataBytes)
-      return await readFile(path, "utf8");
-  } catch (error) {
-    if (isMissing(error)) return null;
-  }
-  throw inspectionFailed(`Could not read Git metadata: ${name}.`);
+  const detail = `Could not read Git metadata: ${name}.`;
+  const info = await unlessMissing(stat(path), detail);
+  if (info === null) return null;
+  if (info.size > maximumMetadataBytes) throw inspectionFailed(detail);
+  return unlessMissing(readFile(path, "utf8"), detail);
 }
 
 async function operationFileStamp(directory: string, name: string) {
+  const info = await unlessMissing(
+    lstat(join(directory, name), { bigint: true }),
+    `Could not inspect Git metadata: ${name}.`,
+  );
+  return info === null
+    ? null
+    : `${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
+}
+
+async function unlessMissing<T>(read: Promise<T>, detail: string) {
   try {
-    const info = await lstat(join(directory, name), { bigint: true });
-    return `${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
+    return await read;
   } catch (error) {
     if (isMissing(error)) return null;
-    throw inspectionFailed(`Could not inspect Git metadata: ${name}.`);
+    throw inspectionFailed(detail);
   }
 }
 
