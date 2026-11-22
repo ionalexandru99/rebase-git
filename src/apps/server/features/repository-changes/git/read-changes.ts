@@ -28,49 +28,38 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
   return Effect.gen(function* () {
     const directory = scope.worktreePath;
     const { head, indexPath } = yield* readHeadAndIndexPath(git, directory);
-    if (scope.amend && head === null)
-      return yield* Effect.fail(
-        changesFailed("Unsupported", "There is no commit to amend."),
-      );
     const base = yield* comparisonBase(git, directory, head, scope.amend);
-    const [status, unstagedLines, stagedDiff, index, message] =
-      yield* Effect.all(
-        [
-          runRepositoryGit(git, directory, [
-            "status",
-            "--porcelain=v1",
-            "--no-renames",
-            "-z",
-            "--untracked-files=all",
-          ]),
-          runRepositoryGit(git, directory, [
-            "diff",
-            "--numstat",
-            "--no-renames",
-            "-z",
-          ]),
-          runRepositoryGitOutput(git, directory, [
-            "diff",
-            "--cached",
-            "--find-renames",
-            `-l${renameLimit}`,
-            "--raw",
-            "--numstat",
-            "-z",
-            base,
-          ]),
-          indexIdentity(indexPath),
-          head === null
-            ? Effect.succeed("")
-            : runRepositoryGit(git, directory, [
-                "log",
-                "-1",
-                "--format=%B",
-                head,
-              ]),
-        ],
-        { concurrency: 5 },
-      );
+    const [status, stagedDiff, index, message] = yield* Effect.all(
+      [
+        runRepositoryGit(git, directory, [
+          "status",
+          "--porcelain=v1",
+          "--no-renames",
+          "-z",
+          "--untracked-files=all",
+        ]),
+        runRepositoryGitOutput(git, directory, [
+          "diff",
+          "--cached",
+          "--find-renames",
+          `-l${renameLimit}`,
+          "--raw",
+          "--numstat",
+          "-z",
+          base,
+        ]),
+        indexIdentity(indexPath),
+        head === null
+          ? Effect.succeed("")
+          : runRepositoryGit(git, directory, [
+              "log",
+              "-1",
+              "--format=%B",
+              head,
+            ]),
+      ],
+      { concurrency: 4 },
+    );
     const records = status
       .split("\0")
       .filter((record) => record.length > 0)
@@ -79,9 +68,22 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
     const untracked = records.flatMap(({ xy, path }) =>
       xy === "??" ? [path] : [],
     );
-    const untrackedLines = yield* worktreeLineCounts(
-      directory,
-      untracked.slice(0, countedUntrackedLimit),
+    const [unstagedLines, untrackedLines] = yield* Effect.all(
+      [
+        records.some(({ xy }) => xy !== "??")
+          ? runRepositoryGit(git, directory, [
+              "diff",
+              "--numstat",
+              "--no-renames",
+              "-z",
+            ])
+          : Effect.succeed(""),
+        worktreeLineCounts(
+          directory,
+          untracked.slice(0, countedUntrackedLimit),
+        ),
+      ],
+      { concurrency: 2 },
     );
     const counted = new Map([
       ...lineCounts(unstagedLines),
@@ -134,6 +136,47 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
   });
 }
 
+export function readComparisonBase(git: GitCommandRunner, scope: ChangesScope) {
+  return Effect.gen(function* () {
+    const directory = scope.worktreePath;
+    const head = (yield* runRepositoryGit(
+      git,
+      directory,
+      ["rev-parse", "--verify", "--quiet", "HEAD"],
+      { exitCodes: [0, 1] },
+    )).trim();
+    return yield* comparisonBase(
+      git,
+      directory,
+      head === "" ? null : head,
+      scope.amend,
+    );
+  });
+}
+
+export function readStagedPreviousPath(
+  git: GitCommandRunner,
+  directory: string,
+  base: string,
+  path: string,
+) {
+  return runRepositoryGit(git, directory, [
+    "diff",
+    "--cached",
+    "--find-renames",
+    `-l${renameLimit}`,
+    "--raw",
+    "-z",
+    base,
+  ]).pipe(
+    Effect.map(
+      (output) =>
+        stagedFiles(output).find((file) => file.path === path)?.previousPath ??
+        null,
+    ),
+  );
+}
+
 function readHeadAndIndexPath(git: GitCommandRunner, directory: string) {
   return runRepositoryGit(
     git,
@@ -177,6 +220,10 @@ function comparisonBase(
   amend: boolean,
 ) {
   return Effect.gen(function* () {
+    if (amend && head === null)
+      return yield* Effect.fail(
+        changesFailed("Unsupported", "There is no commit to amend."),
+      );
     if (head !== null && !amend) return head;
     if (head !== null) {
       const parents = (yield* runRepositoryGit(git, directory, [

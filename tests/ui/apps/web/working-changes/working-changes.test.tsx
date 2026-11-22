@@ -817,6 +817,21 @@ describe("working changes", () => {
       .element(page.getByRole("textbox", { name: "Commit subject" }))
       .toHaveValue("Unsent message");
   });
+  it("commits with Ctrl+Enter and shows subject length past 50 characters", async () => {
+    const f = await fixture();
+    const subject = page.getByRole("textbox", { name: "Commit subject" });
+    const longSubject =
+      "Speed up working changes diff clicks and local history search";
+    await subject.fill(longSubject);
+    await expect
+      .element(page.getByText(`${longSubject.length}/72`, { exact: true }))
+      .toBeVisible();
+    (subject.element() as HTMLInputElement).focus();
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
+    await expect.poll(() => f.commits).toHaveLength(1);
+    expect(f.commits[0]?.message).toBe(longSubject);
+  });
+
   it("says when this browser cannot keep the commit draft", async () => {
     const transaction = vi
       .spyOn(IDBDatabase.prototype, "transaction")

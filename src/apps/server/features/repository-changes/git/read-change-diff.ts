@@ -86,24 +86,74 @@ function cleanFileContent(
   path: string,
   content: Buffer,
 ) {
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const objectDirectory = yield* scratchDirectory;
-      const oid = (yield* runRepositoryGit(
+  return Effect.gen(function* () {
+    if (
+      !content.includes(13) &&
+      !(yield* needsCleanFilter(git, index, directory, path))
+    )
+      return content;
+    return yield* Effect.scoped(
+      Effect.gen(function* () {
+        const objectDirectory = yield* scratchDirectory;
+        const oid = (yield* runRepositoryGit(
+          git,
+          directory,
+          ["hash-object", "-w", `--path=${path}`, "--stdin"],
+          { ...index, input: content.toString("utf8"), objectDirectory },
+        )).trim();
+        return Buffer.from(
+          yield* runRepositoryGit(git, directory, ["cat-file", "blob", oid], {
+            ...index,
+            objectDirectory,
+            outputEncoding: "base64",
+            maxOutputBytes: diffByteLimit,
+          }),
+          "base64",
+        );
+      }),
+    );
+  });
+}
+
+const inactiveSafeCrlfValues = new Set(["false", "0", "no", "off", "warn"]);
+
+function needsCleanFilter(
+  git: GitCommandRunner,
+  index: GitCommandOptions,
+  directory: string,
+  path: string,
+) {
+  return Effect.all(
+    [
+      runRepositoryGit(
         git,
         directory,
-        ["hash-object", "-w", `--path=${path}`, "--stdin"],
-        { ...index, input: content.toString("utf8"), objectDirectory },
-      )).trim();
-      return Buffer.from(
-        yield* runRepositoryGit(git, directory, ["cat-file", "blob", oid], {
-          ...index,
-          objectDirectory,
-          outputEncoding: "base64",
-          maxOutputBytes: diffByteLimit,
-        }),
-        "base64",
-      );
+        ["check-attr", "-z", "--all", "--", path],
+        index,
+      ),
+      runRepositoryGit(
+        git,
+        directory,
+        ["config", "--default", "false", "--get", "core.safecrlf"],
+        index,
+      ),
+    ],
+    { concurrency: 2 },
+  ).pipe(
+    Effect.map(([attributes, safeCrlf]) => {
+      if (!inactiveSafeCrlfValues.has(safeCrlf.trim().toLowerCase()))
+        return true;
+      const fields = attributes.split("\0");
+      for (let i = 1; i < fields.length; i += 3) {
+        const attribute = fields[i];
+        if (
+          attribute === "filter" ||
+          attribute === "ident" ||
+          attribute === "working-tree-encoding"
+        )
+          return true;
+      }
+      return false;
     }),
   );
 }

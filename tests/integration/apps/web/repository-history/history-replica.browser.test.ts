@@ -76,6 +76,50 @@ describe("history replica in browser storage", () => {
     expect(reopened.requests).toEqual([]);
   });
 
+  it("filters history search by author: and ref: prefixes", async () => {
+    const f = fixture();
+    const alexCommit = {
+      ...historyCommit("c2", ["c1"], 2, "Fix diff rendering"),
+      author: {
+        name: "Alex Ion",
+        email: "alex@example.test",
+        timestampSeconds: 2,
+        timezoneOffsetMinutes: 0,
+      },
+    };
+    const jamieCommit = {
+      ...historyCommit("c1", [], 1, "Fix diff rendering"),
+      author: {
+        name: "Jamie Lee",
+        email: "jamie@example.test",
+        timestampSeconds: 1,
+        timezoneOffsetMinutes: 0,
+      },
+    };
+    await f.synchronize(
+      tips(
+        ["c2", "c1"],
+        [
+          { name: "main", oid: "c2", type: "branch" },
+          { name: "feature/perf", oid: "c1", type: "branch" },
+        ],
+      ),
+      [alexCommit, jamieCommit],
+    );
+
+    const byAuthor = await f.replica.search(
+      { text: "author:alex diff", limit: 20 },
+      new AbortController().signal,
+    );
+    expect(byAuthor.commits.map(({ oid }) => oid)).toEqual(["c2"]);
+
+    const byRef = await f.replica.search(
+      { text: "ref:perf fix", limit: 20 },
+      new AbortController().signal,
+    );
+    expect(byRef.commits.map(({ oid }) => oid)).toEqual(["c1"]);
+  });
+
   it("clears the stored history and pauses synchronization until rebuilt", async () => {
     const f = fixture();
     await f.synchronize(tips(["c1"]), [historyCommit("c1", [], 1)]);

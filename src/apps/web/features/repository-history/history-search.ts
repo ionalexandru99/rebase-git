@@ -6,7 +6,21 @@ import { readCommits } from "#web/features/repository-history/history-database.t
 import type { HistoryGraph } from "#web/features/repository-history/history-graph.ts";
 
 const maximumScannedCommits = 4_096;
-const chunkSize = 256;
+const chunkSize = 1_024;
+const maximumCachedCommits = 16_384;
+
+interface CachedSearchCommit {
+  readonly commit: RepositoryCommit;
+  readonly oid: string;
+  readonly subject: string;
+  readonly authorName: string;
+  readonly authorEmail: string;
+}
+
+const searchCache = new WeakMap<
+  HistoryGraph,
+  Map<number, CachedSearchCommit>
+>();
 
 export async function searchHistory(
   repository: number,
@@ -27,29 +41,48 @@ export async function searchHistory(
   )
     throw new Error("History search query exceeds its limits");
   const after = decodeCursor(repository, query.text, query.cursor);
-  const matches = matchingHistoryMetadata(query.text, refTargets);
+  const matcher = createSearchMatcher(query.text, refTargets);
   const commits: RepositoryCommit[] = [];
-  if (normalizeHistorySearch(query.text) === "") return { commits };
+  if (matcher === undefined) return { commits };
   const newest = graph.newest();
   let next = resumePosition(graph, newest, after);
   const end = Math.min(newest.length, next + maximumScannedCommits);
+  let cache = searchCache.get(graph);
+  if (cache === undefined) {
+    cache = new Map();
+    searchCache.set(graph, cache);
+  }
   while (next < end && commits.length < query.limit) {
     signal.throwIfAborted();
-    const oids = Array.from(
-      newest.subarray(next, Math.min(end, next + chunkSize)),
-      (id) => graph.oid(id),
-    );
-    const chunk = new Map(
-      (await readCommits(repository, oids)).map((commit) => [
-        commit.oid,
-        commit,
-      ]),
-    );
-    signal.throwIfAborted();
-    for (const oid of oids) {
+    const slice = newest.subarray(next, Math.min(end, next + chunkSize));
+    const missingOids: string[] = [];
+    const missingIds: number[] = [];
+    for (let i = 0; i < slice.length; i += 1) {
+      const id = slice[i] as number;
+      if (!cache.has(id)) {
+        missingIds.push(id);
+        missingOids.push(graph.oid(id));
+      }
+    }
+    let fetched: Map<string, CachedSearchCommit> | undefined;
+    if (missingOids.length > 0) {
+      const loaded = await readCommits(repository, missingOids);
+      signal.throwIfAborted();
+      fetched = new Map();
+      for (const commit of loaded)
+        fetched.set(commit.oid, toCachedEntry(commit));
+      for (let i = 0; i < missingIds.length; i += 1) {
+        if (cache.size >= maximumCachedCommits) break;
+        const id = missingIds[i] as number;
+        const entry = fetched.get(missingOids[i] as string);
+        if (entry !== undefined) cache.set(id, entry);
+      }
+    }
+    for (let i = 0; i < slice.length; i += 1) {
       next += 1;
-      const commit = chunk.get(oid);
-      if (commit !== undefined && matches(commit)) commits.push(commit);
+      const id = slice[i] as number;
+      const entry = cache.get(id) ?? fetched?.get(graph.oid(id));
+      if (entry !== undefined && matcher(entry)) commits.push(entry.commit);
       if (commits.length === query.limit) break;
     }
   }
@@ -65,27 +98,74 @@ export async function searchHistory(
     : { commits };
 }
 
-export function matchingHistoryMetadata(
+interface SearchToken {
+  readonly kind: "any" | "author" | "ref";
+  readonly value: string;
+}
+
+function toCachedEntry(commit: RepositoryCommit): CachedSearchCommit {
+  return {
+    commit,
+    oid: commit.oid.toLowerCase(),
+    subject: commit.subject.toLowerCase(),
+    authorName: commit.author.name.toLowerCase(),
+    authorEmail: commit.author.email.toLowerCase(),
+  };
+}
+
+function parseSearchTokens(text: string): readonly SearchToken[] {
+  const words = normalizeHistorySearch(text).split(" ").filter(Boolean);
+  const tokens: SearchToken[] = [];
+  for (const word of words) {
+    if (word.startsWith("author:") && word.length > "author:".length) {
+      tokens.push({ kind: "author", value: word.slice("author:".length) });
+    } else if (word.startsWith("ref:") && word.length > "ref:".length) {
+      tokens.push({ kind: "ref", value: word.slice("ref:".length) });
+    } else {
+      tokens.push({ kind: "any", value: word });
+    }
+  }
+  return tokens;
+}
+
+function createSearchMatcher(
   text: string,
   refs: readonly RepositoryHistoryRefTarget[],
 ) {
-  const words = normalizeHistorySearch(text).split(" ").filter(Boolean);
+  const tokens = parseSearchTokens(text);
+  if (tokens.length === 0) return undefined;
   const refsByOid = new Map<string, string[]>();
   for (const ref of refs) {
     const names = refsByOid.get(ref.oid) ?? [];
     names.push(ref.name.toLowerCase());
     refsByOid.set(ref.oid, names);
   }
-  return (commit: RepositoryCommit) => {
-    if (words.length === 0) return false;
-    const fields = [
-      commit.oid,
-      commit.subject,
-      commit.author.name,
-      commit.author.email,
-      ...(refsByOid.get(commit.oid) ?? []),
-    ].map((field) => field.toLowerCase());
-    return words.every((word) => fields.some((field) => field.includes(word)));
+  return (entry: CachedSearchCommit) => {
+    const refNames = refsByOid.get(entry.commit.oid);
+    for (const token of tokens) {
+      if (token.kind === "author") {
+        if (
+          !entry.authorName.includes(token.value) &&
+          !entry.authorEmail.includes(token.value)
+        )
+          return false;
+      } else if (token.kind === "ref") {
+        if (
+          refNames === undefined ||
+          !refNames.some((name) => name.includes(token.value))
+        )
+          return false;
+      } else if (
+        !entry.subject.includes(token.value) &&
+        !entry.authorName.includes(token.value) &&
+        !entry.authorEmail.includes(token.value) &&
+        !entry.oid.includes(token.value) &&
+        !refNames?.some((name) => name.includes(token.value))
+      ) {
+        return false;
+      }
+    }
+    return true;
   };
 }
 

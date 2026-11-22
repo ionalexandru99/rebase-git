@@ -1,9 +1,13 @@
 import { IconCheck } from "@tabler/icons-react";
+import { type KeyboardEvent, useId } from "react";
 import { Button } from "#web/components/ui/button.tsx";
 import { Input } from "#web/components/ui/input.tsx";
 import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation-status.ts";
 import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
+
+const subjectSoftLimit = 50;
+const subjectHardLimit = 72;
 
 type CommitEditorView = Pick<
   WorkingChangesView,
@@ -42,21 +46,66 @@ export function CommitEditor({
       ? 0
       : (changes?.unstaged.length ?? 0)
     : staged;
+  const canCommit =
+    !disabled &&
+    !blocked &&
+    Boolean(draft.subject.trim()) &&
+    (amend || count > 0);
+  const subjectLength = draft.subject.length;
+  const showSubjectCount = subjectLength > subjectSoftLimit;
+  const subjectCountId = useId();
+  const onFieldKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (
+      event.nativeEvent.isComposing ||
+      event.key !== "Enter" ||
+      !(event.ctrlKey || event.metaKey)
+    )
+      return;
+    event.preventDefault();
+    if (canCommit) void view.commit();
+  };
   return (
     <section
       className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto border-border border-t bg-background p-3"
       aria-label="Commit editor"
     >
-      <Input
-        aria-label="Commit subject"
-        placeholder="Commit message"
-        value={draft.subject}
-        disabled={loading || busy}
-        maxLength={2000}
-        onChange={(event) =>
-          view.editDraft({ ...draft, subject: event.target.value })
-        }
-      />
+      <div className="relative">
+        <Input
+          aria-label="Commit subject"
+          aria-describedby={showSubjectCount ? subjectCountId : undefined}
+          placeholder="Commit message"
+          className={showSubjectCount ? "pr-13" : undefined}
+          value={draft.subject}
+          disabled={loading || busy}
+          maxLength={2000}
+          onKeyDown={onFieldKeyDown}
+          onChange={(event) =>
+            view.editDraft({ ...draft, subject: event.target.value })
+          }
+        />
+        <span
+          id={subjectCountId}
+          aria-live="polite"
+          aria-atomic="true"
+          className="sr-only"
+        >
+          {showSubjectCount
+            ? `Subject length ${subjectLength} of ${subjectHardLimit} characters`
+            : ""}
+        </span>
+        {showSubjectCount ? (
+          <span
+            aria-hidden="true"
+            className={`pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-meta tabular-nums ${
+              subjectLength > subjectHardLimit
+                ? "text-warning"
+                : "text-muted-foreground"
+            }`}
+          >
+            {subjectLength}/{subjectHardLimit}
+          </span>
+        ) : null}
+      </div>
       <textarea
         aria-label="Commit description"
         placeholder="Description"
@@ -64,6 +113,7 @@ export function CommitEditor({
         value={draft.description}
         disabled={loading || busy}
         maxLength={28000}
+        onKeyDown={onFieldKeyDown}
         onChange={(event) =>
           view.editDraft({ ...draft, description: event.target.value })
         }
@@ -91,12 +141,8 @@ export function CommitEditor({
       </label>
       <Button
         className="w-full shrink-0 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
-        disabled={
-          disabled ||
-          blocked ||
-          !draft.subject.trim() ||
-          (!amend && count === 0)
-        }
+        aria-keyshortcuts="Control+Enter Meta+Enter"
+        disabled={!canCommit}
         onClick={view.commit}
       >
         {busy
