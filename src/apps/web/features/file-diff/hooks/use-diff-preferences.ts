@@ -1,39 +1,32 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  type DiffPreferences,
-  defaultDiffPreferences,
-} from "#web/domain/file-diff/diff-preferences.contract.ts";
-import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import {
-  readDiffPreferences,
-  saveDiffPreferences,
-} from "#web/persistence/working-changes/working-changes-store.ts";
+import { useStoredStore } from "#web/platform/store/stored-store.ts";
+import { useStore } from "#web/platform/store/use-store.ts";
+
+export interface DiffPreferences {
+  readonly split: boolean;
+  readonly wrap: boolean;
+  readonly tree: boolean;
+}
+
+export const defaultDiffPreferences: DiffPreferences = {
+  split: false,
+  wrap: false,
+  tree: true,
+};
 
 export function useDiffPreferences() {
-  const [preferences, setPreferences] = useState(defaultDiffPreferences);
-  const errorToast = useErrorToast();
-  const chosen = useRef(false);
-  useEffect(() => {
-    let current = true;
-    readDiffPreferences().then(
-      (restored) => {
-        if (current && !chosen.current) setPreferences(restored);
-      },
-      () => undefined,
-    );
-    return () => {
-      current = false;
-    };
-  }, []);
-  const choose = (next: DiffPreferences) => {
-    chosen.current = true;
-    setPreferences(next);
-    saveDiffPreferences(next).catch(() =>
-      errorToast.show(
-        "saveDiffSettings",
-        "The setting applies until you reload Rebase.",
-      ),
-    );
+  const store = useStoredStore(
+    "rebase:diff-preferences:v1",
+    decodeDiffPreferences,
+  );
+  return [useStore(store), store.set] as const;
+}
+
+function decodeDiffPreferences(saved: unknown): DiffPreferences {
+  if (typeof saved !== "object" || saved === null)
+    return defaultDiffPreferences;
+  const read = (key: keyof DiffPreferences): boolean => {
+    const stored: unknown = Reflect.get(saved, key);
+    return typeof stored === "boolean" ? stored : defaultDiffPreferences[key];
   };
-  return [preferences, choose] as const;
+  return { split: read("split"), wrap: read("wrap"), tree: read("tree") };
 }

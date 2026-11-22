@@ -1,13 +1,13 @@
 import { type ReactNode, useRef } from "react";
 import type { CommitFile } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
-import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
 import { DiffContent } from "#web/features/file-diff/components/diff-content.tsx";
 import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls.tsx";
 import {
   contentUnchanged,
   createChangeDiffModel,
 } from "#web/features/file-diff/diff-model.ts";
+import type { DiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import type { DiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 
 export default function CommitDiff({

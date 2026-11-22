@@ -19,6 +19,7 @@ import {
 } from "#web/features/working-changes/hooks/use-change-selection.ts";
 import {
   amendDraftKey,
+  type CommitDraft,
   commitMessage,
   useCommitDraft,
 } from "#web/features/working-changes/hooks/use-commit-draft.ts";
@@ -33,13 +34,9 @@ import {
 } from "#web/features/working-changes/hooks/use-working-changes.ts";
 import { useIgnorePaths } from "#web/features/working-changes/ignore-paths.tsx";
 import type { ShowChangeInput } from "#web/features/working-changes/show-change.ts";
-import type { CommitDraft } from "#web/persistence/working-changes/working-changes-store.ts";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
 
 const headMovedMessage = "HEAD changed while you were amending.";
-
-const storageUnavailableMessage =
-  "Could not access changes preferences or the commit draft in this browser.";
 
 export interface WorkingChangesTarget {
   readonly repositoryId: string;
@@ -89,9 +86,13 @@ export function useWorkingChangesView({
     read.isFetching || actions.busy ? undefined : changes,
     headMoved,
   );
+  const amendKey =
+    amend.on && amend.head !== undefined
+      ? amendDraftKey(draftKey, amend.head)
+      : undefined;
   const draft = useCommitDraft(
-    currentDraftKey(draftKey, amend),
-    amend.on ? changes?.message : undefined,
+    amendKey ?? draftKey,
+    amendKey === undefined ? undefined : changes?.message,
   );
   const loading =
     changes === undefined || (amend.on && amend.head === undefined);
@@ -178,13 +179,11 @@ export function useWorkingChangesView({
     error:
       conflicts.problem ??
       (read.isError ? describeFailure(read.error) : null) ??
-      diff.error ??
-      (draft.unavailable ? storageUnavailableMessage : null),
+      diff.error,
     refresh: () => {
       void read.refetch();
       if (diff.error) diff.retry();
       conflicts.refresh();
-      draft.retry();
     },
     act,
     commit,
@@ -195,13 +194,6 @@ export function useWorkingChangesView({
 }
 
 export type WorkingChangesView = ReturnType<typeof useWorkingChangesView>;
-
-function currentDraftKey(draftKey: string, amend: Amend) {
-  if (!amend.on) return draftKey;
-  return amend.head === undefined
-    ? undefined
-    : amendDraftKey(draftKey, amend.head);
-}
 
 function viewing(selection: SelectedChange | null) {
   const viewed = viewedChange(selection);
