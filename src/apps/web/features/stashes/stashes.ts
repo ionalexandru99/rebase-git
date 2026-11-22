@@ -52,9 +52,12 @@ export function isStashInput(input: unknown): input is StashInput {
   );
 }
 
-export function useStashDraft() {
+export function useStashDraft(onDraft: () => void) {
   const [selection, setSelection] = useState<StashSelection>();
-  useListener(stashDrafts, setSelection);
+  useListener(stashDrafts, (next) => {
+    setSelection(next);
+    onDraft();
+  });
   const cancel = () => setSelection(undefined);
   return { selection, cancel };
 }

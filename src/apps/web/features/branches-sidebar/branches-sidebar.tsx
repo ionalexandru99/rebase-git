@@ -79,6 +79,7 @@ import { RefEditingStatus } from "#web/features/refs/ref-editing-status.tsx";
 import {
   commitStartPoint,
   type RefKind,
+  type StartPoint,
 } from "#web/features/refs/ref-kinds.ts";
 import { RefEditField } from "#web/features/refs/ref-name-field.tsx";
 import {
@@ -145,7 +146,6 @@ export function BranchesSidebar({
   const tagPush = useTagPush();
   const stashes = useStashes();
   const stashCommands = useStashCommands();
-  const stashDraft = useStashDraft();
   const settling = useCommand(BranchSettlingApi.settle);
   const errorToast = useErrorToast();
   const settle = (names: readonly string[], settled: boolean) =>
@@ -159,6 +159,9 @@ export function BranchesSidebar({
   const [expandedSections, setExpandedSections] = useState(
     defaultExpandedSections,
   );
+  const stashDraft = useStashDraft(() =>
+    setScope((current) => scopeShowing(current, stashesSectionId)),
+  );
   const [view, setView] = useBranchesSidebarView();
   const [expandedFolders, setExpandedFolders] = useState<
     ReadonlyMap<string, boolean>
@@ -169,12 +172,6 @@ export function BranchesSidebar({
   const treeRef = useRef<HTMLDivElement>(null);
   const refs = repositoryRefs.refs;
   const onSelectRef = activation.select;
-  const folderRepositoryRef = useRef(refs?.repositoryId);
-  useEffect(() => {
-    if (folderRepositoryRef.current === refs?.repositoryId) return;
-    folderRepositoryRef.current = refs?.repositoryId;
-    setExpandedFolders(new Map());
-  }, [refs?.repositoryId]);
   const rows = useMemo(
     () =>
       refs === undefined
@@ -214,29 +211,27 @@ export function BranchesSidebar({
     setActiveRowId(refRowId(sectionId, name));
     treeRef.current?.focus();
   };
-  const editing = useRefEditing({
+  const refEditing = useRefEditing({
     refs,
     focusTree,
     reveal,
     onCreated: (name) => onSelectRef({ _tag: "LocalBranch", name }),
     onRenamed: onBranchRenamed,
   });
+  const editing = {
+    ...refEditing,
+    draft: (kind: RefKind, startPoint: StartPoint) => {
+      const sectionId = refSectionId(kind);
+      setScope((current) => scopeShowing(current, sectionId));
+      setExpandedSections((current) =>
+        current.has(sectionId) ? current : toggleSection(current, sectionId),
+      );
+      refEditing.draft(kind, startPoint);
+    },
+  };
   const edit = editing.edit;
   const draftSectionId =
     edit?.kind === "create" ? refSectionId(edit.ref) : undefined;
-  useEffect(() => {
-    if (draftSectionId === undefined) return;
-    setScope((current) => scopeShowing(current, draftSectionId));
-    setExpandedSections((current) =>
-      current.has(draftSectionId)
-        ? current
-        : toggleSection(current, draftSectionId),
-    );
-  }, [draftSectionId]);
-  useEffect(() => {
-    if (stashDraft.selection !== undefined)
-      setScope((current) => scopeShowing(current, stashesSectionId));
-  }, [stashDraft.selection]);
   const detailsRowId = rows.find(
     (row) =>
       row.id === activeRowId && row.kind === "ref" && row.target._tag === "Tag",
