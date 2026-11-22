@@ -1,9 +1,4 @@
-import {
-  type ChildProcess,
-  type ChildProcessWithoutNullStreams,
-  execFile,
-  spawn,
-} from "node:child_process";
+import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
@@ -281,79 +276,115 @@ function rejectedByGit(exitCode: number, stderr: string): GitFailed {
   };
 }
 
-function runLocalGitCommand(command: GitCommand) {
-  return new Promise<GitCommandOutput>((resolve, reject) => {
-    let ended: GitFailed["reason"] | "Stopped" | undefined;
-    let finished = false;
-    const finish = (settle: () => void) => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(deadline);
-      command.signal?.removeEventListener("abort", abort);
-      settle();
-    };
-    const fail = (failure: GitFailed) => finish(() => reject(failure));
-    const end = (reason: GitFailed["reason"] | "Stopped") => {
-      if (ended !== undefined || !running(child)) return;
-      ended = reason;
-      killGit(child);
-    };
-    const abort = () => end("Failed");
-    if (command.signal?.aborted) {
-      reject(command.signal.reason);
-      return;
-    }
-    const child = startGit(command);
-    command.signal?.addEventListener("abort", abort, { once: true });
-    const deadline = setTimeout(
-      () => end("Timeout"),
-      command.timeoutMilliseconds ?? defaultTimeoutMilliseconds,
-    );
-    const limit = command.maxOutputBytes ?? defaultMaximumOutputBytes;
-    const output = collectOutput(child.stdout, limit, () =>
-      end("OutputTooLarge"),
-    );
-    const errorOutput = collectOutput(child.stderr, limit, () =>
-      end("OutputTooLarge"),
-    );
-    const { progress } = command;
-    if (progress !== undefined) {
+async function runLocalGitCommand(
+  command: GitCommand,
+): Promise<GitCommandOutput> {
+  command.signal?.throwIfAborted();
+  const limit = command.maxOutputBytes ?? defaultMaximumOutputBytes;
+  const git = startGit(command, limit);
+  const output = collectOutput(git.child.stdout, limit, () =>
+    git.stop("OutputTooLarge"),
+  );
+  const { progress } = command;
+  if (progress !== undefined) {
+    const decoder = new StringDecoder("utf8");
+    const stream =
+      command.progressStream === "stdout" ? git.child.stdout : git.child.stderr;
+    stream.on("data", (chunk: Buffer) => {
+      const text = decoder.write(chunk);
+      if (text !== "") progress(text);
+    });
+  }
+  const exitCode = await git.exit;
+  const stderr = git.stderr();
+  return {
+    exitCode,
+    stdout: Buffer.concat(output).toString(command.outputEncoding ?? "utf8"),
+    stderr:
+      progress === undefined || command.progressStream === "stdout"
+        ? stderr
+        : withoutProgress(stderr),
+  };
+}
+
+async function* streamLocalGitCommand(command: GitStreamCommand) {
+  command.signal?.throwIfAborted();
+  const git = startGit(command);
+  try {
+    try {
       const decoder = new StringDecoder("utf8");
-      const stream =
-        command.progressStream === "stdout" ? child.stdout : child.stderr;
-      stream.on("data", (chunk: Buffer) => {
+      for await (const chunk of git.child.stdout as AsyncIterable<Buffer>) {
         const text = decoder.write(chunk);
-        if (text !== "") progress(text);
-      });
+        if (text !== "") yield text;
+      }
+      const rest = decoder.end();
+      if (rest !== "") yield rest;
+    } catch {
+      git.stop("Failed");
+      await git.exit;
+      throw gitFailed("Failed");
     }
+    const exitCode = await git.exit;
+    if (exitCode !== 0) throw rejectedByGit(exitCode, git.stderr());
+  } finally {
+    git.stop("Failed");
+    await git.exit.catch(() => undefined);
+  }
+}
+
+function startGit(command: GitStreamCommand, outputLimit?: number) {
+  const child = spawn("git", gitArguments(command), {
+    detached,
+    env: gitEnvironment(command),
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  child.stdin.once("error", () => undefined);
+  child.stdin.end(command.input);
+  let ended: GitFailed["reason"] | "Stopped" | undefined;
+  const stop = (reason: GitFailed["reason"] | "Stopped") => {
+    if (ended !== undefined || !running(child)) return;
+    ended = reason;
+    killGit(child);
+  };
+  const abort = () => stop("Failed");
+  command.signal?.addEventListener("abort", abort, { once: true });
+  const deadline = setTimeout(
+    () => stop("Timeout"),
+    command.timeoutMilliseconds ?? defaultTimeoutMilliseconds,
+  );
+  const errorOutput = collectOutput(
+    child.stderr,
+    outputLimit ?? defaultMaximumOutputBytes,
+    () => {
+      if (outputLimit !== undefined) stop("OutputTooLarge");
+    },
+  );
+  const exit = new Promise<number>((resolve, reject) => {
     child.once("error", (cause: NodeJS.ErrnoException) =>
-      fail(gitFailed(cause.code === "ENOENT" ? "GitUnavailable" : "Failed")),
+      reject(gitFailed(cause.code === "ENOENT" ? "GitUnavailable" : "Failed")),
     );
     child.once("close", (code) => {
-      if (command.signal?.aborted)
-        return finish(() => reject(command.signal?.reason));
-      if (ended === "Stopped")
-        return fail(gitFailed("Failed", "Stopped from Diagnostics."));
-      if (ended !== undefined) return fail(gitFailed(ended));
-      if (code === null) return fail(gitFailed("Failed"));
-      const stdout = Buffer.concat(output).toString(
-        command.outputEncoding ?? "utf8",
-      );
-      const stderr = Buffer.concat(errorOutput).toString("utf8");
-      finish(() =>
-        resolve({
-          exitCode: code,
-          stdout,
-          stderr:
-            progress === undefined || command.progressStream === "stdout"
-              ? stderr
-              : withoutProgress(stderr),
-        }),
-      );
+      if (command.signal?.aborted) reject(command.signal.reason);
+      else if (ended === "Stopped")
+        reject(gitFailed("Failed", "Stopped from Diagnostics."));
+      else if (ended !== undefined) reject(gitFailed(ended));
+      else if (code === null) reject(gitFailed("Failed"));
+      else resolve(code);
     });
-    if (child.pid !== undefined)
-      command.onSpawn?.(child.pid, () => end("Stopped"));
+  }).finally(() => {
+    clearTimeout(deadline);
+    command.signal?.removeEventListener("abort", abort);
   });
+  exit.catch(() => undefined);
+  if (child.pid !== undefined)
+    command.onSpawn?.(child.pid, () => stop("Stopped"));
+  return {
+    child,
+    exit,
+    stop,
+    stderr: () => Buffer.concat(errorOutput).toString("utf8"),
+  };
 }
 
 function collectOutput(
@@ -369,18 +400,6 @@ function collectOutput(
     else chunks.push(chunk);
   });
   return chunks;
-}
-
-function startGit(command: GitStreamCommand) {
-  const child = spawn("git", gitArguments(command), {
-    detached,
-    env: gitEnvironment(command),
-    stdio: ["pipe", "pipe", "pipe"],
-    windowsHide: true,
-  });
-  child.stdin.once("error", () => undefined);
-  child.stdin.end(command.input);
-  return child;
 }
 
 function running(child: ChildProcess) {
@@ -432,65 +451,6 @@ function withoutProgress(stderr: string) {
 function isProgressLine(segment: string) {
   const line = segment.replace(/^remote: /, "").trimEnd();
   return progressLines.some((pattern) => pattern.test(line));
-}
-
-async function* streamLocalGitCommand(command: GitStreamCommand) {
-  command.signal?.throwIfAborted();
-  const child = startGit(command);
-  const exit = watchGitExit(child);
-  const stop = () => {
-    if (running(child)) killGit(child);
-  };
-  if (child.pid !== undefined) command.onSpawn?.(child.pid, stop);
-  let timedOut = false;
-  const deadline = setTimeout(() => {
-    timedOut = true;
-    stop();
-  }, command.timeoutMilliseconds ?? defaultTimeoutMilliseconds);
-  command.signal?.addEventListener("abort", stop, { once: true });
-  try {
-    const decoder = new StringDecoder("utf8");
-    for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
-      const text = decoder.write(chunk);
-      if (text !== "") yield text;
-    }
-    const rest = decoder.end();
-    if (rest !== "") yield rest;
-    await exit;
-    if (timedOut) throw gitFailed("Timeout");
-  } catch (error) {
-    if (timedOut) throw gitFailed("Timeout");
-    if (isGitFailed(error) || command.signal?.aborted) throw error;
-    throw gitFailed("Failed");
-  } finally {
-    clearTimeout(deadline);
-    command.signal?.removeEventListener("abort", stop);
-    if (running(child)) signalGit(child);
-  }
-}
-
-function watchGitExit(child: ChildProcessWithoutNullStreams) {
-  let stderr = "";
-  child.stderr.setEncoding("utf8");
-  child.stderr.on("data", (chunk: string) => {
-    if (stderr.length < defaultMaximumOutputBytes) {
-      stderr += chunk.slice(0, defaultMaximumOutputBytes - stderr.length);
-    }
-  });
-  const exit = new Promise<void>((resolve, reject) => {
-    child.once("error", (cause: NodeJS.ErrnoException) =>
-      reject(gitFailed(cause.code === "ENOENT" ? "GitUnavailable" : "Failed")),
-    );
-    child.once("close", (code) => {
-      if (code === 0) resolve();
-      else
-        reject(
-          code === null ? gitFailed("Failed") : rejectedByGit(code, stderr),
-        );
-    });
-  });
-  exit.catch(() => undefined);
-  return exit;
 }
 
 function gitArguments(command: GitCommand) {

@@ -12,6 +12,12 @@ const testIdentity = [
   "user.email=rebase@example.test",
 ];
 
+export const gitWaitingForever = [
+  "-c",
+  'alias.wait-forever=!node -e "console.log(process.pid); setInterval(() => {}, 1000)"',
+  "wait-forever",
+];
+
 export async function git(path: string, ...arguments_: string[]) {
   const { stdout } = await execute("git", [
     "-C",

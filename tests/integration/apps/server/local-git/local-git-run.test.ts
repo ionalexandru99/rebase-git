@@ -3,15 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
-import { createRepository } from "#tests-support/git.ts";
+import { createRepository, gitWaitingForever } from "#tests-support/git.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const git = createLocalGitCommandRunner();
-const waitForever = [
-  "-c",
-  "alias.wait-forever=!node -e \"console.log('started'); setInterval(() => {}, 1000)\"",
-  "wait-forever",
-];
 let directory = "";
 
 beforeAll(async () => {
@@ -46,7 +41,7 @@ it("fails instead of returning cut-off output when Git prints more than allowed"
 it("stops Git and everything it started when the deadline passes", async () => {
   await expect(
     git.run({
-      arguments: waitForever,
+      arguments: gitWaitingForever,
       directory,
       timeoutMilliseconds: 1_000,
     }),
@@ -57,7 +52,7 @@ it("reports a run stopped from Diagnostics", async () => {
   let stop = () => {};
   await expect(
     git.run({
-      arguments: waitForever,
+      arguments: gitWaitingForever,
       directory,
       onSpawn: (_pid, stopRun) => {
         stop = stopRun;
