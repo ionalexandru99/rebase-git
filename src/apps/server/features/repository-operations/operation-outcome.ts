@@ -11,11 +11,10 @@ import {
   type GitCommandRunner,
   type GitFailed,
   isGitFailed,
-  isIdentityMissing,
   runRepositoryGit,
   runRepositoryGitOutput,
-  signingRejection,
 } from "#server/adapters/local-git/git-commands.ts";
+import { rejectionFromGit } from "#server/repository/git-rejection.ts";
 
 export function started(
   outcome: OperationStarted["outcome"],
@@ -56,13 +55,8 @@ export function requireGitSuccess(output: GitCommandOutput) {
     output.stdout ||
     "Git rejected the action. Check the worktree and configured hooks.";
   if (isGitLocked(detail)) throw repositoryRejected("Busy", detail);
-  if (isIdentityMissing(detail))
-    throw repositoryRejected(
-      "IdentityMissing",
-      "Add your name and email to commit.",
-    );
-  const signing = signingRejection(detail);
-  if (signing !== undefined) throw signing;
+  const rejection = rejectionFromGit(detail);
+  if (rejection.reason !== "GitFailed") throw rejection;
   if (/would be overwritten by (?:merge|checkout)/i.test(detail))
     throw {
       ...operationError("WouldOverwrite", detail),

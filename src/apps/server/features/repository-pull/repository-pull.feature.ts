@@ -27,10 +27,7 @@ import {
   acquireRepositoryFetch,
 } from "#server/features/repository-pull/repository-fetch.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
-import {
-  canonicalizeWorktrees,
-  readWorktrees,
-} from "#server/repository/repository-access.ts";
+import { readWorktrees } from "#server/repository/repository-access.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
 export function acquireRepositoryPullFeature(
@@ -132,9 +129,7 @@ function pullInCheckout(
 }
 
 async function findCheckout(git: GitCommandRunner, command: PullBranch) {
-  const worktrees = await canonicalizeWorktrees(
-    await readWorktrees(git, command.worktreePath),
-  );
+  const worktrees = await readWorktrees(git, command.worktreePath);
   return worktrees.find((worktree) => worktree.head.branch === command.branch)
     ?.path;
 }

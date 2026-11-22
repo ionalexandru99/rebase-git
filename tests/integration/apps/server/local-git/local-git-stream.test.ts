@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
-import { createRepository, fastImport } from "#tests-support/git.ts";
+import {
+  createRepository,
+  fastImport,
+  gitWaitingForever,
+} from "#tests-support/git.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const git = createLocalGitCommandRunner();
@@ -52,17 +56,18 @@ it("fails with a timeout when the command outlives its deadline", async () => {
   await expect(consume()).rejects.toMatchObject({ reason: "Timeout" });
 });
 
-it("stops Git when the consumer finishes early", async () => {
-  const chunks: string[] = [];
+it("stops Git and everything it started when the consumer finishes early", async () => {
+  let pid = 0;
   for await (const chunk of git.stream({
-    arguments: ["log", "--format=%H %s", "--all"],
+    arguments: gitWaitingForever,
     directory,
   })) {
-    chunks.push(chunk);
+    pid = Number(chunk.trim());
     break;
   }
 
-  expect(chunks).toHaveLength(1);
+  expect(pid).toBeGreaterThan(0);
+  await expect.poll(() => isRunning(pid)).toBe(false);
 });
 
 async function createHistory(directory: string) {
@@ -86,4 +91,13 @@ async function collect(chunks: AsyncIterable<string>) {
   const collected: string[] = [];
   for await (const chunk of chunks) collected.push(chunk);
   return collected;
+}
+
+function isRunning(pid: number) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }

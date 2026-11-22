@@ -6,6 +6,7 @@ import type {
 } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
+import { isObjectId } from "#contracts/git/git-values.contract.ts";
 import {
   type ChangedLines,
   changesFailed,
@@ -18,7 +19,6 @@ import {
 import {
   type GitCommandRunner,
   gitFailed,
-  isGitObjectId,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
@@ -143,7 +143,7 @@ async function readMetadata(git: GitCommandRunner, command: InspectCommit) {
     ![
       command.oid,
       ...(command.parentOid === undefined ? [] : [command.parentOid]),
-    ].every((oid) => isGitObjectId(oid))
+    ].every((oid) => isObjectId(oid))
   )
     throw changesFailed("Unsupported", "Select a full commit identity.");
   const output = await runRepositoryGit(

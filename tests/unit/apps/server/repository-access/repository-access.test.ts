@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
-import { createRepositoryAccess } from "#server/repository/repository-access.ts";
+import {
+  createRepositoryAccess,
+  createWorktreeLocations,
+} from "#server/repository/repository-access.ts";
 import { catalogEntry } from "#tests-support/fixtures.ts";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -51,10 +54,14 @@ function fakeAccess(locations: Record<string, readonly string[]>) {
   const git: GitCommandRunner = {
     stream: async function* () {},
     run: async (command) => {
-      const location = locations[command.directory];
-      return location === undefined
+      const [root, commonDirectory] = locations[command.directory] ?? [];
+      return root === undefined
         ? { exitCode: 128, stderr: "not a git repository", stdout: "" }
-        : { exitCode: 0, stderr: "", stdout: `${location.join("\n")}\n` };
+        : {
+            exitCode: 0,
+            stderr: "",
+            stdout: `${root}\n${commonDirectory}\n${commonDirectory}\n`,
+          };
     },
   };
   return createRepositoryAccess(
@@ -62,5 +69,6 @@ function fakeAccess(locations: Record<string, readonly string[]>) {
       find: async (id) => catalogEntry({ id, path: repositoryPath }),
     },
     git,
+    createWorktreeLocations(git),
   );
 }

@@ -7,18 +7,14 @@ import type {
   RouteSuccess,
   StreamValue,
 } from "#contracts/environment-connection/environment-route.contract.ts";
-import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import {
   type GitCommandRunner,
   isGitFailed,
-  isIdentityMissing,
-  isLfsMissing,
-  lfsMissing,
-  signingRejection,
 } from "#server/adapters/local-git/git-commands.ts";
 import type { CommandProgress } from "#server/features/command-progress/command-progress.ts";
 import type { GitLfs } from "#server/features/repository-lfs/git-lfs.ts";
+import { rejectionFromGit } from "#server/repository/git-rejection.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 import type {
   RepositoryCoordination,
@@ -204,14 +200,6 @@ async function rejectingGitFailures<Value>(run: () => Promise<Value>) {
     return await run();
   } catch (error) {
     if (!isGitFailed(error)) throw error;
-    throw isIdentityMissing(error.detail)
-      ? repositoryRejected(
-          "IdentityMissing",
-          "Add your name and email to commit.",
-        )
-      : isLfsMissing(error.detail)
-        ? lfsMissing()
-        : (signingRejection(error.detail) ??
-          repositoryRejected("GitFailed", error.detail));
+    throw rejectionFromGit(error.detail);
   }
 }

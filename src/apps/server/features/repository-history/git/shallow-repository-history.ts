@@ -1,8 +1,8 @@
 import { open } from "node:fs/promises";
+import { isObjectId } from "#contracts/git/git-values.contract.ts";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 import {
   type GitCommandRunner,
-  isGitObjectId,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import { historyFailed } from "#server/features/repository-history/git/history-failures.ts";
@@ -51,7 +51,7 @@ async function readShallowFile(shallowFile: string) {
       .trim()
       .split("\n")
       .filter(Boolean);
-    if (oids.length > 40_512 || oids.some((oid) => !isGitObjectId(oid)))
+    if (oids.length > 40_512 || oids.some((oid) => !isObjectId(oid)))
       throw new Error("Invalid shallow boundary");
     return [...new Set(oids)].sort();
   } finally {
@@ -88,7 +88,7 @@ export async function restoreShallowCommitParents(
     const separator = line.indexOf(" ");
     const field = line.slice(0, separator);
     const oid = line.slice(separator + 1);
-    if (separator < 0 || !isGitObjectId(oid)) continue;
+    if (separator < 0 || !isObjectId(oid)) continue;
     if (field === "commit") {
       parents = [];
       parentsByOid.set(oid, parents);

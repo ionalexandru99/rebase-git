@@ -85,7 +85,10 @@ import {
 } from "#server/persistence/environment-context.ts";
 import { environmentTable } from "#server/persistence/environment-state.schema.ts";
 import { environmentPaths } from "#server/persistence/storage/environment-paths.ts";
-import { createRepositoryAccess } from "#server/repository/repository-access.ts";
+import {
+  createRepositoryAccess,
+  createWorktreeLocations,
+} from "#server/repository/repository-access.ts";
 import { createRepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
 export interface EnvironmentServerOptions {
@@ -216,15 +219,16 @@ export function acquireEnvironment(home: string, runner: GitCommandRunner) {
         monitor,
       }),
     );
+    const locations = createWorktreeLocations(git);
     return {
-      access: createRepositoryAccess(catalog, git),
+      access: createRepositoryAccess(catalog, git, locations),
       activity,
       authorization: createEnvironmentAuthorization(context),
       avatarImages: createAvatarImages(),
       catalog,
       changes,
       context,
-      coordination: createRepositoryCoordination(git),
+      coordination: createRepositoryCoordination(git, locations),
       diagnostics: diagnostics.feature,
       events,
       git,

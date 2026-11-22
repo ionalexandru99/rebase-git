@@ -1,7 +1,4 @@
-import {
-  type RepositoryRejected,
-  repositoryRejected,
-} from "#contracts/git/git-failures.contract.ts";
+import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   RefMissing,
   RepositoryTag,
@@ -20,7 +17,6 @@ import {
   isGitFailed,
   isGitRejection,
   runRepositoryGit,
-  signingRejection,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
   isGitRejected,
@@ -28,6 +24,7 @@ import {
   refCommand,
   requireValidRefName,
 } from "#server/features/repository-refs/git/ref-git.ts";
+import { rejectionFromGit } from "#server/repository/git-rejection.ts";
 
 const pushCommand = { literalPathspecs: false, timeoutMilliseconds: 120_000 };
 
@@ -206,6 +203,5 @@ function tagRejected(reason: TagRejected["reason"]): TagRejected {
 function tagWriteFailed(error: GitFailed): TagRejected | RepositoryRejected {
   return isGitRejection(error) && /already exists/.test(error.detail)
     ? tagRejected("Exists")
-    : (signingRejection(error.detail) ??
-        repositoryRejected("GitFailed", error.detail));
+    : rejectionFromGit(error.detail);
 }

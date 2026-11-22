@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vite-plus/test";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
+import { createWorktreeLocations } from "#server/repository/repository-access.ts";
 import {
   createRepositoryCoordination,
   type RepositoryWritePolicy,
@@ -29,10 +30,17 @@ function coordinationRun() {
     stream: async function* () {},
     run: async () => {
       resolutions++;
-      return { exitCode: 0, stderr: "", stdout: `${tmpdir()}\n${tmpdir()}\n` };
+      return {
+        exitCode: 0,
+        stderr: "",
+        stdout: `${worktree}\n${tmpdir()}\n${tmpdir()}\n`,
+      };
     },
   };
-  const coordination = createRepositoryCoordination(git);
+  const coordination = createRepositoryCoordination(
+    git,
+    createWorktreeLocations(git),
+  );
   return (operation: () => Promise<void> = async () => {}) =>
     coordination.run(worktree, recoverPolicy, operation).catch(() => {});
 }
