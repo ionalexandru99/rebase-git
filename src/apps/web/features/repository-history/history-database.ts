@@ -9,7 +9,7 @@ const topologyStoreName = "topology";
 const recentTopologyStoreName = "recentTopology";
 const identityIndexName = "identity";
 const databaseName = "rebase-repository-history";
-const databaseVersion = 11;
+const databaseVersion = 10;
 const epochSize = 2 ** 32;
 
 export interface StoredRepository {
