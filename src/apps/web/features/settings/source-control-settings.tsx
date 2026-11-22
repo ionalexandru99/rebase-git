@@ -226,16 +226,6 @@ function HostRow({ host }: { readonly host: GitHostStatus }) {
       className={`size-4.5 ${descriptor.color}`}
     />
   );
-  if (host._tag === "ComingSoon")
-    return (
-      <SettingsRow
-        badge="Coming Soon"
-        description={`Support for ${descriptor.label} is coming soon.`}
-        dim
-        icon={icon}
-        title={descriptor.label}
-      />
-    );
   const signedIn =
     host._tag === "SignedIn" || (host._tag === "Token" && host.saved !== null);
   const enabled = setEnabled.running

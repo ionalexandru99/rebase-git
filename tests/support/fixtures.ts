@@ -304,9 +304,9 @@ export function sourceControlDiscovery({
     hosts: [
       github,
       gitlab,
-      { _tag: "ComingSoon", kind: "azure-devops" } as const,
+      { _tag: "Missing", kind: "azure-devops", enabled: true } as const,
       bitbucket,
-      { _tag: "ComingSoon", kind: "forgejo" } as const,
+      { _tag: "Missing", kind: "forgejo", enabled: true } as const,
     ],
   };
 }

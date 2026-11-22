@@ -52,7 +52,6 @@ export const GitStatus = z.discriminatedUnion("_tag", [
 export type GitStatus = z.infer<typeof GitStatus>;
 
 export const GitHostStatus = z.discriminatedUnion("_tag", [
-  z.object({ _tag: z.literal("ComingSoon"), kind: GitHostKind }),
   z.object({
     _tag: z.literal("Missing"),
     kind: GitHostKind,

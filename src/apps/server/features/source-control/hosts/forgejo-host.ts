@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
-import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
+import { remotePath } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
   type AvatarAuthor,
   avatarUrl,
@@ -138,19 +138,15 @@ function loginFor(
 }
 
 function forgejoRepository(remoteUrl: string): ForgejoRepository | undefined {
-  const location = remoteLocation(remoteUrl);
-  const parts = location?.path
-    .replace(/^\/+|\/+$/g, "")
-    .replace(/\.git$/, "")
-    .split("/");
-  const name = parts?.at(-1);
-  const owner = parts?.at(-2);
+  const remote = remotePath(remoteUrl);
+  const name = remote?.parts.at(-1);
+  const owner = remote?.parts.at(-2);
   const url = URL.parse(remoteUrl);
-  return location === undefined || location.host === "" || !owner || !name
+  return remote === undefined || remote.host === "" || !owner || !name
     ? undefined
     : {
-        id: `${location.host}/${owner}/${name}`.toLowerCase(),
-        host: location.host,
+        id: `${remote.host}/${owner}/${name}`.toLowerCase(),
+        host: remote.host,
         server:
           url?.protocol === "https:" || url?.protocol === "http:"
             ? url.host

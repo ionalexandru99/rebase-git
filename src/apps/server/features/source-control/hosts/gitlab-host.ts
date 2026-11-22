@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { HostRepositories } from "#contracts/source-control/source-control.contract.ts";
-import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
+import { remotePath } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
   avatarUrl,
   cloneableRepository,
@@ -9,17 +9,17 @@ import {
   foundAvatar,
   type GitHost,
   type GitHostAccount,
+  graphqlArguments,
   gravatarHosts,
   type HostedPullRequest,
   hostCommandOutput,
-  inBatches,
-  pageAnswer,
+  hostCommandText,
+  inAliasedBatches,
   pullRequest,
   readRepositoryPages,
   repositoriesPerPage,
   runHostCommand,
   signedInTool,
-  unavailable,
 } from "#server/features/source-control/git-host.ts";
 
 export interface GitLabCli {
@@ -49,10 +49,10 @@ export function createGitLabCli(): GitLabCli {
   const glab = (args: readonly string[]) =>
     runHostCommand("glab", args, { env });
   return {
-    version: async () => {
-      const { succeeded, stdout } = await glab(["--version"]);
-      return succeeded ? stdout.split("\n")[0]?.trim() || undefined : undefined;
-    },
+    version: async () =>
+      (await hostCommandText("glab", ["--version"], { env }))
+        ?.split("\n")[0]
+        ?.trim(),
     authStatus: async (hostname) => {
       if (hostname !== undefined)
         return (await glab(["auth", "status", "--hostname", hostname])).output;
@@ -61,16 +61,12 @@ export function createGitLabCli(): GitLabCli {
         ? (await glab(["auth", "status"])).output
         : output;
     },
-    protocol: async (hostname) => {
-      const { succeeded, stdout } = await glab([
-        "config",
-        "get",
-        "git_protocol",
-        "--host",
-        hostname,
-      ]);
-      return succeeded ? stdout.trim() || undefined : undefined;
-    },
+    protocol: (hostname) =>
+      hostCommandText(
+        "glab",
+        ["config", "get", "git_protocol", "--host", hostname],
+        { env },
+      ),
     repositories: (hostname, page) =>
       hostCommandOutput(
         "glab",
@@ -90,12 +86,7 @@ export function createGitLabCli(): GitLabCli {
           "graphql",
           "--hostname",
           hostname,
-          "-f",
-          `query=${query}`,
-          ...Object.entries(variables).flatMap(([name, value]) => [
-            "-f",
-            `${name}=${value}`,
-          ]),
+          ...graphqlArguments(query, variables),
         ],
         { env },
       ),
@@ -138,24 +129,19 @@ export function createGitLabHost(cli: GitLabCli): GitHost {
       return {
         id: project.id,
         pullRequests: (heads) =>
-          inBatches(heads, branchesPerRequest, async (batch) => {
-            const answers = decodeResponse(
-              await cli.graphql(
-                project.host,
-                mergeRequestsQuery(batch.length),
-                {
-                  fullPath: project.path,
-                  ...Object.fromEntries(
-                    batch.map((head, index) => [`b${index}`, head]),
-                  ),
-                },
-              ),
-            ).data.project;
-            if (answers === null) throw unavailable;
-            return batch.map((_, index) =>
-              headAnswer(answers[`b${index}`]?.nodes, project),
-            );
-          }),
+          inAliasedBatches(
+            heads,
+            { size: branchesPerRequest, perHead: mergeRequestsPerBranch },
+            async (aliases) =>
+              decodeResponse(
+                await cli.graphql(
+                  project.host,
+                  mergeRequestsQuery(Object.keys(aliases)),
+                  { fullPath: project.path, ...aliases },
+                ),
+              ).data.project,
+            (nodes) => mergeRequests(nodes, project),
+          ),
         pullRequest: async (number) => {
           try {
             const answer = decodeMergeRequestResponse(
@@ -238,25 +224,21 @@ function signedInAccounts(output: string): readonly GitHostAccount[] {
 }
 
 function gitlabProject(remoteUrl: string): GitLabProject | undefined {
-  const location = remoteLocation(remoteUrl);
-  const path = location?.path.replace(/^\/+|\/+$/g, "").replace(/\.git$/, "");
-  return location === undefined ||
-    location.host === "" ||
-    path === undefined ||
-    !path.includes("/")
-    ? undefined
-    : {
-        id: `${location.host}/${path}`.toLowerCase(),
-        host: location.host,
-        path,
-      };
+  const remote = remotePath(remoteUrl);
+  if (remote === undefined || remote.host === "" || remote.parts.length < 2)
+    return undefined;
+  const path = remote.parts.join("/");
+  return {
+    id: `${remote.host}/${path}`.toLowerCase(),
+    host: remote.host,
+    path,
+  };
 }
 
-function mergeRequestsQuery(branches: number) {
-  const indexes = Array.from({ length: branches }, (_, index) => index);
-  return `query($fullPath: ID!${indexes.map((index) => `, $b${index}: String!`).join("")}) {
+function mergeRequestsQuery(aliases: readonly string[]) {
+  return `query($fullPath: ID!${aliases.map((alias) => `, $${alias}: String!`).join("")}) {
   project(fullPath: $fullPath) {
-${indexes.map((index) => `    b${index}: mergeRequests(sourceBranches: [$b${index}], first: ${mergeRequestsPerBranch}, sort: CREATED_DESC) { nodes { ...mergeRequest } }`).join("\n")}
+${aliases.map((alias) => `    ${alias}: mergeRequests(sourceBranches: [$${alias}], first: ${mergeRequestsPerBranch}, sort: CREATED_DESC) { nodes { ...mergeRequest } }`).join("\n")}
   }
 }
 ${mergeRequestFragment}`;
@@ -308,19 +290,6 @@ const decodeMergeRequestResponse = decodeHostJson(
     }),
   }),
 );
-
-function headAnswer(
-  nodes: readonly MergeRequestNode[] | undefined,
-  project: GitLabProject,
-) {
-  return nodes === undefined
-    ? undefined
-    : pageAnswer(
-        nodes.length,
-        mergeRequestsPerBranch,
-        mergeRequests(nodes, project),
-      );
-}
 
 function mergeRequests(
   nodes: readonly MergeRequestNode[],

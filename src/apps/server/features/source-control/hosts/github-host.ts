@@ -1,24 +1,23 @@
 import { z } from "zod";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
-import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
+import { remotePath } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
   avatarUrl,
   cloneableRepository,
   decodeHostJson,
   foundAvatar,
   type GitHost,
+  graphqlArguments,
   type HostedPullRequest,
   hostCommandOutput,
-  inBatches,
-  pageAnswer,
+  hostCommandText,
+  inAliasedBatches,
   pullRequest,
   readRepositoryPages,
   repositoriesPerPage,
-  runHostCommand,
   sameEmail,
   signedInTool,
   singleAccount,
-  unavailable,
 } from "#server/features/source-control/git-host.ts";
 
 export interface GitHubCli {
@@ -37,19 +36,12 @@ const pullRequestsPerBranch = 10;
 const env = { GH_PROMPT_DISABLED: "1" };
 
 export function createGitHubCli(): GitHubCli {
-  const gh = async (args: readonly string[]) => {
-    const { succeeded, stdout } = await runHostCommand("gh", args, { env });
-    return succeeded ? stdout : undefined;
-  };
+  const gh = (args: readonly string[]) => hostCommandText("gh", args, { env });
   return {
-    version: async () =>
-      (await gh(["--version"]))?.split("\n")[0]?.trim() || undefined,
-    account: async () =>
-      (await gh(["api", "user", "--jq", ".login"]))?.trim() || undefined,
-    protocol: async () =>
-      (
-        await gh(["config", "get", "git_protocol", "--host", "github.com"])
-      )?.trim() || undefined,
+    version: async () => (await gh(["--version"]))?.split("\n")[0]?.trim(),
+    account: () => gh(["api", "user", "--jq", ".login"]),
+    protocol: () =>
+      gh(["config", "get", "git_protocol", "--host", "github.com"]),
     repositories: (page) =>
       hostCommandOutput(
         "gh",
@@ -62,16 +54,7 @@ export function createGitHubCli(): GitHubCli {
     graphql: (query, variables) =>
       hostCommandOutput(
         "gh",
-        [
-          "api",
-          "graphql",
-          "-f",
-          `query=${query}`,
-          ...Object.entries(variables).flatMap(([name, value]) => [
-            "-f",
-            `${name}=${value}`,
-          ]),
-        ],
+        ["api", "graphql", ...graphqlArguments(query, variables)],
         { env },
       ),
   };
@@ -116,21 +99,19 @@ export function createGitHubHost(cli: GitHubCli): GitHost {
         repository && {
           id: repository.id,
           pullRequests: (heads) =>
-            inBatches(heads, branchesPerRequest, async (batch) => {
-              const answers = decodeResponse(
-                await cli.graphql(pullRequestsQuery(batch.length), {
-                  owner: repository.owner,
-                  name: repository.name,
-                  ...Object.fromEntries(
-                    batch.map((head, index) => [`b${index}`, head]),
-                  ),
-                }),
-              ).data.repository;
-              if (answers === null) throw unavailable;
-              return batch.map((_, index) =>
-                headAnswer(answers[`b${index}`]?.nodes, repository.owner),
-              );
-            }),
+            inAliasedBatches(
+              heads,
+              { size: branchesPerRequest, perHead: pullRequestsPerBranch },
+              async (aliases) =>
+                decodeResponse(
+                  await cli.graphql(pullRequestsQuery(Object.keys(aliases)), {
+                    owner: repository.owner,
+                    name: repository.name,
+                    ...aliases,
+                  }),
+                ).data.repository,
+              (nodes) => pullRequests(nodes, repository.owner),
+            ),
           pullRequest: async (number) => {
             try {
               const answer = decodePullRequestResponse(
@@ -213,12 +194,9 @@ const decodeRepositoryPage = decodeHostJson(
 );
 
 function githubRepository(remoteUrl: string) {
-  const location = remoteLocation(remoteUrl);
-  if (location?.host !== "github.com") return undefined;
-  const [owner, name, ...rest] = location.path
-    .replace(/^\/+|\/+$/g, "")
-    .replace(/\.git$/, "")
-    .split("/");
+  const remote = remotePath(remoteUrl);
+  if (remote?.host !== "github.com") return undefined;
+  const [owner, name, ...rest] = remote.parts;
   return owner === undefined ||
     name === undefined ||
     rest.length > 0 ||
@@ -232,11 +210,10 @@ function isGitHubName(value: string) {
   return /^(?!\.{1,2}$)[\w.-]{1,100}$/.test(value);
 }
 
-function pullRequestsQuery(branches: number) {
-  const indexes = Array.from({ length: branches }, (_, index) => index);
-  return `query($owner: String!, $name: String!${indexes.map((index) => `, $b${index}: String!`).join("")}) {
+function pullRequestsQuery(aliases: readonly string[]) {
+  return `query($owner: String!, $name: String!${aliases.map((alias) => `, $${alias}: String!`).join("")}) {
   repository(owner: $owner, name: $name) {
-${indexes.map((index) => `    b${index}: pullRequests(headRefName: $b${index}, first: ${pullRequestsPerBranch}, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { ...pullRequest } }`).join("\n")}
+${aliases.map((alias) => `    ${alias}: pullRequests(headRefName: $${alias}, first: ${pullRequestsPerBranch}, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { ...pullRequest } }`).join("\n")}
   }
 }
 ${pullRequestFragment}`;
@@ -296,19 +273,6 @@ const decodePullRequestResponse = decodeHostJson(
     }),
   }),
 );
-
-function headAnswer(
-  nodes: readonly PullRequestNode[] | undefined,
-  owner: string,
-) {
-  return nodes === undefined
-    ? undefined
-    : pageAnswer(
-        nodes.length,
-        pullRequestsPerBranch,
-        pullRequests(nodes, owner),
-      );
-}
 
 function pullRequests(
   nodes: readonly PullRequestNode[],

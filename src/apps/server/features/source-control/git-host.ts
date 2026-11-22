@@ -68,7 +68,7 @@ export interface GitHost {
   readonly repository: (
     remoteUrl: string,
   ) => Promise<HostedRepository | undefined>;
-  readonly cloneable?: () => Promise<readonly HostRepositories[]>;
+  readonly cloneable: () => Promise<readonly HostRepositories[]>;
 }
 
 interface HostCommandResult {
@@ -175,6 +175,29 @@ export async function hostCommandOutput(
   return stdout;
 }
 
+export async function hostCommandText(
+  command: string,
+  args: readonly string[],
+  options?: Parameters<typeof runHostCommand>[2],
+) {
+  const { succeeded, stdout } = await runHostCommand(command, args, options);
+  return succeeded ? stdout.trim() || undefined : undefined;
+}
+
+export function graphqlArguments(
+  query: string,
+  variables: Readonly<Record<string, string>>,
+) {
+  return [
+    "-f",
+    `query=${query}`,
+    ...Object.entries(variables).flatMap(([name, value]) => [
+      "-f",
+      `${name}=${value}`,
+    ]),
+  ];
+}
+
 export async function hostGet(
   url: string,
   headers: Readonly<Record<string, string>>,
@@ -277,6 +300,17 @@ export function decodeHostJson<Schema extends z.ZodType>(schema: Schema) {
   };
 }
 
+export type HostJsonReader = <Schema extends z.ZodType>(
+  url: string,
+  schema: Schema,
+) => Promise<z.output<Schema>>;
+
+export function hostJsonReader(
+  get: (url: string) => Promise<string>,
+): HostJsonReader {
+  return async (url, schema) => decodeHostJson(schema)(await get(url));
+}
+
 export function isPullRequestsUnavailable(
   error: unknown,
 ): error is PullRequestsUnavailable {
@@ -349,6 +383,30 @@ export async function inBatches(
     return batch.map((head, index) => [head, answers[index]] as const);
   });
   return answeredHeads(entries.flat());
+}
+
+export function inAliasedBatches<Node>(
+  heads: readonly string[],
+  { size, perHead }: { readonly size: number; readonly perHead: number },
+  read: (
+    aliases: Readonly<Record<string, string>>,
+  ) => Promise<Readonly<
+    Record<string, { readonly nodes: readonly Node[] }>
+  > | null>,
+  found: (nodes: readonly Node[]) => readonly HostedPullRequest[],
+): Promise<PullRequestsByHead> {
+  return inBatches(heads, size, async (batch) => {
+    const answers = await read(
+      Object.fromEntries(batch.map((head, index) => [`b${index}`, head])),
+    );
+    if (answers === null) throw unavailable;
+    return batch.map((_, index) => {
+      const nodes = answers[`b${index}`]?.nodes;
+      return nodes === undefined
+        ? undefined
+        : pageAnswer(nodes.length, perHead, found(nodes));
+    });
+  });
 }
 
 export async function mapConcurrently<A, B>(

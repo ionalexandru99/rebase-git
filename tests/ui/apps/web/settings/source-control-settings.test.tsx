@@ -62,9 +62,6 @@ describe("source control settings", () => {
     await expect
       .element(page.getByText(/on gitlab\.com, .* on git\.example\.com$/))
       .toBeVisible();
-    await expect
-      .element(page.getByText("Support for Forgejo / Gitea is coming soon."))
-      .toBeVisible();
     const github = page.getByRole("switch", { name: "Use GitHub" });
     await expect.element(github).toBeChecked();
 

@@ -80,7 +80,14 @@ describe("Bitbucket pull requests", () => {
     );
     await f.track("main", "origin", "main");
 
-    await expect(f.list()).resolves.toEqual([]);
+    await expect(f.listed()).resolves.toEqual({
+      kind: "PullRequest",
+      branches: [],
+    });
+    await expect(f.find(1)).resolves.toEqual({
+      kind: "PullRequest",
+      pullRequest: null,
+    });
     expect(requests).toEqual([]);
   });
 

@@ -7,7 +7,7 @@ import {
   bitbucketApiTokenScopes,
   type SourceControlApi,
 } from "#contracts/source-control/source-control.contract.ts";
-import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
+import { remotePath } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
   type AvatarAuthor,
   avatarUrl,
@@ -16,15 +16,15 @@ import {
   foundAvatar,
   type GitHost,
   type HostedPullRequest,
+  type HostJsonReader,
+  type HostResponse,
+  hostGet,
+  hostJsonReader,
   pullRequest,
   unavailable,
 } from "#server/features/source-control/git-host.ts";
 import {
-  type BitbucketClient,
   bitbucketApi,
-  readJson,
-} from "#server/features/source-control/hosts/bitbucket-client.ts";
-import {
   listCloneable,
   workspacesUrl,
 } from "#server/features/source-control/hosts/bitbucket-repositories.ts";
@@ -32,6 +32,14 @@ import type { EnvironmentContext } from "#server/persistence/environment-context
 import { bitbucketTokenTable } from "#server/persistence/environment-state.schema.ts";
 
 export type Bitbucket = ReturnType<typeof createBitbucket>;
+
+export interface BitbucketClient {
+  readonly get: (
+    url: string,
+    authorization: string,
+    timeoutMilliseconds?: number,
+  ) => Promise<HostResponse>;
+}
 
 type SaveBitbucketToken = RouteInput<
   typeof SourceControlApi.saveBitbucketToken
@@ -55,6 +63,13 @@ type SavedToken =
 const pullRequestsPerBranch = 10;
 const branchesAtOnce = 8;
 
+export function createBitbucketClient(): BitbucketClient {
+  return {
+    get: (url, authorization, timeoutMilliseconds) =>
+      hostGet(url, { authorization }, timeoutMilliseconds),
+  };
+}
+
 export function createBitbucket(
   context: EnvironmentContext,
   client: BitbucketClient,
@@ -75,10 +90,6 @@ export function createBitbucket(
             account: row.account ?? row.email,
           };
   };
-  const savedOrUnavailable = () =>
-    saved().catch(() => {
-      throw unavailable;
-    });
 
   const host: GitHost = {
     kind: "bitbucket",
@@ -94,7 +105,9 @@ export function createBitbucket(
       try {
         const current = await saved();
         if (current?._tag !== "ApiToken") return [];
-        const repositories = await listCloneable(client, current.authorization);
+        const repositories = await listCloneable(
+          reader(client, current.authorization),
+        );
         return [
           {
             kind: "bitbucket" as const,
@@ -109,43 +122,25 @@ export function createBitbucket(
     },
     repository: async (remoteUrl) => {
       const repository = bitbucketRepository(remoteUrl);
-      return (
-        repository && {
+      if (repository === undefined) return undefined;
+      const current = await saved().catch(() => {
+        throw unavailable;
+      });
+      if (current === undefined)
+        return {
           id: repository.id,
-          pullRequests: async (heads) => {
-            const current = await savedOrUnavailable();
-            return current === undefined
-              ? new Map()
-              : listPullRequests(
-                  client,
-                  current.authorization,
-                  repository,
-                  heads,
-                );
-          },
-          pullRequest: async (number) => {
-            try {
-              const current = await saved();
-              return current === undefined
-                ? undefined
-                : await readPullRequest(
-                    client,
-                    current.authorization,
-                    repository,
-                    number,
-                  );
-            } catch {
-              return undefined;
-            }
-          },
-          avatar: async (author) => {
-            const current = await savedOrUnavailable();
-            return current === undefined
-              ? { answered: false }
-              : readAvatar(client, current.authorization, repository, author);
-          },
-        }
-      );
+          pullRequests: async () => new Map(),
+          pullRequest: async () => undefined,
+          avatar: async () => ({ answered: false }),
+        };
+      const read = reader(client, current.authorization);
+      return {
+        id: repository.id,
+        pullRequests: (heads) => listPullRequests(read, repository, heads),
+        pullRequest: (number) =>
+          readPullRequest(read, repository, number).catch(() => undefined),
+        avatar: (author) => readAvatar(read, repository, author),
+      };
     },
   };
 
@@ -235,16 +230,21 @@ function basic(email: string, token: string) {
   return `Basic ${Buffer.from(`${email}:${token}`).toString("base64")}`;
 }
 
+function reader(client: BitbucketClient, authorization: string) {
+  return hostJsonReader(async (url) => {
+    const { status, body } = await client.get(url, authorization);
+    if (status !== 200) throw unavailable;
+    return body;
+  });
+}
+
 function listPullRequests(
-  client: BitbucketClient,
-  authorization: string,
+  read: HostJsonReader,
   repository: BitbucketRepository,
   heads: readonly string[],
 ) {
   return eachHead(heads, branchesAtOnce, async (head) => {
-    const { values } = await readJson(
-      client,
-      authorization,
+    const { values } = await read(
       pullRequestsUrl(repository, head),
       PullRequests,
     );
@@ -254,35 +254,26 @@ function listPullRequests(
           (node) =>
             node.source.repository?.full_name.toLowerCase() === repository.id,
         )
-        .map((node) => withChecks(client, authorization, repository, node)),
+        .map((node) => withChecks(read, repository, node)),
     );
   });
 }
 
 async function readPullRequest(
-  client: BitbucketClient,
-  authorization: string,
+  read: HostJsonReader,
   repository: BitbucketRepository,
   number: number,
 ) {
-  const node = await readJson(
-    client,
-    authorization,
-    pullRequestUrl(repository, number),
-    PullRequestNode,
-  );
-  return withChecks(client, authorization, repository, node);
+  const node = await read(pullRequestUrl(repository, number), PullRequestNode);
+  return withChecks(read, repository, node);
 }
 
 async function readAvatar(
-  client: BitbucketClient,
-  authorization: string,
+  read: HostJsonReader,
   repository: BitbucketRepository,
   author: AvatarAuthor,
 ) {
-  const { author: found } = await readJson(
-    client,
-    authorization,
+  const { author: found } = await read(
     `${bitbucketApi}/repositories/${repositoryPath(repository)}/commit/${encodeURIComponent(author.commit)}?${new URLSearchParams(
       { fields: "author.raw,author.user.links.avatar.href" },
     )}`,
@@ -301,20 +292,14 @@ async function readAvatar(
 }
 
 async function withChecks(
-  client: BitbucketClient,
-  authorization: string,
+  read: HostJsonReader,
   repository: BitbucketRepository,
   node: PullRequestNode,
 ) {
   const hash = node.source.commit?.hash;
   const checks =
     node.state === "OPEN" && hash !== undefined
-      ? await readJson(
-          client,
-          authorization,
-          statusesUrl(repository, hash),
-          Statuses,
-        ).then(
+      ? await read(statusesUrl(repository, hash), Statuses).then(
           ({ values }) => checksState(values),
           () => undefined,
         )
@@ -325,17 +310,10 @@ async function withChecks(
 function bitbucketRepository(
   remoteUrl: string,
 ): BitbucketRepository | undefined {
-  const location = remoteLocation(remoteUrl);
-  if (
-    location?.host !== "bitbucket.org" &&
-    location?.host !== "ssh.bitbucket.org"
-  )
+  const remote = remotePath(remoteUrl);
+  if (remote?.host !== "bitbucket.org" && remote?.host !== "ssh.bitbucket.org")
     return undefined;
-  const parts = location.path
-    .replace(/^\/+|\/+$/g, "")
-    .replace(/\.git$/, "")
-    .split("/");
-  const [workspace, slug, ...rest] = parts;
+  const [workspace, slug, ...rest] = remote.parts;
   return workspace && slug && rest.length === 0
     ? { id: `${workspace}/${slug}`.toLowerCase(), workspace, slug }
     : undefined;

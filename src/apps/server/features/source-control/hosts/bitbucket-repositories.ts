@@ -2,14 +2,11 @@ import { z } from "zod";
 import type { CloneableRepository } from "#contracts/source-control/source-control.contract.ts";
 import {
   cloneableRepository,
+  type HostJsonReader,
   mapConcurrently,
 } from "#server/features/source-control/git-host.ts";
-import {
-  type BitbucketClient,
-  bitbucketApi,
-  readJson,
-} from "#server/features/source-control/hosts/bitbucket-client.ts";
 
+export const bitbucketApi = "https://api.bitbucket.org/2.0";
 const repositoriesPerPage = 100;
 const repositoryPages = 10;
 const workspacesAtOnce = 4;
@@ -22,21 +19,12 @@ export function workspacesUrl(pagelen: number) {
 }
 
 export async function listCloneable(
-  client: BitbucketClient,
-  authorization: string,
+  read: HostJsonReader,
 ): Promise<readonly CloneableRepository[]> {
-  const read = (url: string) =>
-    readJson(client, authorization, url, RepositoryPage).catch(
-      (): RepositoryPage => ({ values: [] }),
-    );
-  const { values } = await readJson(
-    client,
-    authorization,
-    workspacesUrl(repositoriesPerPage),
-    Workspaces,
-  );
+  const { values } = await read(workspacesUrl(repositoriesPerPage), Workspaces);
   const nodes = await readPages(
-    read,
+    (url) =>
+      read(url, RepositoryPage).catch((): RepositoryPage => ({ values: [] })),
     values.map(({ workspace }) => workspaceRepositoriesUrl(workspace.slug)),
     repositoryPages,
   );
