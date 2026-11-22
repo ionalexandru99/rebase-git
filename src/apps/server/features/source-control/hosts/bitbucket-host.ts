@@ -90,10 +90,6 @@ export function createBitbucket(
             account: row.account ?? row.email,
           };
   };
-  const savedOrUnavailable = () =>
-    saved().catch(() => {
-      throw unavailable;
-    });
 
   const host: GitHost = {
     kind: "bitbucket",
@@ -126,45 +122,25 @@ export function createBitbucket(
     },
     repository: async (remoteUrl) => {
       const repository = bitbucketRepository(remoteUrl);
-      return (
-        repository && {
+      if (repository === undefined) return undefined;
+      const current = await saved().catch(() => {
+        throw unavailable;
+      });
+      if (current === undefined)
+        return {
           id: repository.id,
-          pullRequests: async (heads) => {
-            const current = await savedOrUnavailable();
-            return current === undefined
-              ? new Map()
-              : listPullRequests(
-                  reader(client, current.authorization),
-                  repository,
-                  heads,
-                );
-          },
-          pullRequest: async (number) => {
-            try {
-              const current = await saved();
-              return current === undefined
-                ? undefined
-                : await readPullRequest(
-                    reader(client, current.authorization),
-                    repository,
-                    number,
-                  );
-            } catch {
-              return undefined;
-            }
-          },
-          avatar: async (author) => {
-            const current = await savedOrUnavailable();
-            return current === undefined
-              ? { answered: false }
-              : readAvatar(
-                  reader(client, current.authorization),
-                  repository,
-                  author,
-                );
-          },
-        }
-      );
+          pullRequests: async () => new Map(),
+          pullRequest: async () => undefined,
+          avatar: async () => ({ answered: false }),
+        };
+      const read = reader(client, current.authorization);
+      return {
+        id: repository.id,
+        pullRequests: (heads) => listPullRequests(read, repository, heads),
+        pullRequest: (number) =>
+          readPullRequest(read, repository, number).catch(() => undefined),
+        avatar: (author) => readAvatar(read, repository, author),
+      };
     },
   };
 
